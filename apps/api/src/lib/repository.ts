@@ -124,7 +124,7 @@ function sortPeriods(periods: ReportPeriod[]) {
   return [...periods].sort((left, right) => right.month.localeCompare(left.month));
 }
 
-function datasetKeyToProperty(datasetType: DatasetType): keyof ReportDatasets {
+export function datasetKeyToProperty(datasetType: DatasetType): keyof ReportDatasets {
   if (datasetType === "agent-metrics") {
     return "agentMetrics";
   }
@@ -213,16 +213,10 @@ async function createFileRepository(): Promise<Repository> {
     async replaceDataset(periodId, datasetType, rows) {
       const db = await ensureLocalDb();
       db.datasets[periodId] ??= emptyDatasets();
-
-      if (datasetType === "agent-metrics") {
-        db.datasets[periodId].agentMetrics = (rows as AgentMetric[]).map((row) => agentMetricSchema.parse(row));
-      } else if (datasetType === "question-performance") {
-        db.datasets[periodId].questionPerformance = (rows as QuestionPerformance[]).map((row) =>
-          questionPerformanceSchema.parse(row)
-        );
-      } else {
-        db.datasets[periodId].qtMetrics = (rows as QtMetric[]).map((row) => qtMetricSchema.parse(row));
-      }
+      const property = datasetKeyToProperty(datasetType);
+      (db.datasets[periodId] as Record<string, unknown[]>)[property] = rows.map((row) =>
+        parseDatasetRecord(datasetType, row)
+      );
 
       await persistLocalDb(db);
     },
@@ -240,14 +234,6 @@ async function createFileRepository(): Promise<Repository> {
       const parsed = parseDatasetRecord(datasetType, record);
       rows[index] = parsed;
 
-      if (datasetType === "agent-metrics") {
-        db.datasets[periodId].agentMetrics = rows as AgentMetric[];
-      } else if (datasetType === "question-performance") {
-        db.datasets[periodId].questionPerformance = rows as QuestionPerformance[];
-      } else {
-        db.datasets[periodId].qtMetrics = rows as QtMetric[];
-      }
-
       await persistLocalDb(db);
       return parsed;
     },
@@ -263,11 +249,12 @@ async function createFileRepository(): Promise<Repository> {
         throw new ApiError(404, "Dönem bulunamadı.");
       }
 
+      const now = new Date().toISOString();
       const published = reportPeriodSchema.parse({
         ...db.reportPeriods[index],
         status: "published",
-        publishedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        publishedAt: now,
+        updatedAt: now
       });
       db.reportPeriods[index] = published;
       await persistLocalDb(db);
@@ -501,11 +488,12 @@ async function createFirebaseRepository(): Promise<Repository> {
         throw new ApiError(404, "Dönem bulunamadı.");
       }
 
+      const now = new Date().toISOString();
       const published = reportPeriodSchema.parse({
         ...current,
         status: "published",
-        publishedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        publishedAt: now,
+        updatedAt: now
       });
 
       await db.collection("reportPeriods").doc(periodId).set(published, { merge: true });

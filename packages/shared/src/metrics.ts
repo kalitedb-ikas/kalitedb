@@ -145,6 +145,6 @@ export function selectQuestionRankings(questions: QuestionPerformance[]) {
 
   return {
     weakestQuestions: sorted.slice(0, 5),
-    strongestQuestions: [...sorted].reverse().slice(0, 5)
+    strongestQuestions: sorted.slice(-5).reverse()
   };
 }

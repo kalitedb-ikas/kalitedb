@@ -181,6 +181,9 @@ function parseAgentMetrics(rows: CanonicalCsvRow[], expectedPeriod: string, sha2
     ensurePeriod(row.period, expectedPeriod, rowNumber, errors);
 
     const agentName = (row.agent_name ?? "").trim();
+    const totalCallCount = Math.trunc(coerceNumber(row.total_call_count));
+    const totalChatMailCount = Math.trunc(coerceNumber(row.total_chat_mail_count));
+    const totalTicketClosedCount = Math.trunc(coerceNumber(row.total_ticket_closed_count));
     const record = {
       id: createDeterministicId(expectedPeriod, "agent", agentName),
       period: expectedPeriod,
@@ -189,14 +192,10 @@ function parseAgentMetrics(rows: CanonicalCsvRow[], expectedPeriod: string, sha2
       auditScore: coerceNullableNumber(row.audit_score),
       previousAuditAccuracy: coerceNullableNumber(row.previous_audit_accuracy),
       missingQuestionsAccuracy: coerceNullableNumber(row.missing_questions_accuracy),
-      totalCallCount: Math.trunc(coerceNumber(row.total_call_count)),
-      totalChatMailCount: Math.trunc(coerceNumber(row.total_chat_mail_count)),
-      totalTicketClosedCount: Math.trunc(coerceNumber(row.total_ticket_closed_count)),
-      totalConversationCount: computeTotalConversationCount(
-        Math.trunc(coerceNumber(row.total_call_count)),
-        Math.trunc(coerceNumber(row.total_chat_mail_count)),
-        Math.trunc(coerceNumber(row.total_ticket_closed_count))
-      ),
+      totalCallCount,
+      totalChatMailCount,
+      totalTicketClosedCount,
+      totalConversationCount: computeTotalConversationCount(totalCallCount, totalChatMailCount, totalTicketClosedCount),
       avgTalkDurationSeconds: coerceNullableNumber(row.avg_talk_duration_seconds)?.valueOf() ?? null,
       localCloseRate: coerceNullableNumber(row.local_close_rate),
       missedCalls: coerceNullableNumber(row.missed_calls)?.valueOf() ?? null,
@@ -441,6 +440,3 @@ export function getTemplateContent(datasetType: DatasetType): string {
   return CSV_TEMPLATES[datasetType].join("\n");
 }
 
-export function getDefaultThresholds() {
-  return structuredClone(DEFAULT_THRESHOLDS);
-}

@@ -21,33 +21,18 @@ function getBearerToken(request: NextRequest) {
   return authorization.slice("Bearer ".length).trim();
 }
 
+const BYPASS_USERS: Record<string, AuthUser> = {
+  "dev-admin": { uid: "dev-admin", email: "admin@local.dev", displayName: "Dev Admin", role: "admin" },
+  "dev-team": { uid: "dev-team", email: "team@local.dev", displayName: "Dev Team", role: "team" },
+  "dev-ceo": { uid: "dev-ceo", email: "ceo@local.dev", displayName: "Dev CEO", role: "ceo" }
+};
+
 function getBypassUser(token: string | undefined): AuthUser | undefined {
   if (process.env.APP_AUTH_BYPASS !== "true" || !token) {
     return undefined;
   }
 
-  const bypassUsers: Record<string, AuthUser> = {
-    "dev-admin": {
-      uid: "dev-admin",
-      email: "admin@local.dev",
-      displayName: "Dev Admin",
-      role: "admin"
-    },
-    "dev-team": {
-      uid: "dev-team",
-      email: "team@local.dev",
-      displayName: "Dev Team",
-      role: "team"
-    },
-    "dev-ceo": {
-      uid: "dev-ceo",
-      email: "ceo@local.dev",
-      displayName: "Dev CEO",
-      role: "ceo"
-    }
-  };
-
-  return bypassUsers[token];
+  return BYPASS_USERS[token];
 }
 
 export async function requireAuth(request: NextRequest, allowedRoles?: Role[]): Promise<AuthUser> {
