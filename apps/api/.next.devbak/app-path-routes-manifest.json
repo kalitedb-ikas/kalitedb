@@ -1,0 +1,14 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/report-periods/[periodId]/qt-manual-entry/route": "/api/report-periods/[periodId]/qt-manual-entry",
+  "/api/dashboard/route": "/api/dashboard",
+  "/api/report-periods/[periodId]/publish/route": "/api/report-periods/[periodId]/publish",
+  "/api/me/route": "/api/me",
+  "/api/report-periods/[periodId]/imports/[datasetType]/route": "/api/report-periods/[periodId]/imports/[datasetType]",
+  "/api/report-periods/[periodId]/reopen/route": "/api/report-periods/[periodId]/reopen",
+  "/api/users/roles/route": "/api/users/roles",
+  "/api/report-periods/route": "/api/report-periods",
+  "/api/settings/thresholds/route": "/api/settings/thresholds",
+  "/api/report-periods/[periodId]/route": "/api/report-periods/[periodId]",
+  "/page": "/"
+}

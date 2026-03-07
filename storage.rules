@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isPrivileged() {
+      return request.auth != null
+        && (request.auth.token.role == 'admin' || request.auth.token.role == 'team');
+    }
+
+    match /imports/{allPaths=**} {
+      allow read, write: if isPrivileged();
+    }
+  }
+}
+

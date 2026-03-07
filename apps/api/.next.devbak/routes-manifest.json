@@ -1,0 +1,95 @@
+{
+  "version": 3,
+  "pages404": true,
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [
+    {
+      "page": "/api/report-periods/[periodId]",
+      "regex": "^/api/report\\-periods/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPperiodId": "nxtPperiodId"
+      },
+      "namedRegex": "^/api/report\\-periods/(?<nxtPperiodId>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/report-periods/[periodId]/imports/[datasetType]",
+      "regex": "^/api/report\\-periods/([^/]+?)/imports/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPperiodId": "nxtPperiodId",
+        "nxtPdatasetType": "nxtPdatasetType"
+      },
+      "namedRegex": "^/api/report\\-periods/(?<nxtPperiodId>[^/]+?)/imports/(?<nxtPdatasetType>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/report-periods/[periodId]/publish",
+      "regex": "^/api/report\\-periods/([^/]+?)/publish(?:/)?$",
+      "routeKeys": {
+        "nxtPperiodId": "nxtPperiodId"
+      },
+      "namedRegex": "^/api/report\\-periods/(?<nxtPperiodId>[^/]+?)/publish(?:/)?$"
+    },
+    {
+      "page": "/api/report-periods/[periodId]/qt-manual-entry",
+      "regex": "^/api/report\\-periods/([^/]+?)/qt\\-manual\\-entry(?:/)?$",
+      "routeKeys": {
+        "nxtPperiodId": "nxtPperiodId"
+      },
+      "namedRegex": "^/api/report\\-periods/(?<nxtPperiodId>[^/]+?)/qt\\-manual\\-entry(?:/)?$"
+    },
+    {
+      "page": "/api/report-periods/[periodId]/reopen",
+      "regex": "^/api/report\\-periods/([^/]+?)/reopen(?:/)?$",
+      "routeKeys": {
+        "nxtPperiodId": "nxtPperiodId"
+      },
+      "namedRegex": "^/api/report\\-periods/(?<nxtPperiodId>[^/]+?)/reopen(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSuffix": ".prefetch.rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments"
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}

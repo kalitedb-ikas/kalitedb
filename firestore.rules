@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function hasRole(role) {
+      return isAuthed() && request.auth.token.role == role;
+    }
+
+    function isPrivileged() {
+      return hasRole('admin') || hasRole('team');
+    }
+
+    match /reportPeriods/{periodId} {
+      allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
+      allow write: if hasRole('admin') || hasRole('team');
+
+      match /{document=**} {
+        allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
+        allow write: if hasRole('admin') || hasRole('team');
+      }
+    }
+
+    match /thresholdConfigs/{document=**} {
+      allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
+      allow write: if hasRole('admin');
+    }
+
+    match /userRoles/{document=**} {
+      allow read, write: if hasRole('admin');
+    }
+
+    match /importJobs/{document=**} {
+      allow read, write: if isPrivileged();
+    }
+  }
+}
+
