@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { sanitizeEditedRecord } from "@/src/lib/edit-record";
 import { requireAuth } from "@/src/lib/auth";
-import { getRepository } from "@/src/lib/repository";
+import { datasetKeyToProperty, getRepository } from "@/src/lib/repository";
 import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
 
 export const OPTIONS = optionsResponse;
@@ -50,23 +50,13 @@ export async function PATCH(
         throw new ApiError(404, "Dönem bulunamadı.");
       }
 
-      const datasetProperty =
-        body.datasetType === "agent-metrics"
-          ? "agentMetrics"
-          : body.datasetType === "question-performance"
-            ? "questionPerformance"
-            : "qtMetrics";
+      const datasetProperty = datasetKeyToProperty(body.datasetType);
       const current = details.datasets[datasetProperty].find((record) => record.id === body.recordId);
       if (!current) {
         throw new ApiError(404, "Kayıt bulunamadı.");
       }
 
-      const nextRecord =
-        body.datasetType === "agent-metrics"
-          ? sanitizeEditedRecord(body.datasetType, current as never, body.updates as never)
-          : body.datasetType === "question-performance"
-            ? sanitizeEditedRecord(body.datasetType, current as never, body.updates as never)
-            : sanitizeEditedRecord(body.datasetType, current as never, body.updates as never);
+      const nextRecord = sanitizeEditedRecord(body.datasetType, current as never, body.updates as never);
       const updated = await repository.updateDatasetRecord(periodId, body.datasetType, nextRecord as never);
       return jsonResponse(updated);
     }

@@ -42,20 +42,15 @@ export function jsonResponse(data: unknown, init?: ResponseInit) {
 
 export function handleRouteError(error: unknown) {
   if (error instanceof ApiError) {
-    return jsonResponse(
-      {
-        error: error.message,
-        details: error.details
-      },
-      { status: error.status }
+    return NextResponse.json(
+      { error: error.message, details: error.details },
+      { status: error.status, headers: getCorsHeaders() }
     );
   }
 
   console.error(error);
-  return jsonResponse(
-    {
-      error: "Beklenmeyen bir hata oluştu."
-    },
-    { status: 500 }
+  return NextResponse.json(
+    { error: "Beklenmeyen bir hata oluştu." },
+    { status: 500, headers: getCorsHeaders() }
   );
 }
