@@ -33,24 +33,7 @@ export async function POST(
     }
 
     const text = await file.text();
-    const preview =
-      datasetType === "agent-metrics"
-        ? parseDatasetCsv({
-            datasetType,
-            text,
-            expectedPeriod: details.period.month
-          })
-        : datasetType === "question-performance"
-          ? parseDatasetCsv({
-              datasetType,
-              text,
-              expectedPeriod: details.period.month
-            })
-          : parseDatasetCsv({
-              datasetType,
-              text,
-              expectedPeriod: details.period.month
-            });
+    const preview = parseDatasetCsv({ datasetType, text, expectedPeriod: details.period.month });
 
     if (preview.errors.length > 0 || !commit) {
       return jsonResponse({
