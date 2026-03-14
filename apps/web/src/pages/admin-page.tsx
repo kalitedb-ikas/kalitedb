@@ -1,10 +1,19 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { getTemplateContent, type DatasetType, type KpiMetricKey } from "@kalitedb/shared";
-import { SectionCard } from "@kalitedb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import {
+  User,
+  BarChart3,
+  ClipboardCheck,
+  Upload,
+  Eye,
+  FileDown,
+  Settings2,
+  UserPlus
+} from "lucide-react";
 
 import { DataTable } from "../components/data-table";
 import { RecordEditor } from "../components/record-editor";
@@ -67,18 +76,11 @@ export function AdminPage() {
 
   const periodForm = useForm<z.infer<typeof createPeriodSchema>>({
     resolver: zodResolver(createPeriodSchema),
-    defaultValues: {
-      month: "",
-      title: "",
-      compareToPeriodId: ""
-    }
+    defaultValues: { month: "", title: "", compareToPeriodId: "" }
   });
   const roleForm = useForm<z.infer<typeof roleSchema>>({
     resolver: zodResolver(roleSchema),
-    defaultValues: {
-      email: "",
-      role: "team"
-    }
+    defaultValues: { email: "", role: "team" }
   });
 
   const createPeriodMutation = useMutation({
@@ -108,10 +110,7 @@ export function AdminPage() {
   const importMutation = useMutation({
     mutationFn: async (input: { datasetType: DatasetType; commit: boolean }) => {
       const file = selectedFiles[input.datasetType];
-      if (!file || !selectedPeriodId) {
-        throw new Error("Dönem ve dosya seçin.");
-      }
-
+      if (!file || !selectedPeriodId) throw new Error("Dönem ve dosya seçin.");
       return api.importDataset(auth.token, selectedPeriodId, input.datasetType, file, input.commit);
     },
     onSuccess: async () => {
@@ -131,18 +130,11 @@ export function AdminPage() {
   const thresholdMutation = useMutation({
     mutationFn: () => {
       const current = thresholdsQuery.data;
-      if (!current) {
-        throw new Error("Eşik verisi bulunamadı.");
-      }
-
+      if (!current) throw new Error("Eşik verisi bulunamadı.");
       const payload = thresholdKeys.reduce<Record<KpiMetricKey, Partial<typeof current[KpiMetricKey]>>>(
-        (accumulator, key) => {
-          accumulator[key] = current[key];
-          return accumulator;
-        },
+        (acc, key) => { acc[key] = current[key]; return acc; },
         {} as Record<KpiMetricKey, Partial<typeof current[KpiMetricKey]>>
       );
-
       return api.updateThresholds(auth.token, payload);
     },
     onSuccess: async () => {
@@ -151,283 +143,325 @@ export function AdminPage() {
   });
 
   const datasetRows = useMemo(() => {
-    if (!periodDetailsQuery.data) {
-      return [];
-    }
-
-    if (selectedDatasetType === "agent-metrics") {
-      return periodDetailsQuery.data.datasets.agentMetrics;
-    }
-
-    if (selectedDatasetType === "question-performance") {
-      return periodDetailsQuery.data.datasets.questionPerformance;
-    }
-
+    if (!periodDetailsQuery.data) return [];
+    if (selectedDatasetType === "agent-metrics") return periodDetailsQuery.data.datasets.agentMetrics;
+    if (selectedDatasetType === "question-performance") return periodDetailsQuery.data.datasets.questionPerformance;
     return periodDetailsQuery.data.datasets.qtMetrics;
   }, [periodDetailsQuery.data, selectedDatasetType]);
 
-  const selectedRecord =
-    datasetRows.find((record) => record.id === selectedRecordId) ?? null;
+  const selectedRecord = datasetRows.find((r) => r.id === selectedRecordId) ?? null;
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <SectionCard title="Dönem oluştur" description="Yeni taslak ay oluşturulur ve içe aktarımlar bu taslak altında toplanır.">
-          <form className="grid gap-4" onSubmit={periodForm.handleSubmit((values) => createPeriodMutation.mutate(values))}>
-            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-              Ay
-              <input className="rounded-2xl border border-slate-200 px-3 py-2" placeholder="2026-02" {...periodForm.register("month")} />
-            </label>
-            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-              Başlık
-              <input className="rounded-2xl border border-slate-200 px-3 py-2" placeholder="CS Şubat 2026" {...periodForm.register("title")} />
-            </label>
-            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-              Karşılaştırma dönemi
-              <select className="rounded-2xl border border-slate-200 px-3 py-2" {...periodForm.register("compareToPeriodId")}>
-                <option value="">Seçiniz</option>
-                {(periodsQuery.data ?? []).map((period) => (
-                  <option key={period.id} value={period.id}>
-                    {period.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="rounded-full bg-brand-ink px-5 py-2 text-sm font-semibold text-white" type="submit">
-              Dönem oluştur
-            </button>
-          </form>
-        </SectionCard>
+    <div className="max-w-5xl mx-auto p-8">
+      {/* Header */}
+      <header className="mb-8">
+        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Yönetim Paneli</h2>
+        <p className="text-slate-500 mt-1">Dönem oluşturma, veri aktarımı ve ayarlar.</p>
+      </header>
 
-        <SectionCard title="Taslak yönetimi" description="Seçili dönem için içe aktarma, düzenleme ve yayımlama adımları burada yönetilir.">
-          <div className="grid gap-4">
-            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-              Dönem seç
-              <select className="rounded-2xl border border-slate-200 px-3 py-2" onChange={(event) => setSelectedPeriodId(event.target.value)} value={selectedPeriodId}>
-                <option value="">Dönem seçin</option>
-                {(periodsQuery.data ?? []).map((period) => (
-                  <option key={period.id} value={period.id}>
-                    {period.title} ({period.status})
-                  </option>
+      <div className="space-y-6">
+        {/* Section: Period Creation */}
+        <FormSection icon={<User size={16} />} title="Dönem Bilgileri">
+          <form
+            className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6"
+            onSubmit={periodForm.handleSubmit((v) => createPeriodMutation.mutate(v))}
+          >
+            <FormField label="Ay (YYYY-AA)">
+              <input
+                className="form-input w-full rounded-lg border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-primary h-11"
+                placeholder="2026-02"
+                {...periodForm.register("month")}
+              />
+            </FormField>
+            <FormField label="Başlık">
+              <input
+                className="form-input w-full rounded-lg border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-primary h-11"
+                placeholder="CS Şubat 2026"
+                {...periodForm.register("title")}
+              />
+            </FormField>
+            <FormField label="Karşılaştırma Dönemi">
+              <select
+                className="form-select w-full rounded-lg border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-primary h-11"
+                {...periodForm.register("compareToPeriodId")}
+              >
+                <option value="">Seçiniz</option>
+                {(periodsQuery.data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
                 ))}
               </select>
-            </label>
-            <div className="flex flex-wrap gap-3">
-              <button className="rounded-full border px-4 py-2 text-sm font-semibold" onClick={() => publishMutation.mutate("publish")} type="button">
+            </FormField>
+            <div className="flex items-end">
+              <button
+                className="px-8 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all h-11"
+                type="submit"
+              >
+                Dönem Oluştur
+              </button>
+            </div>
+          </form>
+        </FormSection>
+
+        {/* Section: Draft Management */}
+        <FormSection icon={<BarChart3 size={16} />} title="Taslak Yönetimi">
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <FormField label="Dönem Seç">
+              <select
+                className="form-select w-full rounded-lg border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-primary h-11"
+                onChange={(e) => setSelectedPeriodId(e.target.value)}
+                value={selectedPeriodId}
+              >
+                <option value="">Dönem seçin</option>
+                {(periodsQuery.data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>{p.title} ({p.status})</option>
+                ))}
+              </select>
+            </FormField>
+            <div className="flex items-end gap-3">
+              <button
+                className="px-6 py-2.5 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors h-11"
+                onClick={() => publishMutation.mutate("publish")}
+                type="button"
+              >
                 Yayımla
               </button>
-              <button className="rounded-full border px-4 py-2 text-sm font-semibold" onClick={() => publishMutation.mutate("reopen")} type="button">
-                Taslağa geri al
+              <button
+                className="px-6 py-2.5 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors h-11"
+                onClick={() => publishMutation.mutate("reopen")}
+                type="button"
+              >
+                Taslağa Geri Al
               </button>
             </div>
           </div>
-        </SectionCard>
-      </div>
+        </FormSection>
 
-      <SectionCard title="CSV içe aktar" description="Önce ön izleme alın, sonra veriyi taslağa kaydedin.">
-        <div className="grid gap-4 xl:grid-cols-3">
-          {(["agent-metrics", "question-performance", "qt-metrics"] as DatasetType[]).map((datasetType) => (
-            <div key={datasetType} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">{datasetLabels[datasetType]}</p>
-              <input
-                className="mt-4 block w-full text-sm"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  setSelectedFiles((current) => ({ ...current, [datasetType]: file }));
-                }}
-                type="file"
-              />
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button className="rounded-full border px-4 py-2 text-xs font-semibold" onClick={() => importMutation.mutate({ datasetType, commit: false })} type="button">
-                  Ön izleme
-                </button>
-                <button className="rounded-full bg-brand-ink px-4 py-2 text-xs font-semibold text-white" onClick={() => importMutation.mutate({ datasetType, commit: true })} type="button">
-                  İçe aktar
-                </button>
+        {/* Section: CSV Import */}
+        <FormSection icon={<Upload size={16} />} title="CSV İçe Aktarım">
+          <div className="p-6">
+            <div className="grid gap-4 xl:grid-cols-3">
+              {(["agent-metrics", "question-performance", "qt-metrics"] as DatasetType[]).map((dt) => (
+                <div key={dt} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900 mb-3">{datasetLabels[dt]}</p>
+                  <input
+                    className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setSelectedFiles((c) => ({ ...c, [dt]: file }));
+                    }}
+                    type="file"
+                  />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white transition-colors"
+                      onClick={() => importMutation.mutate({ datasetType: dt, commit: false })}
+                      type="button"
+                    >
+                      <Eye size={14} /> Ön İzleme
+                    </button>
+                    <button
+                      className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 transition-colors"
+                      onClick={() => importMutation.mutate({ datasetType: dt, commit: true })}
+                      type="button"
+                    >
+                      <Upload size={14} /> İçe Aktar
+                    </button>
+                    <button
+                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white transition-colors"
+                      onClick={() => {
+                        const content = getTemplateContent(dt);
+                        const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement("a");
+                        link.href = url;
+                        link.download = `${dt}.csv`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      type="button"
+                    >
+                      <FileDown size={14} /> Şablon
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {importMutation.data ? (
+              <pre className="mt-4 overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
+                {JSON.stringify(importMutation.data, null, 2)}
+              </pre>
+            ) : null}
+          </div>
+        </FormSection>
+
+        {/* Section: Draft Editor (Table) */}
+        <FormSection icon={<ClipboardCheck size={16} />} title="Taslak Düzenleyici">
+          <div className="p-6">
+            <div className="flex flex-wrap gap-3 mb-4">
+              <select
+                className="form-select rounded-lg border-slate-200 px-3 py-2 text-sm"
+                onChange={(e) => setSelectedDatasetType(e.target.value as DatasetType)}
+                value={selectedDatasetType}
+              >
+                <option value="agent-metrics">{datasetLabels["agent-metrics"]}</option>
+                <option value="question-performance">{datasetLabels["question-performance"]}</option>
+                <option value="qt-metrics">{datasetLabels["qt-metrics"]}</option>
+              </select>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-xs font-bold text-slate-500">
+                    <th className="px-6 py-3 border-b border-slate-100">Kayıt</th>
+                    <th className="px-6 py-3 border-b border-slate-100 text-center w-32">İşlem</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {datasetRows.slice(0, 12).map((record) => (
+                    <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 text-sm text-slate-700 max-w-md truncate">
+                        {JSON.stringify(record)}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          className="text-primary text-sm font-semibold hover:underline"
+                          onClick={() => setSelectedRecordId(record.id)}
+                          type="button"
+                        >
+                          Düzenle
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </FormSection>
+
+        <RecordEditor
+          onSave={async (updates) => {
+            if (!selectedPeriodId || !selectedRecord) return;
+            await api.updatePeriod(auth.token, selectedPeriodId, {
+              datasetType: selectedDatasetType,
+              recordId: selectedRecord.id,
+              updates
+            });
+            await queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] });
+          }}
+          record={selectedRecord as Record<string, string | number | null> | null}
+          title="Kayıt düzenleyici"
+        />
+
+        {/* Threshold & Role Grid */}
+        <div className="grid gap-6 xl:grid-cols-2">
+          {/* Thresholds */}
+          <FormSection icon={<Settings2 size={16} />} title="Eşik Ayarları">
+            <div className="p-6 space-y-4">
+              {thresholdKeys.map((key) => {
+                const t = thresholdsQuery.data?.[key];
+                if (!t) return null;
+                return (
+                  <div key={key} className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-3">
+                    <p className="md:col-span-3 text-sm font-semibold text-slate-900">{t.label}</p>
+                    {(["red", "yellow", "green"] as const).map((band) => (
+                      <FormField key={band} label={band === "red" ? "Kırmızı" : band === "yellow" ? "Sarı" : "Yeşil"}>
+                        <input
+                          className="form-input w-full rounded-lg border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-primary h-10 text-sm"
+                          onChange={(e) =>
+                            queryClient.setQueryData(["thresholds", auth.token], (cur: typeof thresholdsQuery.data) =>
+                              cur ? { ...cur, [key]: { ...cur[key], [band]: Number(e.target.value) } } : cur
+                            )
+                          }
+                          value={t[band]}
+                        />
+                      </FormField>
+                    ))}
+                  </div>
+                );
+              })}
+              <button
+                className="px-8 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+                onClick={() => thresholdMutation.mutate()}
+                type="button"
+              >
+                Eşikleri Kaydet
+              </button>
+            </div>
+          </FormSection>
+
+          {/* Role Assignment */}
+          <FormSection icon={<UserPlus size={16} />} title="Rol Atama">
+            <div className="p-6">
+              <form
+                className="grid gap-4"
+                onSubmit={roleForm.handleSubmit((v) => roleMutation.mutate(v))}
+              >
+                <FormField label="E-posta">
+                  <input
+                    className="form-input w-full rounded-lg border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-primary h-11"
+                    {...roleForm.register("email")}
+                  />
+                </FormField>
+                <FormField label="Rol">
+                  <select
+                    className="form-select w-full rounded-lg border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-primary h-11"
+                    {...roleForm.register("role")}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="team">Ekip</option>
+                    <option value="ceo">CEO</option>
+                  </select>
+                </FormField>
                 <button
-                  className="rounded-full border px-4 py-2 text-xs font-semibold"
-                  onClick={() => {
-                    const content = getTemplateContent(datasetType);
-                    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement("a");
-                    link.href = url;
-                    link.download = `${datasetType}.csv`;
-                    link.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  type="button"
+                  className="px-8 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+                  type="submit"
                 >
-                  Şablonu indir
+                  Rol Ekle
                 </button>
+              </form>
+              <div className="mt-6">
+                <DataTable
+                  columns={[
+                    { header: "E-posta", accessorKey: "email" },
+                    { header: "Rol", accessorKey: "role" }
+                  ]}
+                  data={rolesQuery.data ?? []}
+                />
               </div>
             </div>
-          ))}
+          </FormSection>
         </div>
-        {importMutation.data ? (
-          <pre className="mt-4 overflow-auto rounded-3xl bg-slate-950 p-4 text-xs text-slate-100">
-            {JSON.stringify(importMutation.data, null, 2)}
-          </pre>
-        ) : null}
-      </SectionCard>
-
-      <SectionCard title="Taslak düzenleyici" description="Seçili veri kümesindeki satırları düzenleyip yeniden kaydedebilirsiniz.">
-        <div className="flex flex-wrap gap-3">
-          <select className="rounded-2xl border border-slate-200 px-3 py-2" onChange={(event) => setSelectedDatasetType(event.target.value as DatasetType)} value={selectedDatasetType}>
-            <option value="agent-metrics">{datasetLabels["agent-metrics"]}</option>
-            <option value="question-performance">{datasetLabels["question-performance"]}</option>
-            <option value="qt-metrics">{datasetLabels["qt-metrics"]}</option>
-          </select>
-        </div>
-        <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-950 text-white">
-              <tr>
-                <th className="px-4 py-3">Kayıt</th>
-                <th className="px-4 py-3">İşlem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {datasetRows.slice(0, 12).map((record) => (
-                <tr key={record.id} className="border-b border-slate-100">
-                  <td className="px-4 py-3">{JSON.stringify(record)}</td>
-                  <td className="px-4 py-3">
-                    <button className="rounded-full border px-4 py-2 text-xs font-semibold" onClick={() => setSelectedRecordId(record.id)} type="button">
-                      Düzenle
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </SectionCard>
-
-      <RecordEditor
-        onSave={async (updates) => {
-          if (!selectedPeriodId || !selectedRecord) {
-            return;
-          }
-
-          await api.updatePeriod(auth.token, selectedPeriodId, {
-            datasetType: selectedDatasetType,
-            recordId: selectedRecord.id,
-            updates
-          });
-          await queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] });
-        }}
-        record={selectedRecord as Record<string, string | number | null> | null}
-        title="Kayıt düzenleyici"
-      />
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <SectionCard title="Eşik ayarları" description="Kırmızı-sarı-yeşil bantları yönetim panelinden düzenlenir.">
-          <div className="space-y-4">
-            {thresholdKeys.map((key) => {
-              const threshold = thresholdsQuery.data?.[key];
-              if (!threshold) {
-                return null;
-              }
-
-              return (
-                <div key={key} className="grid gap-3 rounded-3xl border border-slate-200 p-4 md:grid-cols-3">
-                  <p className="md:col-span-3 text-sm font-semibold text-slate-900">{threshold.label}</p>
-                  <label className="flex flex-col gap-2 text-sm">
-                    Kırmızı
-                    <input
-                      className="rounded-2xl border border-slate-200 px-3 py-2"
-                      onChange={(event) =>
-                        queryClient.setQueryData(["thresholds", auth.token], (current: typeof thresholdsQuery.data) =>
-                          current
-                            ? {
-                                ...current,
-                                [key]: { ...current[key], red: Number(event.target.value) }
-                              }
-                            : current
-                        )
-                      }
-                      value={threshold.red}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-2 text-sm">
-                    Sarı
-                    <input
-                      className="rounded-2xl border border-slate-200 px-3 py-2"
-                      onChange={(event) =>
-                        queryClient.setQueryData(["thresholds", auth.token], (current: typeof thresholdsQuery.data) =>
-                          current
-                            ? {
-                                ...current,
-                                [key]: { ...current[key], yellow: Number(event.target.value) }
-                              }
-                            : current
-                        )
-                      }
-                      value={threshold.yellow}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-2 text-sm">
-                    Yeşil
-                    <input
-                      className="rounded-2xl border border-slate-200 px-3 py-2"
-                      onChange={(event) =>
-                        queryClient.setQueryData(["thresholds", auth.token], (current: typeof thresholdsQuery.data) =>
-                          current
-                            ? {
-                                ...current,
-                                [key]: { ...current[key], green: Number(event.target.value) }
-                              }
-                            : current
-                        )
-                      }
-                      value={threshold.green}
-                    />
-                  </label>
-                </div>
-              );
-            })}
-          </div>
-          <button className="mt-4 rounded-full bg-brand-ink px-5 py-2 text-sm font-semibold text-white" onClick={() => thresholdMutation.mutate()} type="button">
-            Eşikleri kaydet
-          </button>
-        </SectionCard>
-
-        <SectionCard title="Rol atama" description="Firebase custom claims yapısıyla uyumlu rol kaydı oluşturulur.">
-          <form className="grid gap-4" onSubmit={roleForm.handleSubmit((values) => roleMutation.mutate(values))}>
-            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-              E-posta
-              <input className="rounded-2xl border border-slate-200 px-3 py-2" {...roleForm.register("email")} />
-            </label>
-            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-              Rol
-              <select className="rounded-2xl border border-slate-200 px-3 py-2" {...roleForm.register("role")}>
-                <option value="admin">Admin</option>
-                <option value="team">Ekip</option>
-                <option value="ceo">CEO</option>
-              </select>
-            </label>
-            <button className="rounded-full bg-brand-ink px-5 py-2 text-sm font-semibold text-white" type="submit">
-              Rol ekle
-            </button>
-          </form>
-          <div className="mt-6">
-            <DataTable
-              columns={[
-                {
-                  header: "E-posta",
-                  accessorKey: "email"
-                },
-                {
-                  header: "Rol",
-                  accessorKey: "role"
-                }
-              ]}
-              data={rolesQuery.data ?? []}
-            />
-          </div>
-        </SectionCard>
       </div>
+    </div>
+  );
+}
+
+/* ---- Sub-components ---- */
+
+function FormSection(props: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+          {props.icon}
+          {props.title}
+        </h3>
+      </div>
+      {props.children}
+    </div>
+  );
+}
+
+function FormField(props: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-sm font-semibold text-slate-700">{props.label}</label>
+      {props.children}
     </div>
   );
 }

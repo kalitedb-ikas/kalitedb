@@ -8,6 +8,7 @@ const config: Config = {
         panel: "0 20px 45px -25px rgba(15, 23, 42, 0.25)"
       },
       colors: {
+        primary: "#137fec",
         brand: {
           ink: "#0B2239",
           coral: "#EB7155",
@@ -17,7 +18,7 @@ const config: Config = {
         }
       },
       fontFamily: {
-        sans: ["Space Grotesk", "Manrope", "ui-sans-serif", "system-ui", "sans-serif"]
+        sans: ["Inter", "Space Grotesk", "Manrope", "ui-sans-serif", "system-ui", "sans-serif"]
       }
     }
   },
@@ -25,4 +26,3 @@ const config: Config = {
 };
 
 export default config;
-
