@@ -10,6 +10,7 @@ import type {
 
 const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, "") ?? "";
 const LOCAL_API_BASE_URL = "http://localhost:3001";
+const LOCALTUNNEL_BYPASS_HEADER = "bypass-tunnel-reminder";
 
 type ApiResponse<T> = {
   data: T;
@@ -111,6 +112,10 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
 
   if (options.token) {
     headers.Authorization = `Bearer ${options.token}`;
+  }
+
+  if (primaryUrl.includes(".loca.lt")) {
+    headers[LOCALTUNNEL_BYPASS_HEADER] = "true";
   }
 
   const requestInit: RequestInit = {
