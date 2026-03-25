@@ -1,12 +1,21 @@
+import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Gauge } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
+import { api } from "../lib/api";
 
 export function LoginPage() {
   const auth = useAuth();
+  const meQuery = useQuery({
+    enabled: Boolean(auth.token),
+    queryKey: ["me", auth.token],
+    queryFn: () => api.getMe(auth.token),
+    retry: false,
+    staleTime: 5 * 60 * 1000
+  });
 
-  if (auth.token) {
+  if (auth.token && meQuery.isSuccess) {
     return <Navigate replace to="/" />;
   }
 
