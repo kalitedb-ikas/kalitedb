@@ -11,7 +11,7 @@ import {
   SurfaceCard
 } from "@kalitedb/ui";
 import { resolveThresholdTone } from "@kalitedb/shared";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -29,7 +29,8 @@ export function DashboardPage() {
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
-    queryFn: () => api.getPeriods(auth.token)
+    queryFn: () => api.getPeriods(auth.token),
+    staleTime: 5 * 60 * 1000
   });
 
   const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
@@ -38,7 +39,9 @@ export function DashboardPage() {
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
     queryKey: ["dashboard", auth.token, periodId, compareToPeriodId],
-    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId)
+    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000
   });
 
   const snapshot = dashboardQuery.data;

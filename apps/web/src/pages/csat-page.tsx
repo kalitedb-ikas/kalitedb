@@ -7,7 +7,7 @@ import {
   StatCard
 } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, PhoneCall, Users } from "lucide-react";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -54,7 +54,8 @@ export function CsatPage() {
     enabled: Boolean(periodId),
     queryKey: ["dashboard", auth.token, periodId, compareToPeriodId, datasetTypes.join(",")],
     queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId, { datasetTypes: [...datasetTypes] }),
-    staleTime: 60 * 1000
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000
   });
   const yearlyTrendQuery = useQuery({
     enabled: yearPeriods.length > 0,

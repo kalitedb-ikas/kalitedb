@@ -1,5 +1,5 @@
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { BookOpen, Sparkles, Target } from "lucide-react";
 import { useMemo, useState } from "react";
 import { type QuestionPerformance } from "@kalitedb/shared";
@@ -18,7 +18,8 @@ export function QuestionsPage() {
   const [searchParams] = useSearchParams();
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
-    queryFn: () => api.getPeriods(auth.token)
+    queryFn: () => api.getPeriods(auth.token),
+    staleTime: 5 * 60 * 1000
   });
   const [topic, setTopic] = useState("");
   const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
@@ -27,7 +28,9 @@ export function QuestionsPage() {
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
     queryKey: ["dashboard", auth.token, periodId, compareToPeriodId],
-    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId)
+    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000
   });
 
   const snapshot = dashboardQuery.data;
