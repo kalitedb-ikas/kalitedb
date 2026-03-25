@@ -1,7 +1,9 @@
 import { normalizeKey } from "@kalitedb/shared";
 
+import { toPublicAssetPath } from "./asset-path";
+
 const REPRESENTATIVE_PHOTO_FILES = [
-  "/representatives/abdülkerim-gurer.png",
+  "/representatives/abdülkerim-gurer.png",
   "/representatives/afra-sak.png",
   "/representatives/ahmet-onur-yarici.png",
   "/representatives/ayca-tokkusoglu.png",
@@ -58,5 +60,6 @@ const REPRESENTATIVE_PHOTO_MAP: Record<string, string> = Object.fromEntries(
 );
 
 export function getRepresentativePhotoSrc(name: string) {
-  return REPRESENTATIVE_PHOTO_MAP[normalizeKey(name)] ?? null;
+  const photoPath = REPRESENTATIVE_PHOTO_MAP[normalizeKey(name)];
+  return photoPath ? toPublicAssetPath(photoPath) : null;
 }
