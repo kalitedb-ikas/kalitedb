@@ -105,17 +105,17 @@ async function fetchAndParse<T>(url: string, requestInit: RequestInit): Promise<
 
 async function request<T>(path: string, options: RequestOptions): Promise<T> {
   const primaryUrl = `${CONFIGURED_API_BASE_URL}${path}`;
+  const headers: Record<string, string> = {
+    Accept: "application/json"
+  };
+
+  if (options.token) {
+    headers.Authorization = `Bearer ${options.token}`;
+  }
+
   const requestInit: RequestInit = {
     method: options.method ?? "GET",
-    headers: options.formData
-      ? {
-          Accept: "application/json",
-          Authorization: options.token ? `Bearer ${options.token}` : ""
-        }
-      : {
-          Accept: "application/json",
-          Authorization: options.token ? `Bearer ${options.token}` : ""
-        }
+    headers
   };
 
   if (options.formData) {
