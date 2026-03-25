@@ -106,10 +106,15 @@ export async function getOptionalAuth(request: NextRequest, allowedRoles?: Role[
     return null;
   }
 
-  const user = await authenticateToken(token);
+  let user: AuthUser;
+  try {
+    user = await authenticateToken(token);
+  } catch {
+    return null;
+  }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    throw new ApiError(403, "Bu işlem için yetkiniz yok.");
+    return null;
   }
 
   return user;
