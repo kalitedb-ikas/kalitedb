@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
+import { toPublicAssetPath } from "../lib/asset-path";
 import { api, type AuthenticatedUser } from "../lib/api";
 import { formatPeriodMonth } from "../lib/format";
 
@@ -140,7 +141,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
               to={{ pathname: "/", search: preservedNavigationSearch }}
             >
               <div className="flex size-12 items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.1)] sm:size-14">
-                <img alt="ikas" className="h-full w-full object-cover" src="/ikas.jpg" />
+                <img alt="ikas" className="h-full w-full object-cover" src={toPublicAssetPath("/ikas.jpg")} />
               </div>
               <div className="min-w-0">
                 <p className="truncate font-display text-base font-semibold tracking-[-0.03em] text-slate-950 sm:text-lg">
