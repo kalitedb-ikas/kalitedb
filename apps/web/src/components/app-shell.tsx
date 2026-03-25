@@ -11,8 +11,8 @@ import {
   Users,
   X
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
@@ -56,6 +56,7 @@ function getCurrentNavigationItem(pathname: string, items: NavigationItem[]) {
 
 export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; children?: ReactNode | undefined }) {
   const auth = useAuth();
+  const queryClient = useQueryClient();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -84,6 +85,22 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
       document.body.style.overflow = "";
     };
   }, [isDrawerOpen]);
+
+  useEffect(() => {
+    const periods = periodsQuery.data;
+
+    if (!periods?.length) {
+      return;
+    }
+
+    for (const period of periods.slice(0, 6)) {
+      void queryClient.prefetchQuery({
+        queryKey: ["dashboard", auth.token, period.id, undefined],
+        queryFn: () => api.getDashboard(auth.token, period.id),
+        staleTime: 5 * 60 * 1000
+      });
+    }
+  }, [auth.token, periodsQuery.data, queryClient]);
 
   const visibleNavigation = useMemo(() => {
     const currentUser = props.currentUser;
@@ -121,7 +138,9 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
     } else {
       next.delete("periodId");
     }
-    setSearchParams(next);
+    startTransition(() => {
+      setSearchParams(next);
+    });
   };
 
   return (

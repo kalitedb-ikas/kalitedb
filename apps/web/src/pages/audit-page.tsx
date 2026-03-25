@@ -1,6 +1,6 @@
 import { ChampionSpotlightCard, ExecutiveChartCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { average, normalizeKey, resolveThresholdTone, selectAuditMetrics } from "@kalitedb/shared";
 import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { useMemo } from "react";
@@ -35,7 +35,8 @@ export function AuditPage() {
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
-    queryFn: () => api.getPeriods(auth.token)
+    queryFn: () => api.getPeriods(auth.token),
+    staleTime: 5 * 60 * 1000
   });
   const sortedPeriods = useMemo(
     () => [...(periodsQuery.data ?? [])].sort((left, right) => left.month.localeCompare(right.month)),
@@ -48,7 +49,9 @@ export function AuditPage() {
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
     queryKey: ["dashboard", auth.token, periodId, compareToPeriodId],
-    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId)
+    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000
   });
 
   const snapshot = dashboardQuery.data;
