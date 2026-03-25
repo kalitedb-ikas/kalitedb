@@ -1,17 +1,15 @@
-import { computeFeedbackCoverage, buildQtOverview, resolveThresholdTone } from "@kalitedb/shared";
-import { SectionCard, StatCard } from "@kalitedb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ExecutiveChartCard, MetricCarouselCard, StatCard } from "@kalitedb/ui";
 import { useEffect, useMemo, useState } from "react";
+import { Layers, MessageCircle, Save, Timer, Users, Waves } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
-import { PeriodFilters } from "../components/period-filters";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
-import { formatDurationFromSeconds, formatNumber } from "../lib/format";
+import { formatNumber } from "../lib/format";
+import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 
-function formatEvaluatedTotal(
-  totalEvaluatedCallCount: number | null,
-  totalEvaluatedChatMailCount: number | null
-) {
+function formatEvaluatedTotal(totalEvaluatedCallCount: number | null, totalEvaluatedChatMailCount: number | null) {
   const totalEvaluatedCount =
     totalEvaluatedCallCount === null && totalEvaluatedChatMailCount === null
       ? null
@@ -21,67 +19,84 @@ function formatEvaluatedTotal(
     return "-";
   }
 
-  if (totalEvaluatedCallCount !== null && totalEvaluatedChatMailCount !== null) {
-    return `${formatNumber(totalEvaluatedCallCount)} + ${formatNumber(totalEvaluatedChatMailCount)} = ${formatNumber(totalEvaluatedCount)}`;
-  }
-
   return formatNumber(totalEvaluatedCount);
 }
 
 function parseNullableInteger(value: string) {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
+  if (!trimmed) return null;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
+function parseNullableNumber(value: string) {
+  const trimmed = value.trim().replace(",", ".");
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function sanitizeQtCardEyebrow(userName: string) {
+  return userName.trim().toLowerCase() === "dev admin" ? "" : userName;
 }
 
 export function QtPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
-    queryFn: () => api.getPeriods(auth.token)
+    queryFn: () => api.getPeriods(auth.token),
+    staleTime: 5 * 60 * 1000
   });
   const meQuery = useQuery({
     enabled: Boolean(auth.token),
     queryKey: ["me", auth.token],
-    queryFn: () => api.getMe(auth.token)
+    queryFn: () => api.getMe(auth.token),
+    staleTime: 5 * 60 * 1000
   });
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string | undefined>();
-  const periodId = selectedPeriodId ?? periodsQuery.data?.[0]?.id;
-  const [compareToPeriodId, setCompareToPeriodId] = useState<string | undefined>();
-  const [manualDraft, setManualDraft] = useState({
-    totalEvaluatedCallCount: "",
-    totalEvaluatedChatMailCount: "",
-    feedbackCount: ""
+  const thresholdsQuery = useQuery({
+    enabled: Boolean(auth.token),
+    queryKey: ["thresholds", auth.token],
+    queryFn: () => api.getThresholds(auth.token),
+    staleTime: 5 * 60 * 1000
   });
 
-  const dashboardQuery = useQuery({
-    enabled: Boolean(periodId),
-    queryKey: ["dashboard", auth.token, periodId, compareToPeriodId],
-    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId)
+  const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
+  const [manualDraft, setManualDraft] = useState({
+    totalListeningHours: "",
+    totalEvaluatedCallCount: "",
+    totalEvaluatedChatMailCount: "",
+    feedbackCount: "",
+    feedbackCoverage: ""
   });
-  const manualEntryQuery = useQuery({
+
+  const canEditManualEntry = meQuery.data?.role === "qt";
+
+  const qtEntriesQuery = useQuery({
     enabled: Boolean(periodId),
+    queryKey: ["qt-manual-entries", auth.token, periodId],
+    queryFn: () => api.getQtManualEntries(auth.token, periodId!)
+  });
+
+  const manualEntryQuery = useQuery({
+    enabled: Boolean(periodId && canEditManualEntry),
     queryKey: ["qt-manual-entry", auth.token, periodId],
-    queryFn: () => api.getQtManualEntry(auth.token, periodId!)
+    queryFn: () => api.getQtManualEntry(auth.token, periodId!),
+    staleTime: 60 * 1000
   });
 
   useEffect(() => {
     const entry = manualEntryQuery.data;
-    if (!entry) {
-      return;
-    }
+    if (!entry) return;
 
     setManualDraft({
-      totalEvaluatedCallCount:
-        entry.totalEvaluatedCallCount === null ? "" : String(entry.totalEvaluatedCallCount),
+      totalListeningHours: entry.totalListeningHours == null ? "" : String(entry.totalListeningHours),
+      totalEvaluatedCallCount: entry.totalEvaluatedCallCount == null ? "" : String(entry.totalEvaluatedCallCount),
       totalEvaluatedChatMailCount:
-        entry.totalEvaluatedChatMailCount === null ? "" : String(entry.totalEvaluatedChatMailCount),
-      feedbackCount: entry.feedbackCount === null ? "" : String(entry.feedbackCount)
+        entry.totalEvaluatedChatMailCount == null ? "" : String(entry.totalEvaluatedChatMailCount),
+      feedbackCount: entry.feedbackCount == null ? "" : String(entry.feedbackCount),
+      feedbackCoverage: entry.feedbackCoverage == null ? "" : String(entry.feedbackCoverage)
     });
   }, [manualEntryQuery.data]);
 
@@ -92,173 +107,137 @@ export function QtPage() {
       }
 
       return api.updateQtManualEntry(auth.token, periodId, {
+        totalListeningHours: parseNullableNumber(manualDraft.totalListeningHours),
         totalEvaluatedCallCount: parseNullableInteger(manualDraft.totalEvaluatedCallCount),
         totalEvaluatedChatMailCount: parseNullableInteger(manualDraft.totalEvaluatedChatMailCount),
-        feedbackCount: parseNullableInteger(manualDraft.feedbackCount)
+        feedbackCount: parseNullableInteger(manualDraft.feedbackCount),
+        feedbackCoverage: parseNullableNumber(manualDraft.feedbackCoverage)
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["qt-manual-entry", auth.token, periodId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["qt-manual-entry", auth.token, periodId] }),
+        queryClient.invalidateQueries({ queryKey: ["qt-manual-entries", auth.token, periodId] })
+      ]);
     }
   });
 
-  const snapshot = dashboardQuery.data;
-  const overview = buildQtOverview(snapshot?.datasets.qtMetrics ?? []);
-  const manualCoverage = useMemo(
-    () =>
-      computeFeedbackCoverage(
-        overview.summary.totalListeningSeconds / 3600,
-        manualEntryQuery.data?.feedbackCount ?? null
-      ),
-    [manualEntryQuery.data?.feedbackCount, overview.summary.totalListeningSeconds]
-  );
-  const feedbackTone = snapshot
-    ? resolveThresholdTone(manualCoverage, snapshot.thresholds.feedbackCoverage)
-    : "neutral";
-  const canEditManualEntry = meQuery.data?.role === "admin" || meQuery.data?.role === "team";
+  const feedbackTone = (() => {
+    const value = manualEntryQuery.data?.feedbackCoverage;
+    const threshold = thresholdsQuery.data?.feedbackCoverage;
+
+    if (value === null || value === undefined || !threshold) return "neutral" as const;
+    if (value >= threshold.green) return "green" as const;
+    if (value >= threshold.yellow) return "yellow" as const;
+    return "red" as const;
+  })();
+
+  const qtCards = useMemo(() => {
+    const entries = qtEntriesQuery.data ?? [];
+    if (entries.length === 0) {
+      return [
+        {
+          eyebrow: "Henüz veri yok",
+          title: "QT kartı bekleniyor",
+          value: "-",
+          detail: "QT kullanıcıları kendi girişlerini yaptığında bu alan kişi kişi dolacak.",
+          imageAlt: undefined,
+          imageSrc: undefined,
+          icon: <Users size={20} />,
+          tone: "violet" as const
+        }
+      ];
+    }
+
+    const tones = ["orange", "violet", "emerald"] as const;
+    return entries.map((entry, index) => ({
+      eyebrow: sanitizeQtCardEyebrow(entry.userName),
+      title: "Toplam dinleme süresi",
+      value:
+        entry.totalListeningHours == null ? "-" : `${formatNumber(entry.totalListeningHours, 2)} saat`,
+      detail: `Degerlendirilen toplam ${formatEvaluatedTotal(entry.totalEvaluatedCallCount, entry.totalEvaluatedChatMailCount)} • Geri bildirim ${formatNumber(entry.feedbackCount)}`,
+      imageAlt: entry.userName,
+      imageSrc: getRepresentativePhotoSrc(entry.userName) ?? undefined,
+      icon: index % 3 === 0 ? <Timer size={20} /> : index % 3 === 1 ? <Layers size={20} /> : <MessageCircle size={20} />,
+      tone: tones[index % tones.length]
+    }));
+  }, [qtEntriesQuery.data]);
+
+  const overviewStats = useMemo(() => {
+    const entries = qtEntriesQuery.data ?? [];
+    return {
+      totalPeople: entries.length,
+      totalListeningHours: entries.reduce((sum, entry) => sum + (entry.totalListeningHours ?? 0), 0),
+      totalFeedback: entries.reduce((sum, entry) => sum + (entry.feedbackCount ?? 0), 0)
+    };
+  }, [qtEntriesQuery.data]);
 
   return (
     <div className="space-y-6">
-      <PeriodFilters
-        compareToPeriodId={compareToPeriodId}
-        onCompareChange={(value) => setCompareToPeriodId(value || undefined)}
-        onPeriodChange={(value) => setSelectedPeriodId(value)}
-        periodId={periodId}
-        periods={periodsQuery.data ?? []}
-      />
-
-      <SectionCard
-        title="QT dinleme özeti"
-        description="Ham çağrı kayıtları temsilci bazında gruplanır; çağrı adedi ve toplam dinleme süresi özetlenir."
-      >
-        <div className="overflow-hidden rounded-[2rem] border border-slate-200">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-[#2f6f5d] text-white">
-              <tr>
-                <th className="px-5 py-4 text-lg font-semibold">MT</th>
-                <th className="px-5 py-4 text-center text-lg font-semibold">Çağrı Adedi</th>
-                <th className="px-5 py-4 text-center text-lg font-semibold">Dinlenen Çağrı Süresi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {overview.rows.map((row) => (
-                <tr key={row.id} className="border-b border-[#d7cfb4] last:border-b-0">
-                  <td className="bg-[#b8d4a4] px-5 py-3 text-base font-medium text-slate-900">
-                    {row.representativeName}
-                  </td>
-                  <td className="bg-[#efe3b8] px-5 py-3 text-center text-base text-slate-800">
-                    {formatNumber(row.listenedCallCount)}
-                  </td>
-                  <td className="bg-[#efe3b8] px-5 py-3 text-center text-base text-slate-800">
-                    {formatNumber(row.listenedDurationSeconds)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <section className="surface-default rounded-[34px] border border-white/75 px-6 py-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <StatCard
+            icon={<Waves size={18} />}
+            label="Toplam dinleme"
+            tone="neutral"
+            value={formatNumber(overviewStats.totalListeningHours, 2)}
+          />
+          <StatCard
+            icon={<MessageCircle size={18} />}
+            label="Toplam geri bildirim"
+            tone="neutral"
+            value={formatNumber(overviewStats.totalFeedback)}
+          />
         </div>
-      </SectionCard>
+      </section>
 
-      <SectionCard
-        title="QT manuel giriş"
-        description="Her QT kendi değerlendirme ve geri bildirim sayılarını bu alandan güncelleyebilir."
-      >
-        <form
-          className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr_auto]"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void manualEntryMutation.mutateAsync();
-          }}
-        >
-          <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            Değerlendirilen çağrı adedi
-            <input
-              className="rounded-2xl border border-slate-200 px-3 py-2"
-              disabled={!canEditManualEntry}
-              onChange={(event) =>
-                setManualDraft((current) => ({
-                  ...current,
-                  totalEvaluatedCallCount: event.target.value
-                }))
-              }
-              value={manualDraft.totalEvaluatedCallCount}
+      <ExecutiveChartCard title="QT özet">
+        <div className="metric-marquee flex gap-4 overflow-x-auto pb-2">
+          {qtCards.map((card) => (
+            <MetricCarouselCard
+              key={`${card.eyebrow}-${card.title}`}
+              detail={card.detail}
+              eyebrow={card.eyebrow}
+              icon={card.icon}
+              imageAlt={card.imageAlt}
+              imageSrc={card.imageSrc}
+              title={card.title}
+              tone={card.tone}
+              value={card.value}
             />
-          </label>
+          ))}
+        </div>
+      </ExecutiveChartCard>
 
-          <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            Değerlendirilen chat/mail adedi
-            <input
-              className="rounded-2xl border border-slate-200 px-3 py-2"
-              disabled={!canEditManualEntry}
-              onChange={(event) =>
-                setManualDraft((current) => ({
-                  ...current,
-                  totalEvaluatedChatMailCount: event.target.value
-                }))
-              }
-              value={manualDraft.totalEvaluatedChatMailCount}
-            />
-          </label>
-
-          <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            Geri bildirim sayısı
-            <input
-              className="rounded-2xl border border-slate-200 px-3 py-2"
-              disabled={!canEditManualEntry}
-              onChange={(event) =>
-                setManualDraft((current) => ({
-                  ...current,
-                  feedbackCount: event.target.value
-                }))
-              }
-              value={manualDraft.feedbackCount}
-            />
-          </label>
-
-          <div className="flex items-end">
-            <button
-              className="rounded-full bg-brand-ink px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-              disabled={!canEditManualEntry || manualEntryMutation.isPending}
-              type="submit"
-            >
-              Kaydet
-            </button>
+      {canEditManualEntry ? (
+        <ExecutiveChartCard title="QT veri girişi">
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-5">
+            <p className="text-sm font-semibold text-slate-900">Manuel giriş alanı taşındı</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              QT verileri artık <span className="font-semibold">Yönetim &gt; QT</span> alanından giriliyor. Ayı seçip aynı ekrandan manuel kayıt yapabilirsiniz.
+            </p>
           </div>
-        </form>
-
-        <p className="mt-3 text-sm text-slate-500">
-          {manualEntryQuery.data?.userName
-            ? `${manualEntryQuery.data.userName} için dönem bazlı manuel kayıt tutulur.`
-            : "Manuel kayıt yükleniyor."}
-        </p>
-
-        <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          <StatCard
-            label="Değerlendirilen çağrı/chat/mail toplamı"
-            tone="neutral"
-            value={formatEvaluatedTotal(
-              manualEntryQuery.data?.totalEvaluatedCallCount ?? null,
-              manualEntryQuery.data?.totalEvaluatedChatMailCount ?? null
-            )}
-          />
-          <StatCard
-            label="Toplam dinleme süresi"
-            tone="neutral"
-            value={formatDurationFromSeconds(overview.summary.totalListeningSeconds)}
-          />
-          <StatCard
-            label="Geri bildirim sayısı"
-            tone="green"
-            value={formatNumber(manualEntryQuery.data?.feedbackCount)}
-          />
-          <StatCard
-            label="Saat başına geri bildirim"
-            tone={feedbackTone}
-            value={formatNumber(manualCoverage, 2)}
-            hint="Hedef: Her 1 saatlik dinleme için en az 2 geri bildirim."
-          />
-        </div>
-      </SectionCard>
+        </ExecutiveChartCard>
+      ) : null}
     </div>
+  );
+}
+
+function QtFormField(props: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-2 text-sm font-medium text-slate-600">
+      {props.label}
+      <input
+        className="rounded-[20px] border border-white/50 bg-white/88 px-4 py-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100"
+        disabled={props.disabled}
+        onChange={(event) => props.onChange(event.target.value)}
+        value={props.value}
+      />
+    </label>
   );
 }

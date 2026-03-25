@@ -5,36 +5,74 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function hasRole(role) {
-      return isAuthed() && request.auth.token.role == role;
+    function currentRole() {
+      return isAuthed() ? request.auth.token.role : null;
     }
 
-    function isPrivileged() {
+    function hasRole(role) {
+      return currentRole() == role;
+    }
+
+    function canReadReports() {
+      return hasRole('admin') || hasRole('team') || hasRole('ceo') || hasRole('qt');
+    }
+
+    function canManageReports() {
       return hasRole('admin') || hasRole('team');
     }
 
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isOwnQtEntry(userKey) {
+      return isAuthed() && hasRole('qt') && request.auth.uid == userKey;
+    }
+
     match /reportPeriods/{periodId} {
-      allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
-      allow write: if hasRole('admin') || hasRole('team');
-
-      match /{document=**} {
-        allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
-        allow write: if hasRole('admin') || hasRole('team');
-      }
+      allow get, list: if canReadReports();
+      allow create, update, delete: if canManageReports();
     }
 
-    match /thresholdConfigs/{document=**} {
-      allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
-      allow write: if hasRole('admin');
+    match /reportPeriods/{periodId}/agentMetrics/{recordId} {
+      allow get, list: if canReadReports();
+      allow create, update, delete: if canManageReports();
     }
 
-    match /userRoles/{document=**} {
-      allow read, write: if hasRole('admin');
+    match /reportPeriods/{periodId}/auditMetrics/{recordId} {
+      allow get, list: if canReadReports();
+      allow create, update, delete: if canManageReports();
     }
 
-    match /importJobs/{document=**} {
-      allow read, write: if isPrivileged();
+    match /reportPeriods/{periodId}/questionPerformance/{recordId} {
+      allow get, list: if canReadReports();
+      allow create, update, delete: if canManageReports();
+    }
+
+    match /reportPeriods/{periodId}/qtMetrics/{recordId} {
+      allow get, list: if canReadReports();
+      allow create, update, delete: if canManageReports();
+    }
+
+    match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
+      allow get, list: if canReadReports();
+      allow create, update: if canManageReports() || isOwnQtEntry(userKey);
+      allow delete: if isAdmin();
+    }
+
+    match /thresholdConfigs/{metricId} {
+      allow get, list: if canReadReports();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /userRoles/{emailKey} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /importJobs/{jobId} {
+      allow get, list: if canManageReports();
+      allow create, update, delete: if canManageReports();
     }
   }
 }
-

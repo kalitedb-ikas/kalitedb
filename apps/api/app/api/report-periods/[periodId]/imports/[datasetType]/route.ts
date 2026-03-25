@@ -19,9 +19,13 @@ export async function POST(
     const { periodId, datasetType: rawDatasetType } = await context.params;
     const datasetType = datasetTypeSchema.parse(rawDatasetType);
     const repository = await getRepository();
-    const details = await repository.getPeriodDetails(periodId);
-    if (!details) {
+    const period = await repository.getReportPeriod(periodId);
+    if (!period) {
       throw new ApiError(404, "Dönem bulunamadı.");
+    }
+
+    if (datasetType === "qt-metrics") {
+      throw new ApiError(400, "QT verileri artık CSV ile değil, QT kullanıcıları tarafından manuel giriliyor.");
     }
 
     const formData = await request.formData();
@@ -33,7 +37,30 @@ export async function POST(
     }
 
     const text = await file.text();
-    const preview = parseDatasetCsv({ datasetType, text, expectedPeriod: details.period.month });
+    const preview =
+      datasetType === "agent-metrics"
+        ? parseDatasetCsv({
+            datasetType,
+            text,
+            expectedPeriod: period.month
+          })
+        : datasetType === "audit-metrics"
+          ? parseDatasetCsv({
+              datasetType,
+              text,
+              expectedPeriod: period.month
+            })
+          : datasetType === "question-performance"
+            ? parseDatasetCsv({
+                datasetType,
+                text,
+                expectedPeriod: period.month
+              })
+            : parseDatasetCsv({
+                datasetType,
+                text,
+                expectedPeriod: period.month
+              });
 
     if (preview.errors.length > 0 || !commit) {
       return jsonResponse({

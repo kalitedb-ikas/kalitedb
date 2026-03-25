@@ -31,13 +31,13 @@ export function RecordEditor(props: {
   if (!props.record) {
     return (
       <SectionCard title={props.title} description="Düzenleme için tablodan bir kayıt seçin.">
-        <p className="text-sm text-slate-500">Kayıt seçilmedi.</p>
+        <p className="text-sm text-slate-600">Kayıt seçilmedi.</p>
       </SectionCard>
     );
   }
 
   return (
-    <SectionCard title={props.title} description="Sayısal alanlar otomatik hesaplanan değerlerle yeniden doğrulanır.">
+    <SectionCard title={props.title} description="Sayısal alanlar, hesaplanan değerlerle birlikte yeniden doğrulanır.">
       <form
         className="grid gap-4 md:grid-cols-2"
         onSubmit={(event) => {
@@ -56,10 +56,10 @@ export function RecordEditor(props: {
         }}
       >
         {Object.entries(draft).map(([key, value]) => (
-          <label key={key} className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+          <label key={key} className="flex flex-col gap-1.5 text-sm font-medium text-slate-600">
             {key}
             <input
-              className="rounded-2xl border border-slate-200 px-3 py-2"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-700 transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               onChange={(event) => {
                 setDraft((current) => ({
                   ...current,
@@ -72,7 +72,7 @@ export function RecordEditor(props: {
         ))}
 
         <div className="md:col-span-2">
-          <button className="rounded-full bg-brand-ink px-5 py-2 text-sm font-semibold text-white" type="submit">
+          <button className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" type="submit">
             Kaydı güncelle
           </button>
         </div>

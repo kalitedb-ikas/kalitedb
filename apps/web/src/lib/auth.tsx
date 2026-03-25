@@ -9,7 +9,7 @@ type AuthContextValue = {
   loading: boolean;
   authMode: "firebase" | "dev" | "none";
   loginWithGoogle: () => Promise<void>;
-  loginAsDev: (role: "admin" | "team" | "ceo") => void;
+  loginAsDev: (role: "admin" | "team" | "ceo" | "qt") => void;
   logout: () => Promise<void>;
 };
 
@@ -86,4 +86,3 @@ export function useAuth() {
 
   return context;
 }
-

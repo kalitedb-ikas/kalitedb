@@ -1,6 +1,7 @@
 import {
   DEFAULT_THRESHOLDS,
   type AgentMetric,
+  type AuditMetric,
   type DashboardMetricItem,
   type DashboardSnapshot,
   type KpiMetricKey,
@@ -30,18 +31,18 @@ function buildMetricItem(
   return item;
 }
 
-function buildAgentDeltaMap(
-  current: AgentMetric[],
-  previous: AgentMetric[],
-  metric: "auditScore" | "callEvaluationAverage"
+function buildMetricDeltaMap<TRecord extends { id: string; agentKey: string; agentName: string }>(
+  current: TRecord[],
+  previous: TRecord[],
+  getValue: (record: TRecord) => number | null
 ): DashboardMetricItem[] {
   const previousMap = new Map(previous.map((record) => [record.agentKey, record]));
 
   return current
     .map((record) => {
       const previousRecord = previousMap.get(record.agentKey);
-      const currentValue = record[metric];
-      const previousValue = previousRecord?.[metric] ?? null;
+      const currentValue = getValue(record);
+      const previousValue = previousRecord ? getValue(previousRecord) : null;
 
       if (currentValue === null) {
         return null;
@@ -61,14 +62,45 @@ function pickFirst(items: DashboardMetricItem[]): DashboardMetricItem | undefine
   return items[0];
 }
 
-function buildSummary(agentMetrics: AgentMetric[], questionPerformance: QuestionPerformance[], qtMetrics: QtMetric[]) {
+function buildLegacyAuditMetrics(agentMetrics: AgentMetric[]): AuditMetric[] {
+  return agentMetrics
+    .filter((record) => record.auditScore !== null || record.previousAuditAccuracy !== null)
+    .map((record) => ({
+      id: record.id,
+      period: record.period,
+      agentKey: record.agentKey,
+      agentName: record.agentName,
+      auditScore: record.auditScore,
+      previousAuditAccuracy: record.previousAuditAccuracy
+    }));
+}
+
+export function selectAuditMetrics(datasets: Pick<ReportDatasets, "agentMetrics" | "auditMetrics">): AuditMetric[] {
+  if (datasets.auditMetrics.length > 0) {
+    return datasets.auditMetrics;
+  }
+
+  return buildLegacyAuditMetrics(datasets.agentMetrics);
+}
+
+function buildSummary(
+  agentMetrics: AgentMetric[],
+  auditMetrics: AuditMetric[],
+  questionPerformance: QuestionPerformance[],
+  qtMetrics: QtMetric[]
+) {
+  const agentKeys = new Set([
+    ...agentMetrics.map((record) => record.agentKey),
+    ...auditMetrics.map((record) => record.agentKey)
+  ]);
+
   return {
-    auditAverage: average(agentMetrics.map((record) => record.auditScore)),
-    missingQuestionsAverage: average(agentMetrics.map((record) => record.missingQuestionsAccuracy)),
+    auditAverage: average(auditMetrics.map((record) => record.auditScore)),
+    previousAuditAccuracyAverage: average(auditMetrics.map((record) => record.previousAuditAccuracy)),
     csatAverage: average(agentMetrics.map((record) => record.callEvaluationAverage)),
     qtCoverageAverage: average(qtMetrics.map((record) => record.feedbackCoverage)),
     totalConversationCount: sum(agentMetrics.map((record) => record.totalConversationCount)),
-    agentCount: agentMetrics.length,
+    agentCount: agentKeys.size,
     questionCount: questionPerformance.length,
     qtRepresentativeCount: qtMetrics.length
   };
@@ -125,8 +157,10 @@ export function buildDashboardSnapshot(params: {
   const thresholds = params.thresholds ?? structuredClone(DEFAULT_THRESHOLDS);
   const currentAgents = params.datasets.agentMetrics;
   const compareAgents = params.compareDatasets?.agentMetrics ?? [];
-  const auditItems = buildAgentDeltaMap(currentAgents, compareAgents, "auditScore");
-  const csatItems = buildAgentDeltaMap(currentAgents, compareAgents, "callEvaluationAverage");
+  const currentAudits = selectAuditMetrics(params.datasets);
+  const compareAudits = params.compareDatasets ? selectAuditMetrics(params.compareDatasets) : [];
+  const auditItems = buildMetricDeltaMap(currentAudits, compareAudits, (record) => record.auditScore);
+  const csatItems = buildMetricDeltaMap(currentAgents, compareAgents, (record) => record.callEvaluationAverage);
   const auditDesc = sortMetricItems(auditItems, "desc");
   const auditAsc = sortMetricItems(auditItems, "asc");
   const csatDesc = sortMetricItems(csatItems, "desc");
@@ -157,6 +191,7 @@ export function buildDashboardSnapshot(params: {
     ...(params.compareToPeriod ? { compareToPeriod: params.compareToPeriod } : {}),
     summary: buildSummary(
       params.datasets.agentMetrics,
+      currentAudits,
       params.datasets.questionPerformance,
       params.datasets.qtMetrics
     ),
