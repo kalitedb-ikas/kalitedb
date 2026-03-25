@@ -19,6 +19,7 @@ describe("metrics helpers", () => {
 
   it("threshold tonunu doner", () => {
     expect(resolveThresholdTone(95, DEFAULT_THRESHOLDS.auditScore)).toBe("green");
-    expect(resolveThresholdTone(72, DEFAULT_THRESHOLDS.auditScore)).toBe("red");
+    expect(resolveThresholdTone(72, DEFAULT_THRESHOLDS.auditScore)).toBe("yellow");
+    expect(resolveThresholdTone(59, DEFAULT_THRESHOLDS.auditScore)).toBe("red");
   });
 });

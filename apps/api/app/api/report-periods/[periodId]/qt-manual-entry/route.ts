@@ -8,9 +8,11 @@ import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src
 export const OPTIONS = optionsResponse;
 
 const patchSchema = z.object({
+  totalListeningHours: z.number().nonnegative().nullable(),
   totalEvaluatedCallCount: z.number().int().nonnegative().nullable(),
   totalEvaluatedChatMailCount: z.number().int().nonnegative().nullable(),
-  feedbackCount: z.number().int().nonnegative().nullable()
+  feedbackCount: z.number().int().nonnegative().nullable(),
+  feedbackCoverage: z.number().nonnegative().nullable()
 });
 
 function buildDefaultEntry(periodId: string, user: Awaited<ReturnType<typeof requireAuth>>): QtManualEntry {
@@ -22,9 +24,11 @@ function buildDefaultEntry(periodId: string, user: Awaited<ReturnType<typeof req
     userKey: user.uid,
     userEmail: user.email,
     userName: user.displayName || user.email,
+    totalListeningHours: null,
     totalEvaluatedCallCount: null,
     totalEvaluatedChatMailCount: null,
     feedbackCount: null,
+    feedbackCoverage: null,
     createdAt: now,
     updatedAt: now
   };
@@ -35,15 +39,21 @@ export async function GET(
   context: { params: Promise<{ periodId: string }> }
 ) {
   try {
-    const user = await requireAuth(request as never, ["admin", "team", "ceo"]);
     const { periodId } = await context.params;
     const repository = await getRepository();
     const period = await repository.getReportPeriod(periodId);
+    const url = new URL(request.url);
 
     if (!period) {
       throw new ApiError(404, "Dönem bulunamadı.");
     }
 
+    if (url.searchParams.get("scope") === "all") {
+      const entries = await repository.listQtManualEntries(periodId);
+      return jsonResponse(entries);
+    }
+
+    const user = await requireAuth(request as never, ["admin", "qt"]);
     const entry = (await repository.getQtManualEntry(periodId, user.uid)) ?? buildDefaultEntry(periodId, user);
     return jsonResponse(entry);
   } catch (error) {
@@ -56,7 +66,7 @@ export async function PATCH(
   context: { params: Promise<{ periodId: string }> }
 ) {
   try {
-    const user = await requireAuth(request as never, ["admin", "team"]);
+    const user = await requireAuth(request as never, ["admin", "qt"]);
     const { periodId } = await context.params;
     const repository = await getRepository();
     const period = await repository.getReportPeriod(periodId);

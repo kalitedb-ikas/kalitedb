@@ -16,5 +16,13 @@ Firebase destekli, CSV import tabanli aylik kalite raporlama platformu.
 3. `cp apps/api/.env.example apps/api/.env.local`
 4. `pnpm dev`
 
-Varsayilan olarak API `file` driver ile `.data/local-db.json` altina yazar. Firebase kullanmak icin `APP_DATA_DRIVER=firebase` ve ilgili servis hesap degiskenlerini tanimlayin.
+API artik `APP_DATA_DRIVER=auto` ile calisabilir. Firebase Admin erisimi varsa Firestore'a gecer, yoksa `.data/local-db.json` dosyasina geri duser.
 
+Firestore kullanimi icin iki yol vardir:
+
+1. `FIREBASE_CLIENT_EMAIL` ve `FIREBASE_PRIVATE_KEY` ile servis hesap bilgisi tanimlayin.
+2. Ya da Firebase/Google emulator veya `GOOGLE_APPLICATION_CREDENTIALS` kullanin.
+
+Okuma maliyetini dusurmek icin dashboard ve donem detay endpoint'leri artik sadece ihtiyac duyulan dataset koleksiyonlarini ceker.
+
+`APP_ALLOW_FIRST_ADMIN_BOOTSTRAP=true` ise sistemde hic rol kaydi yokken ilk Google kullanicisi otomatik `admin` olarak kaydedilir. Ilk kurulumdan sonra isterseniz bu ayari kapatabilirsiniz.

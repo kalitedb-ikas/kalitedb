@@ -1,14 +1,13 @@
 import { z } from "zod";
 
 export const reportStatusSchema = z.enum(["draft", "published"]);
-export const datasetTypeSchema = z.enum(["agent-metrics", "question-performance", "qt-metrics"]);
+export const datasetTypeSchema = z.enum(["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"]);
 export const thresholdDirectionSchema = z.enum(["higher_is_better", "lower_is_better"]);
-export const roleSchema = z.enum(["admin", "team", "ceo"]);
+export const roleSchema = z.enum(["admin", "team", "ceo", "qt"]);
 export const periodSchema = z.string().regex(/^\d{4}-\d{2}$/);
 
 export const kpiMetricKeySchema = z.enum([
   "auditScore",
-  "missingQuestionsAccuracy",
   "callEvaluationAverage",
   "localCloseRate",
   "avgTalkDurationSeconds",
@@ -29,6 +28,9 @@ export const reportPeriodSchema = z.object({
   title: z.string().min(1),
   status: reportStatusSchema,
   compareToPeriodId: z.string().optional(),
+  manualTotalCallCount: z.number().int().nonnegative().nullable().optional(),
+  manualTotalChatMailCount: z.number().int().nonnegative().nullable().optional(),
+  manualTotalTicketClosedCount: z.number().int().nonnegative().nullable().optional(),
   publishedAt: z.string().datetime().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
@@ -48,9 +50,9 @@ export const agentMetricSchema = z.object({
   period: periodSchema,
   agentKey: z.string(),
   agentName: z.string().min(1),
+  // Legacy alanlar: audit verisi artik ayri import ile yonetiliyor.
   auditScore: nullableNumber,
   previousAuditAccuracy: nullableNumber,
-  missingQuestionsAccuracy: nullableNumber,
   totalCallCount: z.number().int().nonnegative(),
   totalChatMailCount: z.number().int().nonnegative(),
   totalTicketClosedCount: z.number().int().nonnegative(),
@@ -60,6 +62,15 @@ export const agentMetricSchema = z.object({
   missedCalls: nullableInteger,
   callEvaluationAverage: nullableNumber,
   evaluationCount: nullableInteger
+});
+
+export const auditMetricSchema = z.object({
+  id: z.string(),
+  period: periodSchema,
+  agentKey: z.string(),
+  agentName: z.string().min(1),
+  auditScore: nullableNumber,
+  previousAuditAccuracy: nullableNumber
 });
 
 export const questionPerformanceSchema = z.object({
@@ -124,9 +135,11 @@ export const qtManualEntrySchema = z.object({
   userKey: z.string(),
   userEmail: z.string().email(),
   userName: z.string().min(1),
+  totalListeningHours: nullableNumber,
   totalEvaluatedCallCount: nullableInteger,
   totalEvaluatedChatMailCount: nullableInteger,
   feedbackCount: nullableInteger,
+  feedbackCoverage: nullableNumber,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });
@@ -134,6 +147,7 @@ export const qtManualEntrySchema = z.object({
 export type ReportPeriod = z.infer<typeof reportPeriodSchema>;
 export type Agent = z.infer<typeof agentSchema>;
 export type AgentMetric = z.infer<typeof agentMetricSchema>;
+export type AuditMetric = z.infer<typeof auditMetricSchema>;
 export type QuestionPerformance = z.infer<typeof questionPerformanceSchema>;
 export type QtMetric = z.infer<typeof qtMetricSchema>;
 export type ThresholdConfig = z.infer<typeof thresholdConfigSchema>;
@@ -158,6 +172,7 @@ export type CsvImportPreview<TRecord> = {
 
 export type ReportDatasets = {
   agentMetrics: AgentMetric[];
+  auditMetrics: AuditMetric[];
   questionPerformance: QuestionPerformance[];
   qtMetrics: QtMetric[];
 };
@@ -171,7 +186,7 @@ export type DashboardMetricItem = {
 
 export type DashboardSummary = {
   auditAverage: number | null;
-  missingQuestionsAverage: number | null;
+  previousAuditAccuracyAverage: number | null;
   csatAverage: number | null;
   qtCoverageAverage: number | null;
   totalConversationCount: number;
@@ -232,34 +247,33 @@ export type DashboardSnapshot = {
 export const DEFAULT_THRESHOLDS: Record<KpiMetricKey, ThresholdConfig> = {
   auditScore: {
     metric: "auditScore",
-    label: "Audit Skoru",
+    label: "Audit skoru",
     direction: "higher_is_better",
+    // Yönetim hedefi:
+    // - < 60 -> sıkıntı (red)
+    // - >= 77 -> operasyonel hedef tutuyor (green)
+    // - 60 - 76.99 -> izlenmeli (yellow)
     red: 60,
-    yellow: 80,
-    green: 90,
-    unit: "percent"
-  },
-  missingQuestionsAccuracy: {
-    metric: "missingQuestionsAccuracy",
-    label: "Kayıp Soruları Bilme Oranı",
-    direction: "higher_is_better",
-    red: 60,
-    yellow: 80,
-    green: 90,
+    yellow: 60,
+    green: 77,
     unit: "percent"
   },
   callEvaluationAverage: {
     metric: "callEvaluationAverage",
-    label: "Çağrı Değerlendirme Ortalaması",
+    label: "Çağrı değerlendirme ortalaması",
     direction: "higher_is_better",
+    // CSAT hedef/iyi eşik:
+    // - >= 4.85 -> iyi (green)
+    // - 4.80 - 4.84 -> geliştirilmeli (yellow)
+    // - < 4.80 -> risk (red)
     red: 4.8,
-    yellow: 4.9,
-    green: 4.97,
+    yellow: 4.8,
+    green: 4.85,
     unit: "number"
   },
   localCloseRate: {
     metric: "localCloseRate",
-    label: "Lokal Kapatma Oranı",
+    label: "Lokal kapatma oranı",
     direction: "higher_is_better",
     red: 70,
     yellow: 85,
@@ -268,7 +282,7 @@ export const DEFAULT_THRESHOLDS: Record<KpiMetricKey, ThresholdConfig> = {
   },
   avgTalkDurationSeconds: {
     metric: "avgTalkDurationSeconds",
-    label: "Ortalama Konuşma Süresi",
+    label: "Ortalama konuşma süresi",
     direction: "lower_is_better",
     red: 420,
     yellow: 360,
@@ -277,7 +291,7 @@ export const DEFAULT_THRESHOLDS: Record<KpiMetricKey, ThresholdConfig> = {
   },
   feedbackCoverage: {
     metric: "feedbackCoverage",
-    label: "Saat Başına Geri Bildirim",
+    label: "Saat başına geri bildirim",
     direction: "higher_is_better",
     red: 1.5,
     yellow: 2,

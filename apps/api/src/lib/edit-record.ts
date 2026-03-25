@@ -1,11 +1,13 @@
 import {
   agentMetricSchema,
+  auditMetricSchema,
   computeFeedbackCoverage,
   computeQuestionAccuracy,
   computeTotalConversationCount,
   questionPerformanceSchema,
   qtMetricSchema,
   type AgentMetric,
+  type AuditMetric,
   type DatasetType,
   type QuestionPerformance,
   type QtMetric
@@ -13,6 +15,7 @@ import {
 
 type DatasetRecordMap = {
   "agent-metrics": AgentMetric;
+  "audit-metrics": AuditMetric;
   "question-performance": QuestionPerformance;
   "qt-metrics": QtMetric;
 };
@@ -22,6 +25,11 @@ export function sanitizeEditedRecord(
   current: AgentMetric,
   updates: Partial<AgentMetric>
 ): AgentMetric;
+export function sanitizeEditedRecord(
+  datasetType: "audit-metrics",
+  current: AuditMetric,
+  updates: Partial<AuditMetric>
+): AuditMetric;
 export function sanitizeEditedRecord(
   datasetType: "question-performance",
   current: QuestionPerformance,
@@ -65,6 +73,13 @@ export function sanitizeEditedRecord(
     };
 
     return questionPerformanceSchema.parse(next);
+  }
+
+  if (datasetType === "audit-metrics") {
+    return auditMetricSchema.parse({
+      ...(current as AuditMetric),
+      ...(updates as Partial<AuditMetric>)
+    });
   }
 
   const merged = {

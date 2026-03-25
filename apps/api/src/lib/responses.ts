@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ZodError } from "zod";
 
 export class ApiError extends Error {
   constructor(
@@ -10,8 +11,17 @@ export class ApiError extends Error {
   }
 }
 
+function shouldUseWildcardCors(origin: string | undefined) {
+  if (!origin) {
+    return true;
+  }
+
+  return origin.includes("localhost") || origin.includes("127.0.0.1");
+}
+
 export function getCorsHeaders() {
-  const origin = process.env.APP_WEB_ORIGIN ?? "*";
+  const configuredOrigin = process.env.APP_WEB_ORIGIN;
+  const origin = shouldUseWildcardCors(configuredOrigin) ? "*" : configuredOrigin ?? "*";
 
   return {
     "Access-Control-Allow-Origin": origin,
@@ -45,6 +55,16 @@ export function handleRouteError(error: unknown) {
     return NextResponse.json(
       { error: error.message, details: error.details },
       { status: error.status, headers: getCorsHeaders() }
+    );
+  }
+
+  if (error instanceof ZodError) {
+    return jsonResponse(
+      {
+        error: error.issues[0]?.message ?? "Gönderilen veri doğrulanamadı.",
+        details: error.issues
+      },
+      { status: 400 }
     );
   }
 

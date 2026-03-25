@@ -1,18 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-test("dashboard renders with mocked api data", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.localStorage.setItem("kalitedb.devToken", "dev-admin");
-  });
-
+async function mockCommonRoutes(page: Page, role: "admin" | "team" | "ceo") {
   await page.route("**/api/me", async (route) => {
     await route.fulfill({
       json: {
         data: {
-          uid: "dev-admin",
-          email: "admin@local.dev",
-          displayName: "Dev Admin",
-          role: "admin"
+          uid: `dev-${role}`,
+          email: `${role}@local.dev`,
+          displayName: role === "ceo" ? "Dev CEO" : role === "team" ? "Dev Team" : "Dev Admin",
+          role
         }
       }
     });
@@ -49,7 +45,7 @@ test("dashboard renders with mocked api data", async ({ page }) => {
           },
           summary: {
             auditAverage: 91,
-            missingQuestionsAverage: 88,
+            previousAuditAccuracyAverage: 88,
             csatAverage: 4.97,
             qtCoverageAverage: 1.1,
             totalConversationCount: 143,
@@ -75,6 +71,7 @@ test("dashboard renders with mocked api data", async ({ page }) => {
           },
           datasets: {
             agentMetrics: [],
+            auditMetrics: [],
             questionPerformance: [],
             qtMetrics: []
           },
@@ -83,8 +80,40 @@ test("dashboard renders with mocked api data", async ({ page }) => {
       }
     });
   });
+}
+
+test("dashboard renders the new hero with mocked api data", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("kalitedb.devToken", "dev-admin");
+  });
+
+  await mockCommonRoutes(page, "admin");
 
   await page.goto("/");
-  await expect(page.getByText("Audit ortalaması")).toBeVisible();
-  await expect(page.getByText("91,00%")).toBeVisible();
+  await expect(page.getByText("Audit ortalaması").first()).toBeVisible();
+  await expect(page.getByText("Ocak 2026 audit doğruluk oranı").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Yönetim" })).toBeVisible();
+});
+
+test("guest users can browse dashboard data without logging in", async ({ page }) => {
+  await mockCommonRoutes(page, "admin");
+
+  await page.goto("/");
+  await expect(page.getByText("Audit ortalaması").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Audit" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Giriş" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Ay filtresi" })).toBeVisible();
+});
+
+test("non-admin users are redirected away from admin and do not see the admin nav", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("kalitedb.devToken", "dev-ceo");
+  });
+
+  await mockCommonRoutes(page, "ceo");
+
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: "Yönetim" })).toHaveCount(0);
+  await expect(page.getByText("Audit ortalaması").first()).toBeVisible();
 });

@@ -4,12 +4,14 @@ import path from "node:path";
 import {
   DEFAULT_THRESHOLDS,
   agentMetricSchema,
+  auditMetricSchema,
   importJobSchema,
   questionPerformanceSchema,
   qtManualEntrySchema,
   qtMetricSchema,
   reportPeriodSchema,
   type AgentMetric,
+  type AuditMetric,
   type DatasetType,
   type ImportJob,
   type KpiMetricKey,
@@ -21,13 +23,25 @@ import {
   type ThresholdConfig,
   type UserRoleAssignment
 } from "@kalitedb/shared";
-import { getFirebaseAdminAuth, getFirebaseAdminDb, getFirebaseAdminStorage } from "./firebase-admin";
+import {
+  getFirebaseAdminAuth,
+  getFirebaseAdminDb,
+  getFirebaseAdminStorage,
+  isFirebaseAdminAvailable
+} from "./firebase-admin";
 import { ApiError } from "./responses";
 
 type DatasetRecordMap = {
   "agent-metrics": AgentMetric;
+  "audit-metrics": AuditMetric;
   "question-performance": QuestionPerformance;
   "qt-metrics": QtMetric;
+};
+
+type PeriodDetailsOptions = {
+  datasetTypes?: DatasetType[] | undefined;
+  includeImportJobs?: boolean | undefined;
+  importJobLimit?: number | undefined;
 };
 
 type LocalDb = {
@@ -39,16 +53,27 @@ type LocalDb = {
   qtManualEntries: QtManualEntry[];
 };
 
-export type ReportPeriodDraftPatch = Partial<Pick<ReportPeriod, "title" | "compareToPeriodId">>;
+export type ReportPeriodDraftPatch = Partial<
+  Pick<
+    ReportPeriod,
+    "title" | "compareToPeriodId" | "manualTotalCallCount" | "manualTotalChatMailCount" | "manualTotalTicketClosedCount"
+  >
+>;
 
 export type Repository = {
   listReportPeriods(): Promise<ReportPeriod[]>;
   getReportPeriod(periodId: string): Promise<ReportPeriod | undefined>;
-  getPeriodDetails(periodId: string): Promise<{
+  hasAnyUserRoles(): Promise<boolean>;
+  getPeriodDetails(periodId: string, options?: PeriodDetailsOptions): Promise<{
     period: ReportPeriod;
     datasets: ReportDatasets;
     importJobs: ImportJob[];
   } | undefined>;
+  getDatasetRecord<T extends DatasetType>(
+    periodId: string,
+    datasetType: T,
+    recordId: string
+  ): Promise<DatasetRecordMap[T] | undefined>;
   createReportPeriod(input: {
     month: string;
     title: string;
@@ -74,15 +99,18 @@ export type Repository = {
   upsertUserRole(input: UserRoleAssignment): Promise<UserRoleAssignment>;
   findRoleByEmail(email: string): Promise<UserRoleAssignment["role"] | undefined>;
   getQtManualEntry(periodId: string, userKey: string): Promise<QtManualEntry | undefined>;
+  listQtManualEntries(periodId: string): Promise<QtManualEntry[]>;
   upsertQtManualEntry(entry: QtManualEntry): Promise<QtManualEntry>;
   storeImportFile(storagePath: string, content: string): Promise<void>;
 };
 
 const DATA_FILE_PATH = path.join(process.cwd(), ".data", "local-db.json");
+const ALL_DATASET_TYPES: DatasetType[] = ["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"];
 
 function emptyDatasets(): ReportDatasets {
   return {
     agentMetrics: [],
+    auditMetrics: [],
     questionPerformance: [],
     qtMetrics: []
   };
@@ -124,9 +152,13 @@ function sortPeriods(periods: ReportPeriod[]) {
   return [...periods].sort((left, right) => right.month.localeCompare(left.month));
 }
 
-export function datasetKeyToProperty(datasetType: DatasetType): keyof ReportDatasets {
+function datasetKeyToProperty(datasetType: DatasetType): keyof ReportDatasets {
   if (datasetType === "agent-metrics") {
     return "agentMetrics";
+  }
+
+  if (datasetType === "audit-metrics") {
+    return "auditMetrics";
   }
 
   if (datasetType === "question-performance") {
@@ -141,6 +173,10 @@ function parseDatasetRecord<T extends DatasetType>(datasetType: T, record: Datas
     return agentMetricSchema.parse(record) as DatasetRecordMap[T];
   }
 
+  if (datasetType === "audit-metrics") {
+    return auditMetricSchema.parse(record) as DatasetRecordMap[T];
+  }
+
   if (datasetType === "question-performance") {
     return questionPerformanceSchema.parse(record) as DatasetRecordMap[T];
   }
@@ -150,6 +186,39 @@ function parseDatasetRecord<T extends DatasetType>(datasetType: T, record: Datas
 
 function normalizeRoleEmail(email: string) {
   return email.trim().toLocaleLowerCase("tr-TR");
+}
+
+function getSelectedDatasetTypes(datasetTypes?: DatasetType[]) {
+  return datasetTypes?.length ? datasetTypes : ALL_DATASET_TYPES;
+}
+
+function buildFilteredDatasets(datasets: ReportDatasets, datasetTypes?: DatasetType[]): ReportDatasets {
+  const selected = new Set(getSelectedDatasetTypes(datasetTypes));
+
+  return {
+    agentMetrics: selected.has("agent-metrics") ? datasets.agentMetrics ?? [] : [],
+    auditMetrics: selected.has("audit-metrics") ? datasets.auditMetrics ?? [] : [],
+    questionPerformance: selected.has("question-performance") ? datasets.questionPerformance ?? [] : [],
+    qtMetrics: selected.has("qt-metrics") ? datasets.qtMetrics ?? [] : []
+  };
+}
+
+function limitImportJobs(importJobs: ImportJob[], limit?: number) {
+  if (!limit || limit < 1) {
+    return importJobs;
+  }
+
+  return importJobs.slice(0, limit);
+}
+
+function chunkItems<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 async function createFileRepository(): Promise<Repository> {
@@ -162,18 +231,32 @@ async function createFileRepository(): Promise<Repository> {
       const db = await ensureLocalDb();
       return db.reportPeriods.find((period) => period.id === periodId);
     },
-    async getPeriodDetails(periodId) {
+    async hasAnyUserRoles() {
+      const db = await ensureLocalDb();
+      return db.userRoles.length > 0;
+    },
+    async getPeriodDetails(periodId, options) {
       const db = await ensureLocalDb();
       const period = db.reportPeriods.find((entry) => entry.id === periodId);
       if (!period) {
         return undefined;
       }
 
+      const filteredImportJobs = db.importJobs
+        .filter((job) => job.periodId === periodId)
+        .sort((left, right) => right.uploadedAt.localeCompare(left.uploadedAt));
+
       return {
         period,
-        datasets: db.datasets[periodId] ?? emptyDatasets(),
-        importJobs: db.importJobs.filter((job) => job.periodId === periodId).sort((left, right) => right.uploadedAt.localeCompare(left.uploadedAt))
+        datasets: buildFilteredDatasets(db.datasets[periodId] ?? emptyDatasets(), options?.datasetTypes),
+        importJobs: options?.includeImportJobs === false ? [] : limitImportJobs(filteredImportJobs, options?.importJobLimit)
       };
+    },
+    async getDatasetRecord(periodId, datasetType, recordId) {
+      const db = await ensureLocalDb();
+      const property = datasetKeyToProperty(datasetType);
+      const rows = db.datasets[periodId]?.[property] as DatasetRecordMap[typeof datasetType][] | undefined;
+      return rows?.find((record) => record.id === recordId);
     },
     async createReportPeriod(input) {
       const db = await ensureLocalDb();
@@ -213,10 +296,18 @@ async function createFileRepository(): Promise<Repository> {
     async replaceDataset(periodId, datasetType, rows) {
       const db = await ensureLocalDb();
       db.datasets[periodId] ??= emptyDatasets();
-      const property = datasetKeyToProperty(datasetType);
-      (db.datasets[periodId] as Record<string, unknown[]>)[property] = rows.map((row) =>
-        parseDatasetRecord(datasetType, row)
-      );
+
+      if (datasetType === "agent-metrics") {
+        db.datasets[periodId].agentMetrics = (rows as AgentMetric[]).map((row) => agentMetricSchema.parse(row));
+      } else if (datasetType === "audit-metrics") {
+        db.datasets[periodId].auditMetrics = (rows as AuditMetric[]).map((row) => auditMetricSchema.parse(row));
+      } else if (datasetType === "question-performance") {
+        db.datasets[periodId].questionPerformance = (rows as QuestionPerformance[]).map((row) =>
+          questionPerformanceSchema.parse(row)
+        );
+      } else {
+        db.datasets[periodId].qtMetrics = (rows as QtMetric[]).map((row) => qtMetricSchema.parse(row));
+      }
 
       await persistLocalDb(db);
     },
@@ -234,6 +325,16 @@ async function createFileRepository(): Promise<Repository> {
       const parsed = parseDatasetRecord(datasetType, record);
       rows[index] = parsed;
 
+      if (datasetType === "agent-metrics") {
+        db.datasets[periodId].agentMetrics = rows as AgentMetric[];
+      } else if (datasetType === "audit-metrics") {
+        db.datasets[periodId].auditMetrics = rows as AuditMetric[];
+      } else if (datasetType === "question-performance") {
+        db.datasets[periodId].questionPerformance = rows as QuestionPerformance[];
+      } else {
+        db.datasets[periodId].qtMetrics = rows as QtMetric[];
+      }
+
       await persistLocalDb(db);
       return parsed;
     },
@@ -249,12 +350,11 @@ async function createFileRepository(): Promise<Repository> {
         throw new ApiError(404, "Dönem bulunamadı.");
       }
 
-      const now = new Date().toISOString();
       const published = reportPeriodSchema.parse({
         ...db.reportPeriods[index],
         status: "published",
-        publishedAt: now,
-        updatedAt: now
+        publishedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
       db.reportPeriods[index] = published;
       await persistLocalDb(db);
@@ -315,6 +415,12 @@ async function createFileRepository(): Promise<Repository> {
       const db = await ensureLocalDb();
       return db.qtManualEntries.find((entry) => entry.periodId === periodId && entry.userKey === userKey);
     },
+    async listQtManualEntries(periodId) {
+      const db = await ensureLocalDb();
+      return db.qtManualEntries
+        .filter((entry) => entry.periodId === periodId)
+        .sort((left, right) => left.userName.localeCompare(right.userName, "tr"));
+    },
     async upsertQtManualEntry(entry) {
       const db = await ensureLocalDb();
       const parsed = qtManualEntrySchema.parse(entry);
@@ -341,15 +447,17 @@ async function createFileRepository(): Promise<Repository> {
 
 async function deleteCollectionDocs(collectionPath: string) {
   const db = getFirebaseAdminDb();
-  const snapshot = await db.collection(collectionPath).get();
+  const refs = await db.collection(collectionPath).listDocuments();
 
-  if (snapshot.empty) {
+  if (!refs.length) {
     return;
   }
 
-  const batch = db.batch();
-  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-  await batch.commit();
+  for (const chunk of chunkItems(refs, 500)) {
+    const batch = db.batch();
+    chunk.forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
 }
 
 async function createFirebaseRepository(): Promise<Repository> {
@@ -376,40 +484,78 @@ async function createFirebaseRepository(): Promise<Repository> {
       return accumulator;
     }, {} as Record<KpiMetricKey, ThresholdConfig>);
   };
+  const fetchDataset = async <T extends DatasetType>(periodId: string, datasetType: T) => {
+    const property = datasetKeyToProperty(datasetType);
+    const snapshot = await db.collection("reportPeriods").doc(periodId).collection(property).get();
+
+    return snapshot.docs.map((doc) =>
+      parseDatasetRecord(datasetType, { id: doc.id, ...doc.data() } as DatasetRecordMap[T])
+    );
+  };
+  const fetchImportJobs = async (periodId: string, limit?: number) => {
+    let query = db.collection("importJobs").where("periodId", "==", periodId).orderBy("uploadedAt", "desc");
+    if (limit && limit > 0) {
+      query = query.limit(limit);
+    }
+    const snapshot = await query.get();
+    return snapshot.docs.map((doc) => importJobSchema.parse({ id: doc.id, ...doc.data() }));
+  };
 
   return {
     async listReportPeriods() {
-      const snapshot = await db.collection("reportPeriods").get();
+      const snapshot = await db.collection("reportPeriods").orderBy("month", "desc").get();
       const periods = snapshot.docs.map((doc) => reportPeriodSchema.parse({ id: doc.id, ...doc.data() }));
-      return sortPeriods(periods);
+      return periods;
     },
     async getReportPeriod(periodId) {
       return fetchReportPeriod(periodId);
     },
-    async getPeriodDetails(periodId) {
+    async hasAnyUserRoles() {
+      const snapshot = await db.collection("userRoles").limit(1).get();
+      return !snapshot.empty;
+    },
+    async getPeriodDetails(periodId, options) {
       const period = await fetchReportPeriod(periodId);
       if (!period) {
         return undefined;
       }
 
-      const [agentSnapshot, questionSnapshot, qtSnapshot, importSnapshot] = await Promise.all([
-        db.collection("reportPeriods").doc(periodId).collection("agentMetrics").get(),
-        db.collection("reportPeriods").doc(periodId).collection("questionPerformance").get(),
-        db.collection("reportPeriods").doc(periodId).collection("qtMetrics").get(),
-        db.collection("importJobs").where("periodId", "==", periodId).get()
+      const selectedDatasetTypes = getSelectedDatasetTypes(options?.datasetTypes);
+      const [agentMetrics, auditMetrics, questionPerformance, qtMetrics, importJobs] = await Promise.all([
+        selectedDatasetTypes.includes("agent-metrics")
+          ? fetchDataset(periodId, "agent-metrics")
+          : Promise.resolve([]),
+        selectedDatasetTypes.includes("audit-metrics")
+          ? fetchDataset(periodId, "audit-metrics")
+          : Promise.resolve([]),
+        selectedDatasetTypes.includes("question-performance")
+          ? fetchDataset(periodId, "question-performance")
+          : Promise.resolve([]),
+        selectedDatasetTypes.includes("qt-metrics")
+          ? fetchDataset(periodId, "qt-metrics")
+          : Promise.resolve([]),
+        options?.includeImportJobs === false
+          ? Promise.resolve([])
+          : fetchImportJobs(periodId, options?.importJobLimit)
       ]);
 
       return {
         period,
         datasets: {
-          agentMetrics: agentSnapshot.docs.map((doc) => agentMetricSchema.parse({ id: doc.id, ...doc.data() })),
-          questionPerformance: questionSnapshot.docs.map((doc) =>
-            questionPerformanceSchema.parse({ id: doc.id, ...doc.data() })
-          ),
-          qtMetrics: qtSnapshot.docs.map((doc) => qtMetricSchema.parse({ id: doc.id, ...doc.data() }))
+          agentMetrics,
+          auditMetrics,
+          questionPerformance,
+          qtMetrics
         },
-        importJobs: importSnapshot.docs.map((doc) => importJobSchema.parse({ id: doc.id, ...doc.data() }))
+        importJobs
       };
+    },
+    async getDatasetRecord(periodId, datasetType, recordId) {
+      const property = datasetKeyToProperty(datasetType);
+      const doc = await db.collection("reportPeriods").doc(periodId).collection(property).doc(recordId).get();
+      return doc.exists
+        ? parseDatasetRecord(datasetType, { id: doc.id, ...doc.data() } as DatasetRecordMap[typeof datasetType])
+        : undefined;
     },
     async createReportPeriod(input) {
       const now = new Date().toISOString();
@@ -452,6 +598,15 @@ async function createFirebaseRepository(): Promise<Repository> {
           title: updated.title,
           status: updated.status,
           compareToPeriodId: updated.compareToPeriodId,
+          ...(updated.manualTotalCallCount !== undefined
+            ? { manualTotalCallCount: updated.manualTotalCallCount }
+            : {}),
+          ...(updated.manualTotalChatMailCount !== undefined
+            ? { manualTotalChatMailCount: updated.manualTotalChatMailCount }
+            : {}),
+          ...(updated.manualTotalTicketClosedCount !== undefined
+            ? { manualTotalTicketClosedCount: updated.manualTotalTicketClosedCount }
+            : {}),
           publishedAt: updated.publishedAt,
           createdAt: updated.createdAt,
           updatedAt: updated.updatedAt
@@ -466,12 +621,14 @@ async function createFirebaseRepository(): Promise<Repository> {
       const collectionName = property;
       await deleteCollectionDocs(`reportPeriods/${periodId}/${collectionName}`);
 
-      const batch = db.batch();
-      rows.forEach((row) => {
-        const ref = db.collection("reportPeriods").doc(periodId).collection(collectionName).doc(row.id);
-        batch.set(ref, row);
-      });
-      await batch.commit();
+      for (const chunk of chunkItems(rows, 500)) {
+        const batch = db.batch();
+        chunk.forEach((row) => {
+          const ref = db.collection("reportPeriods").doc(periodId).collection(collectionName).doc(row.id);
+          batch.set(ref, row);
+        });
+        await batch.commit();
+      }
     },
     async updateDatasetRecord(periodId, datasetType, record) {
       const property = datasetKeyToProperty(datasetType);
@@ -488,12 +645,11 @@ async function createFirebaseRepository(): Promise<Repository> {
         throw new ApiError(404, "Dönem bulunamadı.");
       }
 
-      const now = new Date().toISOString();
       const published = reportPeriodSchema.parse({
         ...current,
         status: "published",
-        publishedAt: now,
-        updatedAt: now
+        publishedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
 
       await db.collection("reportPeriods").doc(periodId).set(published, { merge: true });
@@ -529,7 +685,7 @@ async function createFirebaseRepository(): Promise<Repository> {
       return fetchThresholds();
     },
     async listUserRoles() {
-      const snapshot = await db.collection("userRoles").get();
+      const snapshot = await db.collection("userRoles").orderBy("email", "asc").get();
       return snapshot.docs.map((doc) => doc.data() as UserRoleAssignment).sort((left, right) => left.email.localeCompare(right.email));
     },
     async upsertUserRole(input) {
@@ -553,6 +709,16 @@ async function createFirebaseRepository(): Promise<Repository> {
 
       return doc.exists ? qtManualEntrySchema.parse(doc.data()) : undefined;
     },
+    async listQtManualEntries(periodId) {
+      const snapshot = await db
+        .collection("reportPeriods")
+        .doc(periodId)
+        .collection("qtManualEntries")
+        .orderBy("userName", "asc")
+        .get();
+
+      return snapshot.docs.map((doc) => qtManualEntrySchema.parse(doc.data()));
+    },
     async upsertQtManualEntry(entry) {
       const parsed = qtManualEntrySchema.parse(entry);
       await db
@@ -574,10 +740,34 @@ async function createFirebaseRepository(): Promise<Repository> {
 
 let repositoryPromise: Promise<Repository> | undefined;
 
+function resolveDataDriver() {
+  const driver = process.env.APP_DATA_DRIVER?.toLowerCase();
+  if (driver === "firebase") {
+    return { driver: "firebase" as const, source: "explicit" as const };
+  }
+
+  if (driver === "file") {
+    return { driver: "file" as const, source: "explicit" as const };
+  }
+
+  return isFirebaseAdminAvailable()
+    ? { driver: "firebase" as const, source: "auto" as const }
+    : { driver: "file" as const, source: "auto-fallback" as const };
+}
+
 export async function getRepository(): Promise<Repository> {
   if (!repositoryPromise) {
-    repositoryPromise =
-      process.env.APP_DATA_DRIVER === "firebase" ? createFirebaseRepository() : createFileRepository();
+    const resolvedDriver = resolveDataDriver();
+
+    if (resolvedDriver.source === "auto-fallback") {
+      console.warn(
+        "APP_DATA_DRIVER=auto etkin ama Firebase Admin kimlik bilgileri bulunamadı; veri .data/local-db.json dosyasına yazılacak."
+      );
+    } else {
+      console.info(`Repository veri sürücüsü: ${resolvedDriver.driver}`);
+    }
+
+    repositoryPromise = resolvedDriver.driver === "firebase" ? createFirebaseRepository() : createFileRepository();
   }
 
   return repositoryPromise;
