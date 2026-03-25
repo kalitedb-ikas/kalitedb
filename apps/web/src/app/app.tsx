@@ -23,25 +23,6 @@ function LoadingScreen() {
   );
 }
 
-function AccessErrorScreen(props: { message: string; onLogout: () => void }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-8 shadow-panel">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-brand-coral">Erişim hatası</p>
-        <h1 className="mt-3 text-2xl font-semibold text-slate-950">Oturum açıldı ama yetki alınamadı</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-600">{props.message}</p>
-        <button
-          className="mt-6 rounded-full bg-brand-ink px-5 py-3 text-sm font-semibold text-white"
-          onClick={props.onLogout}
-          type="button"
-        >
-          Oturumu kapat
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function canAccessAdmin(currentUser: AuthenticatedUser | undefined) {
   return currentUser?.role === "admin" || currentUser?.role === "qt";
 }
@@ -52,23 +33,15 @@ function AppRoutes() {
     enabled: Boolean(auth.token),
     queryKey: ["me", auth.token],
     queryFn: () => api.getMe(auth.token),
-    retry: false
+    retry: false,
+    staleTime: 5 * 60 * 1000
   });
 
   if (auth.loading) {
     return <LoadingScreen />;
   }
 
-  if (auth.token && meQuery.isError) {
-    const message = meQuery.error instanceof Error ? meQuery.error.message : "Oturum doğrulanamadı.";
-    return <AccessErrorScreen message={message} onLogout={() => void auth.logout()} />;
-  }
-
-  if (auth.token && meQuery.isPending) {
-    return <LoadingScreen />;
-  }
-
-  const currentUser = meQuery.data;
+  const currentUser = meQuery.isSuccess ? meQuery.data : undefined;
 
   return (
     <Routes>
@@ -81,7 +54,9 @@ function AppRoutes() {
         <Route element={<QtPage />} path="/qt" />
         <Route
           element={
-            canAccessAdmin(currentUser)
+            auth.token && meQuery.isPending
+              ? <LoadingScreen />
+              : canAccessAdmin(currentUser)
               ? <AdminPage currentUserRole={currentUser?.role} />
               : auth.token
                 ? <Navigate replace to="/" />
