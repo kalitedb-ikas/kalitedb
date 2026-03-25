@@ -104,23 +104,27 @@ async function fetchAndParse<T>(url: string, requestInit: RequestInit): Promise<
   };
 }
 
-async function request<T>(path: string, options: RequestOptions): Promise<T> {
-  const primaryUrl = `${CONFIGURED_API_BASE_URL}${path}`;
+function createHeaders(token: string | null, url: string) {
   const headers: Record<string, string> = {
     Accept: "application/json"
   };
 
-  if (options.token) {
-    headers.Authorization = `Bearer ${options.token}`;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  if (primaryUrl.includes(".loca.lt")) {
+  if (url.includes(".loca.lt")) {
     headers[LOCALTUNNEL_BYPASS_HEADER] = "true";
   }
 
+  return headers;
+}
+
+async function request<T>(path: string, options: RequestOptions): Promise<T> {
+  const primaryUrl = `${CONFIGURED_API_BASE_URL}${path}`;
   const requestInit: RequestInit = {
     method: options.method ?? "GET",
-    headers
+    headers: createHeaders(options.token, primaryUrl)
   };
 
   if (options.formData) {
@@ -146,6 +150,19 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
     } catch {
       throw new Error(buildLocalApiHelpMessage(`Yerel API'ye ulaşılamadı. ${LOCAL_API_BASE_URL} çalışıyor mu?`));
     }
+  }
+
+  if (
+    options.token &&
+    requestInit.method === "GET" &&
+    path !== "/api/me" &&
+    (result.response.status === 401 || result.response.status === 403)
+  ) {
+    const guestRequestInit: RequestInit = {
+      ...requestInit,
+      headers: createHeaders(null, result.url)
+    };
+    result = await fetchAndParse(result.url, guestRequestInit);
   }
 
   if (result.rawBody && !result.contentType.includes("application/json") && result.rawBody.trimStart().startsWith("<")) {
