@@ -28,6 +28,18 @@ type CsatRow = AgentMetric & {
 const columnHelper = createColumnHelper<CsatRow>();
 const TREND_DATASET_TYPES = ["agent-metrics", "audit-metrics"] as const;
 
+function formatNameList(names: string[]) {
+  if (names.length <= 1) {
+    return names[0] ?? "";
+  }
+
+  if (names.length === 2) {
+    return names.join(" ve ");
+  }
+
+  return `${names.slice(0, -1).join(", ")} ve ${names.at(-1)}`;
+}
+
 export function CsatPage() {
   const auth = useAuth();
   const [searchParams] = useSearchParams();
@@ -153,7 +165,7 @@ export function CsatPage() {
         imageSrc: getRepresentativePhotoSrc(row.agentName) ?? undefined
       }));
   }, [rows]);
-  const csatLeaderNames = csatLeaders.map((leader) => leader.name).join(", ");
+  const csatLeaderNames = formatNameList(csatLeaders.map((leader) => leader.name));
 
   const csatSummary = useMemo(() => {
     const totalEvaluations = sum(rows.map((row) => row.evaluationCount));
