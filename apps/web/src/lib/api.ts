@@ -12,6 +12,7 @@ import {
   buildDashboardSnapshot,
   DEFAULT_THRESHOLDS as DEFAULT_THRESHOLD_MAP,
   qtManualEntrySchema,
+  reportPeriodSchema,
   roleSchema,
   selectDefaultReportPeriod,
   thresholdConfigSchema,
@@ -134,6 +135,19 @@ async function getMeFromFirebase(): Promise<AuthenticatedUser> {
     displayName: currentUser.displayName ?? currentUser.email!,
     role
   };
+}
+
+async function getPeriodsFromFirebase(): Promise<ReportPeriod[]> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const snapshot = await getDocs(query(collection(firebaseDb, "reportPeriods"), orderBy("month", "desc")));
+
+  return snapshot.docs
+    .map((periodDoc) => reportPeriodSchema.safeParse({ id: periodDoc.id, ...periodDoc.data() }))
+    .filter((period): period is { success: true; data: ReportPeriod } => period.success)
+    .map((period) => period.data);
 }
 
 async function getThresholdsFromFirebase(): Promise<Record<KpiMetricKey, ThresholdConfig>> {
@@ -455,6 +469,10 @@ export const api = {
     }
   },
   getPeriods(token: string | null) {
+    if (shouldPreferFirebaseClientMode()) {
+      return getPeriodsFromFirebase();
+    }
+
     return requestWithPublicFallback<ReportPeriod[]>("/api/report-periods", { token }, (fallback) => fallback.periods);
   },
   createPeriod(

@@ -184,6 +184,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     feedbackCount: "",
     feedbackCoverage: ""
   });
+  const qtSectionSelected = selectedSection === "qt-metrics";
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -203,7 +204,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const periodDetailsQuery = useQuery({
-    enabled: Boolean(selectedPeriodId),
+    enabled: Boolean(selectedPeriodId) && !qtSectionSelected,
     queryKey: ["period-details", auth.token, selectedPeriodId],
     queryFn: () => api.getPeriodDetails(auth.token, selectedPeriodId)
   });
