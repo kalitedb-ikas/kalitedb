@@ -1,4 +1,5 @@
 import { MetaChip, PageHeader, PresentationSlide, StatCard, SurfaceCard } from "@kalitedb/ui";
+import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -30,7 +31,7 @@ export function PresentationPage() {
     queryFn: () => api.getPeriods(auth.token),
     staleTime: 5 * 60 * 1000
   });
-  const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
+  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
   const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),

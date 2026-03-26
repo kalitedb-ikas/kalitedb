@@ -11,6 +11,7 @@ import {
   Users,
   X
 } from "lucide-react";
+import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
@@ -112,7 +113,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
   }, [props.currentUser]);
 
   const currentNavigationItem = getCurrentNavigationItem(location.pathname, visibleNavigation);
-  const activePeriodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id ?? "";
+  const activePeriodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id ?? "";
   const showPeriodFilter = (periodsQuery.data?.length ?? 0) > 0;
   const preservedNavigationSearch = useMemo(() => {
     const next = new URLSearchParams();

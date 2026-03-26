@@ -1,4 +1,4 @@
-import { buildDashboardSnapshot, datasetTypeSchema } from "@kalitedb/shared";
+import { buildDashboardSnapshot, datasetTypeSchema, selectDefaultReportPeriod } from "@kalitedb/shared";
 
 import { getOptionalAuth } from "@/src/lib/auth";
 import { getRepository } from "@/src/lib/repository";
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     const periods = await repository.listReportPeriods();
     const visiblePeriods = periods;
     const url = new URL(request.url);
-    const periodId = url.searchParams.get("periodId") ?? visiblePeriods.find((period) => period.status === "published")?.id;
+    const periodId = url.searchParams.get("periodId") ?? selectDefaultReportPeriod(visiblePeriods)?.id;
     const compareToPeriodId = url.searchParams.get("compareToPeriodId") ?? undefined;
     const datasetTypes = parseDatasetTypes(url.searchParams.get("datasets"));
 

@@ -1,4 +1,4 @@
-import { resolveThresholdTone, selectAuditMetrics, sum, type AgentMetric } from "@kalitedb/shared";
+import { resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, sum, type AgentMetric } from "@kalitedb/shared";
 import {
   ChampionSpotlightCard,
   ExecutiveChartCard,
@@ -37,7 +37,7 @@ export function CsatPage() {
     queryFn: () => api.getPeriods(auth.token),
     staleTime: 5 * 60 * 1000
   });
-  const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
+  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
   const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
   const selectedPeriod = periodsQuery.data?.find((period) => period.id === periodId);
   const selectedYear = selectedPeriod?.month.slice(0, 4);

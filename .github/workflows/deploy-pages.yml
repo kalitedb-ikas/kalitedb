@@ -47,6 +47,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Warn for transient API URL
+        if: contains(env.VITE_API_BASE_URL, '.lhr.life') || contains(env.VITE_API_BASE_URL, '.loca.lt') || contains(env.VITE_API_BASE_URL, 'localhost')
+        run: |
+          echo "::warning::VITE_API_BASE_URL gecici veya yerel bir host gibi gorunuyor (${VITE_API_BASE_URL}). GitHub Pages dagitiminda login icin stabil ve CORS izinli bir API adresi kullanin."
+
       - name: Build web app
         run: pnpm --filter @kalitedb/web build
 

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Gauge } from "lucide-react";
+import { AlertCircle, ArrowRight, Gauge, LogOut } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
@@ -7,6 +7,7 @@ import { api } from "../lib/api";
 
 export function LoginPage() {
   const auth = useAuth();
+  const isDevAuthMode = import.meta.env.VITE_DEV_AUTH_MODE === "true";
   const meQuery = useQuery({
     enabled: Boolean(auth.token),
     queryKey: ["me", auth.token],
@@ -14,6 +15,13 @@ export function LoginPage() {
     retry: false,
     staleTime: 5 * 60 * 1000
   });
+  const authError =
+    auth.token && meQuery.isError
+      ? meQuery.error instanceof Error
+        ? meQuery.error.message
+        : "Giriş doğrulanamadı."
+      : null;
+  const roleError = authError?.toLocaleLowerCase("tr-TR").includes("rol") ?? false;
 
   if (auth.token && meQuery.isSuccess) {
     return <Navigate replace to="/" />;
@@ -44,6 +52,72 @@ export function LoginPage() {
               Google ile oturum aç
               <ArrowRight className="h-4 w-4" />
             </button>
+
+            {auth.token && meQuery.isPending ? (
+              <p className="mt-4 text-sm text-slate-500">Hesap doğrulanıyor...</p>
+            ) : null}
+
+            {authError ? (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-900">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="space-y-2">
+                    <p className="font-semibold">Giriş tamamlandı ama erişim doğrulanamadı.</p>
+                    <p>{authError}</p>
+                    <p className="text-amber-800/90">
+                      {roleError
+                        ? `${auth.user?.email ?? "Seçilen hesap"} için rol tanımı yoksa Yönetim > Roller alanından eklenmesi gerekiyor.`
+                        : "Firebase oturumu ile API doğrulaması eşleşmedi. Hesabı değiştirip tekrar deneyin."}
+                    </p>
+                    <button
+                      className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+                      onClick={() => void auth.logout()}
+                      type="button"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Oturumu sıfırla
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {isDevAuthMode ? (
+              <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+                <p className="text-sm font-semibold text-slate-900">Geliştirme bypass</p>
+                <p className="mt-1 text-sm text-slate-600">Firebase girişinde sorun varsa geçici olarak rol seçip devam edebilirsiniz.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                    onClick={() => auth.loginAsDev("admin")}
+                    type="button"
+                  >
+                    Admin
+                  </button>
+                  <button
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                    onClick={() => auth.loginAsDev("team")}
+                    type="button"
+                  >
+                    Team
+                  </button>
+                  <button
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                    onClick={() => auth.loginAsDev("ceo")}
+                    type="button"
+                  >
+                    CEO
+                  </button>
+                  <button
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                    onClick={() => auth.loginAsDev("qt")}
+                    type="button"
+                  >
+                    QT
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

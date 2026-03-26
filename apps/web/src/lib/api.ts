@@ -7,6 +7,9 @@ import type {
   ThresholdConfig,
   UserRoleAssignment
 } from "@kalitedb/shared";
+import { buildDashboardSnapshot, selectDefaultReportPeriod } from "@kalitedb/shared";
+
+import { toPublicAssetPath } from "./asset-path";
 
 const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, "") ?? "";
 const LOCAL_API_BASE_URL = "http://localhost:3001";
@@ -45,6 +48,14 @@ type DashboardOptions = {
   datasetTypes?: DatasetType[] | undefined;
 };
 
+type PublicFallbackPayload = {
+  generatedAt: string;
+  periods: ReportPeriod[];
+  dashboards: Record<string, DashboardSnapshot>;
+};
+
+let publicFallbackPromise: Promise<PublicFallbackPayload | null> | undefined;
+
 function appendDatasetTypes(params: URLSearchParams, datasetTypes?: DatasetType[]) {
   if (!datasetTypes?.length) {
     return;
@@ -71,6 +82,33 @@ function buildLocalApiHelpMessage(baseMessage: string) {
   }
 
   return `${baseMessage} Geliştirme ortamında API için \`pnpm dev\` veya \`pnpm dev:api\` çalıştığından emin olun.`;
+}
+
+function buildExternalApiHelpMessage(url: string) {
+  const currentOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
+  const corsHint = currentOrigin ? ` Backend CORS ayarında ${currentOrigin} origin'i izinli olmalı.` : "";
+
+  return `API'ye ulaşılamadı. İstek hedefi: ${url}.${corsHint}`;
+}
+
+async function loadPublicFallback() {
+  if (!publicFallbackPromise) {
+    publicFallbackPromise = fetch(toPublicAssetPath("/public-fallback.json"), {
+      headers: {
+        Accept: "application/json"
+      }
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          return null;
+        }
+
+        return (await response.json()) as PublicFallbackPayload;
+      })
+      .catch(() => null);
+  }
+
+  return publicFallbackPromise;
 }
 
 type ParsedHttpResponse<T> = {
@@ -142,7 +180,7 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
     result = await fetchAndParse(primaryUrl, requestInit);
   } catch (error) {
     if (!canUseLocalApiFallback()) {
-      throw error;
+      throw new Error(buildExternalApiHelpMessage(primaryUrl));
     }
 
     try {
@@ -198,12 +236,35 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
   return data;
 }
 
+async function requestWithPublicFallback<T>(
+  path: string,
+  options: RequestOptions,
+  resolveFallback?: (payload: PublicFallbackPayload) => T | undefined
+) {
+  try {
+    return await request<T>(path, options);
+  } catch (error) {
+    if (!resolveFallback) {
+      throw error;
+    }
+
+    const fallback = await loadPublicFallback();
+    const resolved = fallback ? resolveFallback(fallback) : undefined;
+
+    if (resolved !== undefined) {
+      return resolved;
+    }
+
+    throw error;
+  }
+}
+
 export const api = {
   getMe(token: string | null) {
     return request<AuthenticatedUser>("/api/me", { token });
   },
   getPeriods(token: string | null) {
-    return request<ReportPeriod[]>("/api/report-periods", { token });
+    return requestWithPublicFallback<ReportPeriod[]>("/api/report-periods", { token }, (fallback) => fallback.periods);
   },
   createPeriod(
     token: string | null,
@@ -290,7 +351,38 @@ export const api = {
     appendDatasetTypes(params, options?.datasetTypes);
 
     const queryString = params.toString();
-    return request<DashboardSnapshot>(`/api/dashboard${queryString ? `?${queryString}` : ""}`, { token });
+    return requestWithPublicFallback<DashboardSnapshot>(
+      `/api/dashboard${queryString ? `?${queryString}` : ""}`,
+      { token },
+      (fallback) => {
+        const resolvedPeriodId = periodId ?? selectDefaultReportPeriod(fallback.periods)?.id;
+        if (!resolvedPeriodId) {
+          return undefined;
+        }
+
+        const currentSnapshot = fallback.dashboards[resolvedPeriodId];
+        if (!currentSnapshot) {
+          return undefined;
+        }
+
+        if (!compareToPeriodId) {
+          return currentSnapshot;
+        }
+
+        const compareSnapshot = fallback.dashboards[compareToPeriodId];
+        if (!compareSnapshot) {
+          return currentSnapshot;
+        }
+
+        return buildDashboardSnapshot({
+          period: currentSnapshot.period,
+          compareToPeriod: compareSnapshot.period,
+          datasets: currentSnapshot.datasets,
+          compareDatasets: compareSnapshot.datasets,
+          thresholds: currentSnapshot.thresholds
+        });
+      }
+    );
   },
   getThresholds(token: string | null) {
     return request<Record<KpiMetricKey, ThresholdConfig>>("/api/settings/thresholds", { token });

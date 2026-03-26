@@ -2,7 +2,7 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { BookOpen, Sparkles, Target } from "lucide-react";
 import { useMemo, useState } from "react";
-import { type QuestionPerformance } from "@kalitedb/shared";
+import { selectDefaultReportPeriod, type QuestionPerformance } from "@kalitedb/shared";
 import { ExecutiveChartCard, Leaderboard, PageHeader, QuestionSpotlight, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { useSearchParams } from "react-router-dom";
 
@@ -22,7 +22,7 @@ export function QuestionsPage() {
     staleTime: 5 * 60 * 1000
   });
   const [topic, setTopic] = useState("");
-  const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
+  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
   const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
 
   const dashboardQuery = useQuery({

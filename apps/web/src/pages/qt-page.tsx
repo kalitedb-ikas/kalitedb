@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExecutiveChartCard, MetricCarouselCard, StatCard } from "@kalitedb/ui";
+import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import { useEffect, useMemo, useState } from "react";
 import { Layers, MessageCircle, Save, Timer, Users, Waves } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -62,7 +63,7 @@ export function QtPage() {
     staleTime: 5 * 60 * 1000
   });
 
-  const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
+  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
   const [manualDraft, setManualDraft] = useState({
     totalListeningHours: "",
     totalEvaluatedCallCount: "",
