@@ -1,4 +1,5 @@
 import type {
+  Role,
   DashboardSnapshot,
   DatasetType,
   KpiMetricKey,
@@ -7,9 +8,19 @@ import type {
   ThresholdConfig,
   UserRoleAssignment
 } from "@kalitedb/shared";
-import { buildDashboardSnapshot, selectDefaultReportPeriod } from "@kalitedb/shared";
+import {
+  buildDashboardSnapshot,
+  DEFAULT_THRESHOLDS as DEFAULT_THRESHOLD_MAP,
+  qtManualEntrySchema,
+  roleSchema,
+  selectDefaultReportPeriod,
+  thresholdConfigSchema,
+  userRoleAssignmentSchema
+} from "@kalitedb/shared";
+import { collection, doc, getDoc, getDocs, orderBy, query, setDoc } from "firebase/firestore";
 
 import { toPublicAssetPath } from "./asset-path";
+import { firebaseAuth, firebaseDb } from "./firebase";
 
 const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, "") ?? "";
 const LOCAL_API_BASE_URL = "http://localhost:3001";
@@ -55,6 +66,174 @@ type PublicFallbackPayload = {
 };
 
 let publicFallbackPromise: Promise<PublicFallbackPayload | null> | undefined;
+
+function normalizeRoleEmail(email: string) {
+  return email.trim().toLocaleLowerCase("tr-TR");
+}
+
+function canUseFirebaseClientFallback() {
+  return Boolean(firebaseDb && firebaseAuth?.currentUser);
+}
+
+function shouldPreferFirebaseClientMode() {
+  if (!canUseFirebaseClientFallback() || typeof window === "undefined") {
+    return false;
+  }
+
+  return window.location.hostname.endsWith("github.io");
+}
+
+async function getFirebaseCurrentUser() {
+  const currentUser = firebaseAuth?.currentUser;
+
+  if (!currentUser || !currentUser.email) {
+    throw new Error("Firebase oturumu bulunamadı.");
+  }
+
+  return currentUser;
+}
+
+async function resolveFirebaseRole(email: string): Promise<Role | null> {
+  const tokenResult = await firebaseAuth?.currentUser?.getIdTokenResult();
+  const claimRole = roleSchema.safeParse(tokenResult?.claims.role);
+
+  if (claimRole.success) {
+    return claimRole.data;
+  }
+
+  if (!firebaseDb) {
+    return null;
+  }
+
+  const roleSnapshot = await getDoc(doc(firebaseDb, "userRoles", normalizeRoleEmail(email)));
+
+  if (!roleSnapshot.exists()) {
+    return null;
+  }
+
+  const parsedRoleAssignment = userRoleAssignmentSchema.safeParse(roleSnapshot.data());
+  if (parsedRoleAssignment.success) {
+    return parsedRoleAssignment.data.role;
+  }
+
+  const parsedRole = roleSchema.safeParse(roleSnapshot.data().role);
+  return parsedRole.success ? parsedRole.data : null;
+}
+
+async function getMeFromFirebase(): Promise<AuthenticatedUser> {
+  const currentUser = await getFirebaseCurrentUser();
+  const role = await resolveFirebaseRole(currentUser.email!);
+
+  if (!role) {
+    throw new Error("Kullanıcı rol tanımı bulunamadı.");
+  }
+
+  return {
+    uid: currentUser.uid,
+    email: currentUser.email!,
+    displayName: currentUser.displayName ?? currentUser.email!,
+    role
+  };
+}
+
+async function getThresholdsFromFirebase(): Promise<Record<KpiMetricKey, ThresholdConfig>> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const thresholds = structuredClone(DEFAULT_THRESHOLD_MAP);
+  const snapshot = await getDocs(collection(firebaseDb, "thresholdConfigs"));
+
+  snapshot.forEach((thresholdDoc) => {
+    const parsed = thresholdConfigSchema.safeParse(thresholdDoc.data());
+
+    if (!parsed.success) {
+      return;
+    }
+
+    thresholds[thresholdDoc.id as KpiMetricKey] = parsed.data;
+  });
+
+  return thresholds;
+}
+
+function buildDefaultQtManualEntry(periodId: string, user: Awaited<ReturnType<typeof getFirebaseCurrentUser>>): QtManualEntry {
+  const now = new Date().toISOString();
+
+  return {
+    id: `${periodId}-qt-manual-${user.uid}`,
+    periodId,
+    userKey: user.uid,
+    userEmail: user.email!,
+    userName: user.displayName ?? user.email!,
+    totalListeningHours: null,
+    totalEvaluatedCallCount: null,
+    totalEvaluatedChatMailCount: null,
+    feedbackCount: null,
+    feedbackCoverage: null,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+async function getQtManualEntriesFromFirebase(periodId: string): Promise<QtManualEntry[]> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const snapshot = await getDocs(
+    query(collection(firebaseDb, "reportPeriods", periodId, "qtManualEntries"), orderBy("userName", "asc"))
+  );
+
+  return snapshot.docs
+    .map((entryDoc) => qtManualEntrySchema.safeParse(entryDoc.data()))
+    .filter((entry): entry is { success: true; data: QtManualEntry } => entry.success)
+    .map((entry) => entry.data);
+}
+
+async function getQtManualEntryFromFirebase(periodId: string): Promise<QtManualEntry> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const currentUser = await getFirebaseCurrentUser();
+  const entrySnapshot = await getDoc(doc(firebaseDb, "reportPeriods", periodId, "qtManualEntries", currentUser.uid));
+
+  if (!entrySnapshot.exists()) {
+    return buildDefaultQtManualEntry(periodId, currentUser);
+  }
+
+  const parsedEntry = qtManualEntrySchema.safeParse(entrySnapshot.data());
+  return parsedEntry.success ? parsedEntry.data : buildDefaultQtManualEntry(periodId, currentUser);
+}
+
+async function updateQtManualEntryFromFirebase(
+  periodId: string,
+  body: {
+    totalListeningHours: number | null;
+    totalEvaluatedCallCount: number | null;
+    totalEvaluatedChatMailCount: number | null;
+    feedbackCount: number | null;
+    feedbackCoverage: number | null;
+  }
+): Promise<QtManualEntry> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const currentUser = await getFirebaseCurrentUser();
+  const currentEntry = await getQtManualEntryFromFirebase(periodId);
+  const nextEntry: QtManualEntry = {
+    ...currentEntry,
+    ...body,
+    userEmail: currentUser.email!,
+    userName: currentUser.displayName ?? currentUser.email!,
+    updatedAt: new Date().toISOString()
+  };
+
+  await setDoc(doc(firebaseDb, "reportPeriods", periodId, "qtManualEntries", currentUser.uid), nextEntry);
+  return nextEntry;
+}
 
 function appendDatasetTypes(params: URLSearchParams, datasetTypes?: DatasetType[]) {
   if (!datasetTypes?.length) {
@@ -260,8 +439,20 @@ async function requestWithPublicFallback<T>(
 }
 
 export const api = {
-  getMe(token: string | null) {
-    return request<AuthenticatedUser>("/api/me", { token });
+  async getMe(token: string | null) {
+    if (shouldPreferFirebaseClientMode()) {
+      return getMeFromFirebase();
+    }
+
+    try {
+      return await request<AuthenticatedUser>("/api/me", { token });
+    } catch (error) {
+      if (!canUseFirebaseClientFallback()) {
+        throw error;
+      }
+
+      return getMeFromFirebase();
+    }
   },
   getPeriods(token: string | null) {
     return requestWithPublicFallback<ReportPeriod[]>("/api/report-periods", { token }, (fallback) => fallback.periods);
@@ -384,8 +575,20 @@ export const api = {
       }
     );
   },
-  getThresholds(token: string | null) {
-    return request<Record<KpiMetricKey, ThresholdConfig>>("/api/settings/thresholds", { token });
+  async getThresholds(token: string | null) {
+    if (shouldPreferFirebaseClientMode()) {
+      return getThresholdsFromFirebase();
+    }
+
+    try {
+      return await request<Record<KpiMetricKey, ThresholdConfig>>("/api/settings/thresholds", { token });
+    } catch (error) {
+      if (!canUseFirebaseClientFallback()) {
+        throw error;
+      }
+
+      return getThresholdsFromFirebase();
+    }
   },
   updateThresholds(token: string | null, body: Partial<Record<KpiMetricKey, Partial<ThresholdConfig>>>) {
     return request<Record<KpiMetricKey, ThresholdConfig>>("/api/settings/thresholds", {
@@ -404,13 +607,37 @@ export const api = {
       body
     });
   },
-  getQtManualEntries(token: string | null, periodId: string) {
-    return request<QtManualEntry[]>(`/api/report-periods/${periodId}/qt-manual-entry?scope=all`, { token });
+  async getQtManualEntries(token: string | null, periodId: string) {
+    if (shouldPreferFirebaseClientMode()) {
+      return getQtManualEntriesFromFirebase(periodId);
+    }
+
+    try {
+      return await request<QtManualEntry[]>(`/api/report-periods/${periodId}/qt-manual-entry?scope=all`, { token });
+    } catch (error) {
+      if (!canUseFirebaseClientFallback()) {
+        throw error;
+      }
+
+      return getQtManualEntriesFromFirebase(periodId);
+    }
   },
-  getQtManualEntry(token: string | null, periodId: string) {
-    return request<QtManualEntry>(`/api/report-periods/${periodId}/qt-manual-entry`, { token });
+  async getQtManualEntry(token: string | null, periodId: string) {
+    if (shouldPreferFirebaseClientMode()) {
+      return getQtManualEntryFromFirebase(periodId);
+    }
+
+    try {
+      return await request<QtManualEntry>(`/api/report-periods/${periodId}/qt-manual-entry`, { token });
+    } catch (error) {
+      if (!canUseFirebaseClientFallback()) {
+        throw error;
+      }
+
+      return getQtManualEntryFromFirebase(periodId);
+    }
   },
-  updateQtManualEntry(
+  async updateQtManualEntry(
     token: string | null,
     periodId: string,
     body: {
@@ -421,10 +648,22 @@ export const api = {
       feedbackCoverage: number | null;
     }
   ) {
-    return request<QtManualEntry>(`/api/report-periods/${periodId}/qt-manual-entry`, {
-      token,
-      method: "PATCH",
-      body
-    });
+    if (shouldPreferFirebaseClientMode()) {
+      return updateQtManualEntryFromFirebase(periodId, body);
+    }
+
+    try {
+      return await request<QtManualEntry>(`/api/report-periods/${periodId}/qt-manual-entry`, {
+        token,
+        method: "PATCH",
+        body
+      });
+    } catch (error) {
+      if (!canUseFirebaseClientFallback()) {
+        throw error;
+      }
+
+      return updateQtManualEntryFromFirebase(periodId, body);
+    }
   }
 };

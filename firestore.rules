@@ -6,7 +6,14 @@ service cloud.firestore {
     }
 
     function currentRole() {
-      return isAuthed() ? request.auth.token.role : null;
+      return !isAuthed()
+        ? null
+        : request.auth.token.role != null
+          ? request.auth.token.role
+          : request.auth.token.email != null &&
+            exists(/databases/$(database)/documents/userRoles/$(request.auth.token.email))
+            ? get(/databases/$(database)/documents/userRoles/$(request.auth.token.email)).data.role
+            : null;
     }
 
     function hasRole(role) {
@@ -66,7 +73,8 @@ service cloud.firestore {
     }
 
     match /userRoles/{emailKey} {
-      allow get, list: if isAdmin();
+      allow get: if isAdmin() || (isAuthed() && request.auth.token.email == emailKey);
+      allow list: if isAdmin();
       allow create, update, delete: if isAdmin();
     }
 
