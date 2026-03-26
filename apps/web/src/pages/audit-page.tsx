@@ -331,11 +331,6 @@ export function AuditPage() {
 
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <ChampionSpotlightCard
-              delta={
-                snapshot.highlights.bestAudit?.delta != null
-                  ? `Değişim ${snapshot.highlights.bestAudit.delta > 0 ? "+" : ""}${formatNumber(snapshot.highlights.bestAudit.delta, 2)}`
-                  : undefined
-              }
               kicker={auditLeaders.length > 1 ? "Öne çıkan temsilciler" : "Öne çıkan temsilci"}
               metricLabel={auditLeaders.length > 1 ? "Lider temsilciler" : "Lider temsilci"}
               name={auditLeaderNames || snapshot.highlights.bestAudit?.label || "Takip ediliyor"}
@@ -402,8 +397,7 @@ export function AuditPage() {
               items={snapshot.rankings.auditTop.slice(0, 5).map((item) => ({
                 id: item.id,
                 label: item.label,
-                value: formatAuditScore(item.value),
-                ...(item.delta != null ? { delta: `Değişim ${formatNumber(item.delta, 2)}` } : {})
+                value: formatAuditScore(item.value)
               }))}
               title="Audit lider tablosu"
             />
