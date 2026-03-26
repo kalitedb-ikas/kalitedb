@@ -57,7 +57,6 @@ export function QtPage() {
     staleTime: 5 * 60 * 1000
   });
   const thresholdsQuery = useQuery({
-    enabled: Boolean(auth.token),
     queryKey: ["thresholds", auth.token],
     queryFn: () => api.getThresholds(auth.token),
     staleTime: 5 * 60 * 1000
