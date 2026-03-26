@@ -10,7 +10,6 @@ import { AuditPage } from "../pages/audit-page";
 import { CsatPage } from "../pages/csat-page";
 import { DashboardPage } from "../pages/dashboard-page";
 import { LoginPage } from "../pages/login-page";
-import { PresentationPage } from "../pages/presentation-page";
 import { QtPage } from "../pages/qt-page";
 import { QuestionsPage } from "../pages/questions-page";
 import { RepresentativesPage } from "../pages/representatives-page";
@@ -64,7 +63,7 @@ function AppRoutes() {
           }
           path="/admin"
         />
-        <Route element={<PresentationPage />} path="/presentation" />
+        <Route element={<Navigate replace to="/" />} path="/presentation" />
         <Route element={<RepresentativesPage />} path="/representatives" />
       </Route>
     </Routes>
