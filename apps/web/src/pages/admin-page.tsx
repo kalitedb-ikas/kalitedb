@@ -92,6 +92,14 @@ type ImportPreviewResult = {
   committed: boolean;
 };
 
+const EMPTY_QT_MANUAL_INPUTS = {
+  totalListeningHours: "",
+  totalEvaluatedCallCount: "",
+  totalEvaluatedChatMailCount: "",
+  feedbackCount: "",
+  feedbackCoverage: ""
+};
+
 const adminSections: Array<{
   id: AdminSection;
   label: string;
@@ -161,6 +169,16 @@ function normalizeEmailValue(email: string) {
   return email.trim().toLocaleLowerCase("tr-TR");
 }
 
+function mapQtManualEntryToInputs(entry: QtManualEntry) {
+  return {
+    totalListeningHours: entry.totalListeningHours == null ? "" : String(entry.totalListeningHours),
+    totalEvaluatedCallCount: entry.totalEvaluatedCallCount == null ? "" : String(entry.totalEvaluatedCallCount),
+    totalEvaluatedChatMailCount: entry.totalEvaluatedChatMailCount == null ? "" : String(entry.totalEvaluatedChatMailCount),
+    feedbackCount: entry.feedbackCount == null ? "" : String(entry.feedbackCount),
+    feedbackCoverage: entry.feedbackCoverage == null ? "" : String(entry.feedbackCoverage)
+  };
+}
+
 export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] | undefined }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -182,13 +200,9 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     totalTicketClosedCount: ""
   });
   const [editingRoleEmail, setEditingRoleEmail] = useState<string | null>(null);
-  const [qtManualInputs, setQtManualInputs] = useState({
-    totalListeningHours: "",
-    totalEvaluatedCallCount: "",
-    totalEvaluatedChatMailCount: "",
-    feedbackCount: "",
-    feedbackCoverage: ""
-  });
+  const [qtManualInputs, setQtManualInputs] = useState(EMPTY_QT_MANUAL_INPUTS);
+  const [isQtManualDirty, setIsQtManualDirty] = useState(false);
+  const [lastQtManualHydratedKey, setLastQtManualHydratedKey] = useState("");
   const qtSectionSelected = selectedSection === "qt-metrics";
 
   const periodsQuery = useQuery({
@@ -458,7 +472,9 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const qtManualEntryQuery = useQuery({
     enabled: Boolean(selectedPeriodId && canEditQtManualEntry && isQtSection && (!isAdminUser || selectedQtTarget?.targetUserEmail)),
     queryKey: ["qt-manual-entry", auth.token, selectedPeriodId, selectedQtTarget?.targetUserEmail],
-    queryFn: () => api.getQtManualEntry(auth.token, selectedPeriodId, selectedQtTarget)
+    queryFn: () => api.getQtManualEntry(auth.token, selectedPeriodId, selectedQtTarget),
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false
   });
   const qtManualEntryMutation = useMutation({
     mutationFn: async (values: typeof qtManualInputs) => {
@@ -475,6 +491,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       }, selectedQtTarget);
     },
     onSuccess: async () => {
+      setIsQtManualDirty(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["qt-manual-entry", auth.token, selectedPeriodId] }),
         queryClient.invalidateQueries({ queryKey: ["qt-manual-entries", auth.token, selectedPeriodId] })
@@ -482,19 +499,29 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     }
   });
   useEffect(() => {
+    if (!canEditQtManualEntry || !isQtSection) {
+      return;
+    }
+
+    setQtManualInputs(EMPTY_QT_MANUAL_INPUTS);
+    setIsQtManualDirty(false);
+    setLastQtManualHydratedKey("");
+  }, [canEditQtManualEntry, isQtSection, selectedPeriodId, selectedQtTarget?.targetUserEmail]);
+  useEffect(() => {
     const entry = qtManualEntryQuery.data;
     if (!entry) {
       return;
     }
 
-    setQtManualInputs({
-      totalListeningHours: entry.totalListeningHours == null ? "" : String(entry.totalListeningHours),
-      totalEvaluatedCallCount: entry.totalEvaluatedCallCount == null ? "" : String(entry.totalEvaluatedCallCount),
-      totalEvaluatedChatMailCount: entry.totalEvaluatedChatMailCount == null ? "" : String(entry.totalEvaluatedChatMailCount),
-      feedbackCount: entry.feedbackCount == null ? "" : String(entry.feedbackCount),
-      feedbackCoverage: entry.feedbackCoverage == null ? "" : String(entry.feedbackCoverage)
-    });
-  }, [qtManualEntryQuery.data]);
+    const entryKey = `${entry.periodId}:${normalizeEmailValue(entry.userEmail)}`;
+    if (isQtManualDirty && lastQtManualHydratedKey === entryKey) {
+      return;
+    }
+
+    setQtManualInputs(mapQtManualEntryToInputs(entry));
+    setIsQtManualDirty(false);
+    setLastQtManualHydratedKey(entryKey);
+  }, [isQtManualDirty, lastQtManualHydratedKey, qtManualEntryQuery.data]);
   useEffect(() => {
     if (!isAdminUser || !isQtSection) {
       return;
@@ -822,6 +849,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
     return columns;
   }, [isAdminUser]);
+  const qtManualFormDisabled = qtManualEntryQuery.isPending || qtManualEntryMutation.isPending;
 
   return (
     <div className="rounded-[38px] border border-sky-100/90 bg-[#edf6fb] p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)]">
@@ -1155,7 +1183,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                               <InputField label="QT kullanıcısı">
                                 <select
                                   className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
-                                  disabled={qtTargetOptions.length === 0}
+                                  disabled={qtTargetOptions.length === 0 || qtManualEntryQuery.isPending}
                                   onChange={(event) => setSelectedQtTargetEmail(event.target.value)}
                                   value={selectedQtTargetEmail}
                                 >
@@ -1180,8 +1208,12 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             <InputField label="Toplam dinleme süresi (saat)">
                               <input
                                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                                disabled={qtManualFormDisabled}
                                 onChange={(event) =>
-                                  setQtManualInputs((current) => ({ ...current, totalListeningHours: event.target.value }))
+                                  setQtManualInputs((current) => {
+                                    setIsQtManualDirty(true);
+                                    return { ...current, totalListeningHours: event.target.value };
+                                  })
                                 }
                                 placeholder="Örn. 42,5"
                                 type="text"
@@ -1191,9 +1223,13 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             <InputField label="Değerlendirilen çağrı adedi">
                               <input
                                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                                disabled={qtManualFormDisabled}
                                 inputMode="numeric"
                                 onChange={(event) =>
-                                  setQtManualInputs((current) => ({ ...current, totalEvaluatedCallCount: event.target.value }))
+                                  setQtManualInputs((current) => {
+                                    setIsQtManualDirty(true);
+                                    return { ...current, totalEvaluatedCallCount: event.target.value };
+                                  })
                                 }
                                 placeholder="Örn. 120"
                                 type="text"
@@ -1203,9 +1239,13 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             <InputField label="Değerlendirilen chat / e-posta adedi">
                               <input
                                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                                disabled={qtManualFormDisabled}
                                 inputMode="numeric"
                                 onChange={(event) =>
-                                  setQtManualInputs((current) => ({ ...current, totalEvaluatedChatMailCount: event.target.value }))
+                                  setQtManualInputs((current) => {
+                                    setIsQtManualDirty(true);
+                                    return { ...current, totalEvaluatedChatMailCount: event.target.value };
+                                  })
                                 }
                                 placeholder="Örn. 35"
                                 type="text"
@@ -1215,9 +1255,13 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             <InputField label="Geri bildirim sayısı">
                               <input
                                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                                disabled={qtManualFormDisabled}
                                 inputMode="numeric"
                                 onChange={(event) =>
-                                  setQtManualInputs((current) => ({ ...current, feedbackCount: event.target.value }))
+                                  setQtManualInputs((current) => {
+                                    setIsQtManualDirty(true);
+                                    return { ...current, feedbackCount: event.target.value };
+                                  })
                                 }
                                 placeholder="Örn. 24"
                                 type="text"
@@ -1227,8 +1271,12 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             <InputField label="Saat başına geri bildirim oranı">
                               <input
                                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                                disabled={qtManualFormDisabled}
                                 onChange={(event) =>
-                                  setQtManualInputs((current) => ({ ...current, feedbackCoverage: event.target.value }))
+                                  setQtManualInputs((current) => {
+                                    setIsQtManualDirty(true);
+                                    return { ...current, feedbackCoverage: event.target.value };
+                                  })
                                 }
                                 placeholder="Örn. 0,56"
                                 type="text"
@@ -1236,6 +1284,10 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                               />
                             </InputField>
                           </div>
+
+                          {qtManualEntryQuery.isPending ? (
+                            <p className="mt-4 text-sm text-slate-500">Seçili QT kullanıcısının mevcut verileri yükleniyor...</p>
+                          ) : null}
 
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                             <p className="text-sm text-slate-500">
@@ -1245,7 +1297,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             </p>
                             <button
                               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                              disabled={!selectedPeriodId || qtManualEntryMutation.isPending || (isAdminUser && !selectedQtTarget)}
+                              disabled={!selectedPeriodId || qtManualFormDisabled || (isAdminUser && !selectedQtTarget)}
                               onClick={() => qtManualEntryMutation.mutate(qtManualInputs)}
                               type="button"
                             >
