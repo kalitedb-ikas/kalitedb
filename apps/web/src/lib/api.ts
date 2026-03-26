@@ -71,6 +71,11 @@ type PublicFallbackPayload = {
   dashboards: Record<string, DashboardSnapshot>;
 };
 
+type QtManualEntryTarget = {
+  targetUserEmail?: string;
+  targetUserName?: string;
+};
+
 let publicFallbackPromise: Promise<PublicFallbackPayload | null> | undefined;
 
 const ALL_DATASET_TYPES: DatasetType[] = ["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"];
@@ -86,6 +91,10 @@ function emptyDatasets(): ReportDatasets {
 
 function normalizeRoleEmail(email: string) {
   return email.trim().toLocaleLowerCase("tr-TR");
+}
+
+function normalizeQtEntryKey(email: string) {
+  return normalizeRoleEmail(email);
 }
 
 function canUseFirebaseReadMode() {
@@ -198,6 +207,27 @@ async function getThresholdsFromFirebase(): Promise<Record<KpiMetricKey, Thresho
   });
 
   return thresholds;
+}
+
+async function getRolesFromFirebase(): Promise<UserRoleAssignment[]> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const currentUser = await getFirebaseCurrentUser();
+  const currentRole = await resolveFirebaseRole(currentUser.email!);
+
+  if (currentRole !== "admin") {
+    throw new Error("Rol listesi yalnızca admin kullanıcılar için kullanılabilir.");
+  }
+
+  const snapshot = await getDocs(collection(firebaseDb, "userRoles"));
+
+  return snapshot.docs
+    .map((roleDoc) => userRoleAssignmentSchema.safeParse(roleDoc.data()))
+    .filter((role): role is { success: true; data: UserRoleAssignment } => role.success)
+    .map((role) => role.data)
+    .sort((left, right) => left.email.localeCompare(right.email, "tr"));
 }
 
 async function getReportPeriodFromFirebase(periodId: string, knownPeriods?: ReportPeriod[]) {
@@ -349,15 +379,22 @@ async function getDashboardFromFirebase(
   });
 }
 
-function buildDefaultQtManualEntry(periodId: string, user: Awaited<ReturnType<typeof getFirebaseCurrentUser>>): QtManualEntry {
+function buildDefaultQtManualEntry(
+  periodId: string,
+  target: {
+    userKey: string;
+    userEmail: string;
+    userName: string;
+  }
+): QtManualEntry {
   const now = new Date().toISOString();
 
   return {
-    id: `${periodId}-qt-manual-${user.uid}`,
+    id: `${periodId}-qt-manual-${target.userKey}`,
     periodId,
-    userKey: user.uid,
-    userEmail: user.email!,
-    userName: user.displayName ?? user.email!,
+    userKey: target.userKey,
+    userEmail: target.userEmail,
+    userName: target.userName,
     totalListeningHours: null,
     totalEvaluatedCallCount: null,
     totalEvaluatedChatMailCount: null,
@@ -365,6 +402,32 @@ function buildDefaultQtManualEntry(periodId: string, user: Awaited<ReturnType<ty
     feedbackCoverage: null,
     createdAt: now,
     updatedAt: now
+  };
+}
+
+async function resolveQtManualTarget(target?: QtManualEntryTarget) {
+  const currentUser = await getFirebaseCurrentUser();
+  const currentUserName = currentUser.displayName ?? currentUser.email!;
+  const currentRole = await resolveFirebaseRole(currentUser.email!);
+
+  if (!currentRole) {
+    throw new Error("Kullanıcı rol tanımı bulunamadı.");
+  }
+
+  if (currentRole !== "admin" || !target?.targetUserEmail) {
+    return {
+      requesterRole: currentRole,
+      userKey: currentUser.uid,
+      userEmail: currentUser.email!,
+      userName: currentUserName
+    };
+  }
+
+  return {
+    requesterRole: currentRole,
+    userKey: normalizeQtEntryKey(target.targetUserEmail),
+    userEmail: normalizeRoleEmail(target.targetUserEmail),
+    userName: target.targetUserName?.trim() || normalizeRoleEmail(target.targetUserEmail)
   };
 }
 
@@ -383,20 +446,36 @@ async function getQtManualEntriesFromFirebase(periodId: string): Promise<QtManua
     .map((entry) => entry.data);
 }
 
-async function getQtManualEntryFromFirebase(periodId: string): Promise<QtManualEntry> {
+async function getQtManualEntryFromFirebase(periodId: string, target?: QtManualEntryTarget): Promise<QtManualEntry> {
   if (!firebaseDb) {
     throw new Error("Firebase veritabanı hazır değil.");
   }
 
-  const currentUser = await getFirebaseCurrentUser();
-  const entrySnapshot = await getDoc(doc(firebaseDb, "reportPeriods", periodId, "qtManualEntries", currentUser.uid));
+  const resolvedTarget = await resolveQtManualTarget(target);
+  const keyCandidates = Array.from(
+    new Set([resolvedTarget.userKey, normalizeQtEntryKey(resolvedTarget.userEmail)].filter(Boolean))
+  );
 
-  if (!entrySnapshot.exists()) {
-    return buildDefaultQtManualEntry(periodId, currentUser);
+  for (const key of keyCandidates) {
+    const entrySnapshot = await getDoc(doc(firebaseDb, "reportPeriods", periodId, "qtManualEntries", key));
+    if (!entrySnapshot.exists()) {
+      continue;
+    }
+
+    const parsedEntry = qtManualEntrySchema.safeParse(entrySnapshot.data());
+    if (parsedEntry.success) {
+      return parsedEntry.data;
+    }
   }
 
-  const parsedEntry = qtManualEntrySchema.safeParse(entrySnapshot.data());
-  return parsedEntry.success ? parsedEntry.data : buildDefaultQtManualEntry(periodId, currentUser);
+  const matchingEntry = (await getQtManualEntriesFromFirebase(periodId)).find(
+    (entry) => normalizeQtEntryKey(entry.userEmail) === normalizeQtEntryKey(resolvedTarget.userEmail)
+  );
+  if (matchingEntry) {
+    return matchingEntry;
+  }
+
+  return buildDefaultQtManualEntry(periodId, resolvedTarget);
 }
 
 async function updateQtManualEntryFromFirebase(
@@ -407,23 +486,24 @@ async function updateQtManualEntryFromFirebase(
     totalEvaluatedChatMailCount: number | null;
     feedbackCount: number | null;
     feedbackCoverage: number | null;
-  }
+  },
+  target?: QtManualEntryTarget
 ): Promise<QtManualEntry> {
   if (!firebaseDb) {
     throw new Error("Firebase veritabanı hazır değil.");
   }
 
-  const currentUser = await getFirebaseCurrentUser();
-  const currentEntry = await getQtManualEntryFromFirebase(periodId);
+  const resolvedTarget = await resolveQtManualTarget(target);
+  const currentEntry = await getQtManualEntryFromFirebase(periodId, target);
   const nextEntry: QtManualEntry = {
     ...currentEntry,
     ...body,
-    userEmail: currentUser.email!,
-    userName: currentUser.displayName ?? currentUser.email!,
+    userEmail: resolvedTarget.userEmail,
+    userName: target?.targetUserName?.trim() || currentEntry.userName || resolvedTarget.userName,
     updatedAt: new Date().toISOString()
   };
 
-  await setDoc(doc(firebaseDb, "reportPeriods", periodId, "qtManualEntries", currentUser.uid), nextEntry);
+  await setDoc(doc(firebaseDb, "reportPeriods", periodId, "qtManualEntries", currentEntry.userKey), nextEntry);
   return nextEntry;
 }
 
@@ -826,7 +906,17 @@ export const api = {
     });
   },
   getRoles(token: string | null) {
-    return request<UserRoleAssignment[]>("/api/users/roles", { token });
+    if (shouldPreferFirebaseClientMode()) {
+      return getRolesFromFirebase();
+    }
+
+    return request<UserRoleAssignment[]>("/api/users/roles", { token }).catch((error) => {
+      if (!canUseFirebaseClientFallback()) {
+        throw error;
+      }
+
+      return getRolesFromFirebase();
+    });
   },
   createRole(token: string | null, body: { uid?: string; email: string; role: "admin" | "team" | "ceo" | "qt" }) {
     return request<UserRoleAssignment>("/api/users/roles", {
@@ -858,19 +948,31 @@ export const api = {
       return getQtManualEntriesFromFirebase(periodId);
     }
   },
-  async getQtManualEntry(token: string | null, periodId: string) {
+  async getQtManualEntry(token: string | null, periodId: string, target?: QtManualEntryTarget) {
     if (shouldPreferFirebaseClientMode()) {
-      return getQtManualEntryFromFirebase(periodId);
+      return getQtManualEntryFromFirebase(periodId, target);
     }
 
+    const params = new URLSearchParams();
+    if (target?.targetUserEmail) {
+      params.set("targetEmail", target.targetUserEmail);
+    }
+    if (target?.targetUserName) {
+      params.set("targetUserName", target.targetUserName);
+    }
+    const queryString = params.toString();
+
     try {
-      return await request<QtManualEntry>(`/api/report-periods/${periodId}/qt-manual-entry`, { token });
+      return await request<QtManualEntry>(
+        `/api/report-periods/${periodId}/qt-manual-entry${queryString ? `?${queryString}` : ""}`,
+        { token }
+      );
     } catch (error) {
       if (!canUseFirebaseClientFallback()) {
         throw error;
       }
 
-      return getQtManualEntryFromFirebase(periodId);
+      return getQtManualEntryFromFirebase(periodId, target);
     }
   },
   async updateQtManualEntry(
@@ -882,24 +984,29 @@ export const api = {
       totalEvaluatedChatMailCount: number | null;
       feedbackCount: number | null;
       feedbackCoverage: number | null;
-    }
+    },
+    target?: QtManualEntryTarget
   ) {
     if (shouldPreferFirebaseClientMode()) {
-      return updateQtManualEntryFromFirebase(periodId, body);
+      return updateQtManualEntryFromFirebase(periodId, body, target);
     }
 
     try {
       return await request<QtManualEntry>(`/api/report-periods/${periodId}/qt-manual-entry`, {
         token,
         method: "PATCH",
-        body
+        body: {
+          ...body,
+          ...(target?.targetUserEmail ? { targetEmail: target.targetUserEmail } : {}),
+          ...(target?.targetUserName ? { targetUserName: target.targetUserName } : {})
+        }
       });
     } catch (error) {
       if (!canUseFirebaseClientFallback()) {
         throw error;
       }
 
-      return updateQtManualEntryFromFirebase(periodId, body);
+      return updateQtManualEntryFromFirebase(periodId, body, target);
     }
   }
 };

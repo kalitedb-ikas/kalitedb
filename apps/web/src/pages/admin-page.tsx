@@ -157,6 +157,10 @@ function downloadCsvTemplate(datasetType: DatasetType) {
   URL.revokeObjectURL(url);
 }
 
+function normalizeEmailValue(email: string) {
+  return email.trim().toLocaleLowerCase("tr-TR");
+}
+
 export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] | undefined }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -171,6 +175,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const [selectedRecordId, setSelectedRecordId] = useState<string>("");
   const [selectedFiles, setSelectedFiles] = useState<Partial<Record<DatasetType, File>>>({});
   const [lastImportDatasetType, setLastImportDatasetType] = useState<DatasetType | null>(null);
+  const [selectedQtTargetEmail, setSelectedQtTargetEmail] = useState("");
   const [manualCsatInputs, setManualCsatInputs] = useState({
     totalCallCount: "",
     totalChatMailCount: "",
@@ -331,7 +336,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
   const activeDatasetType = isDatasetSection(selectedSection) ? selectedSection : null;
   const isQtSection = activeDatasetType === "qt-metrics";
-  const canEditQtManualEntry = props.currentUserRole === "qt";
+  const canEditQtManualEntry = props.currentUserRole === "qt" || isAdminUser;
   const activePeriodMonth = `${selectedYear}-${selectedMonthValue}`;
   const selectedPeriod = useMemo(() => {
     const periods = periodsQuery.data ?? [];
@@ -396,10 +401,64 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     queryKey: ["qt-manual-entries", auth.token, selectedPeriodId],
     queryFn: () => api.getQtManualEntries(auth.token, selectedPeriodId)
   });
+  const qtTargetOptions = useMemo(() => {
+    const options = new Map<string, { email: string; name: string; label: string }>();
+
+    for (const assignment of rolesQuery.data ?? []) {
+      if (assignment.role !== "qt") {
+        continue;
+      }
+
+      const normalizedEmail = normalizeEmailValue(assignment.email);
+      options.set(normalizedEmail, {
+        email: normalizedEmail,
+        name: normalizedEmail,
+        label: normalizedEmail
+      });
+    }
+
+    for (const entry of qtManualEntriesQuery.data ?? []) {
+      const normalizedEmail = normalizeEmailValue(entry.userEmail);
+      options.set(normalizedEmail, {
+        email: normalizedEmail,
+        name: entry.userName,
+        label: entry.userName === normalizedEmail ? normalizedEmail : `${entry.userName} (${normalizedEmail})`
+      });
+    }
+
+    return Array.from(options.values()).sort((left, right) => left.label.localeCompare(right.label, "tr"));
+  }, [qtManualEntriesQuery.data, rolesQuery.data]);
+  const selectedQtTarget = useMemo(() => {
+    if (!canEditQtManualEntry) {
+      return undefined;
+    }
+
+    if (!isAdminUser) {
+      const currentUserEmail = auth.user?.email ? normalizeEmailValue(auth.user.email) : undefined;
+      const currentUserName = auth.user?.displayName?.trim() || auth.user?.email || undefined;
+
+      return currentUserEmail
+        ? {
+            targetUserEmail: currentUserEmail,
+            targetUserName: currentUserName ?? currentUserEmail
+          }
+        : undefined;
+    }
+
+    const matchedTarget =
+      qtTargetOptions.find((option) => option.email === selectedQtTargetEmail) ?? qtTargetOptions[0];
+
+    return matchedTarget
+      ? {
+          targetUserEmail: matchedTarget.email,
+          targetUserName: matchedTarget.name
+        }
+      : undefined;
+  }, [auth.user?.displayName, auth.user?.email, canEditQtManualEntry, isAdminUser, qtTargetOptions, selectedQtTargetEmail]);
   const qtManualEntryQuery = useQuery({
-    enabled: Boolean(selectedPeriodId && canEditQtManualEntry && isQtSection),
-    queryKey: ["qt-manual-entry", auth.token, selectedPeriodId],
-    queryFn: () => api.getQtManualEntry(auth.token, selectedPeriodId)
+    enabled: Boolean(selectedPeriodId && canEditQtManualEntry && isQtSection && (!isAdminUser || selectedQtTarget?.targetUserEmail)),
+    queryKey: ["qt-manual-entry", auth.token, selectedPeriodId, selectedQtTarget?.targetUserEmail],
+    queryFn: () => api.getQtManualEntry(auth.token, selectedPeriodId, selectedQtTarget)
   });
   const qtManualEntryMutation = useMutation({
     mutationFn: async (values: typeof qtManualInputs) => {
@@ -413,7 +472,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         totalEvaluatedChatMailCount: parseNullableIntegerInput(values.totalEvaluatedChatMailCount),
         feedbackCount: parseNullableIntegerInput(values.feedbackCount),
         feedbackCoverage: parseNullableDecimalInput(values.feedbackCoverage)
-      });
+      }, selectedQtTarget);
     },
     onSuccess: async () => {
       await Promise.all([
@@ -436,6 +495,22 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       feedbackCoverage: entry.feedbackCoverage == null ? "" : String(entry.feedbackCoverage)
     });
   }, [qtManualEntryQuery.data]);
+  useEffect(() => {
+    if (!isAdminUser || !isQtSection) {
+      return;
+    }
+
+    if (qtTargetOptions.length === 0) {
+      if (selectedQtTargetEmail !== "") {
+        setSelectedQtTargetEmail("");
+      }
+      return;
+    }
+
+    if (!qtTargetOptions.some((option) => option.email === selectedQtTargetEmail)) {
+      setSelectedQtTargetEmail(qtTargetOptions[0]!.email);
+    }
+  }, [isAdminUser, isQtSection, qtTargetOptions, selectedQtTargetEmail]);
 
   const visibleAdminSections = useMemo(
     () =>
@@ -533,6 +608,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["periods", auth.token] }),
       queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] }),
+      queryClient.invalidateQueries({ queryKey: ["qt-manual-entry", auth.token, selectedPeriodId] }),
       queryClient.invalidateQueries({ queryKey: ["qt-manual-entries", auth.token, selectedPeriodId] }),
       queryClient.invalidateQueries({ queryKey: ["thresholds", auth.token] }),
       queryClient.invalidateQueries({ queryKey: ["roles", auth.token] })
@@ -694,8 +770,8 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
     return [];
   }, [activeDatasetType]);
-  const qtManualColumns = useMemo<ColumnDef<QtManualEntry>[]>(
-    () => [
+  const qtManualColumns = useMemo<ColumnDef<QtManualEntry>[]>(() => {
+    const columns: ColumnDef<QtManualEntry>[] = [
       {
         header: "QT",
         accessorFn: (row) => row.userName
@@ -726,9 +802,26 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         accessorFn: (row) => row.feedbackCoverage,
         cell: ({ row }) => formatNumber(row.original.feedbackCoverage, 2)
       }
-    ],
-    []
-  );
+    ];
+
+    if (isAdminUser) {
+      columns.push({
+        header: "İşlem",
+        id: "action",
+        cell: ({ row }) => (
+          <button
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"
+            onClick={() => setSelectedQtTargetEmail(normalizeEmailValue(row.original.userEmail))}
+            type="button"
+          >
+            Düzenle
+          </button>
+        )
+      });
+    }
+
+    return columns;
+  }, [isAdminUser]);
 
   return (
     <div className="rounded-[38px] border border-sky-100/90 bg-[#edf6fb] p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)]">
@@ -1057,6 +1150,32 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     >
                       {canEditQtManualEntry ? (
                         <>
+                          {isAdminUser ? (
+                            <div className="mb-4 space-y-3">
+                              <InputField label="QT kullanıcısı">
+                                <select
+                                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                                  disabled={qtTargetOptions.length === 0}
+                                  onChange={(event) => setSelectedQtTargetEmail(event.target.value)}
+                                  value={selectedQtTargetEmail}
+                                >
+                                  {qtTargetOptions.length === 0 ? (
+                                    <option value="">QT kullanıcısı bulunamadı</option>
+                                  ) : (
+                                    qtTargetOptions.map((option) => (
+                                      <option key={option.email} value={option.email}>
+                                        {option.label}
+                                      </option>
+                                    ))
+                                  )}
+                                </select>
+                              </InputField>
+                              <p className="text-sm text-slate-500">
+                                Admin olarak seçtiğiniz QT kullanıcısı adına manuel veri girebilirsiniz.
+                              </p>
+                            </div>
+                          ) : null}
+
                           <div className="grid gap-4 md:grid-cols-2">
                             <InputField label="Toplam dinleme süresi (saat)">
                               <input
@@ -1120,11 +1239,13 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                             <p className="text-sm text-slate-500">
-                              Alanları boş bırakıp kaydetmek mevcut değeri kaldırır.
+                              {selectedQtTarget?.targetUserName
+                                ? `${selectedQtTarget.targetUserName} için alanları boş bırakıp kaydetmek mevcut değeri kaldırır.`
+                                : "Alanları boş bırakıp kaydetmek mevcut değeri kaldırır."}
                             </p>
                             <button
                               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                              disabled={!selectedPeriodId || qtManualEntryMutation.isPending}
+                              disabled={!selectedPeriodId || qtManualEntryMutation.isPending || (isAdminUser && !selectedQtTarget)}
                               onClick={() => qtManualEntryMutation.mutate(qtManualInputs)}
                               type="button"
                             >
@@ -1138,6 +1259,11 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                               {qtManualEntryMutation.error instanceof Error
                                 ? qtManualEntryMutation.error.message
                                 : "QT değerleri kaydedilirken bir hata oluştu."}
+                            </div>
+                          ) : null}
+                          {isAdminUser && qtTargetOptions.length === 0 ? (
+                            <div className="mt-4 rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                              Düzenlemek için önce Roller alanında en az bir kullanıcıyı `QT` rolüyle tanımlayın.
                             </div>
                           ) : null}
                         </>
