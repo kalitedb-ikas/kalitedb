@@ -103,7 +103,7 @@ export function QuestionsPage() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+      <div className="grid gap-6">
         <ExecutiveChartCard title="Soru performans görünümü">
           <div className="grid gap-4 md:grid-cols-2">
             <QuestionSpotlight
@@ -124,76 +124,35 @@ export function QuestionsPage() {
             />
           </div>
         </ExecutiveChartCard>
-
-        <SurfaceCard title="Kısa eğitim özeti" variant="default">
-          <div className="space-y-3">
-            <SummaryLine
-              title="Öncelikli konu"
-              value={weakestQuestions[0]?.topic ?? "Henüz yok"}
-            />
-            <SummaryLine
-              title="Güçlü alan"
-              value={strongestQuestions[0]?.topic ?? "Henüz yok"}
-            />
-            <SummaryLine
-              title="Ortalama doğruluk"
-              value={formatPercent(averageAccuracy)}
-            />
-          </div>
-        </SurfaceCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.88fr_1.12fr]">
-        <div className="grid gap-6">
-          <Leaderboard
-            items={topicAccuracy.slice(0, 5).map((item) => ({
-              id: item.id,
-              label: item.label,
-              value: formatPercent(item.accuracy)
-            }))}
-            title="En düşük doğruluklu konular"
-          />
-
-          <SurfaceCard
-            actions={
-              <select
-                className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 focus:border-primary/40 focus:outline-none"
-                onChange={(event) => setTopic(event.target.value)}
-                value={topic}
-              >
-                <option value="">Tüm kategoriler</option>
-                {topics.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            }
-            title="Riskli soru kümesi"
-            variant="default"
-          >
-            <div className="space-y-3">
-              {weakestQuestions.slice(0, 4).map((question) => (
-                <div
-                  key={question.id}
-                  className="rounded-[22px] border border-slate-200 bg-white/92 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{question.topic}</p>
-                      <p className="mt-2 text-sm font-semibold leading-7 text-slate-900">{question.questionText}</p>
-                    </div>
-                    <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
-                      {formatPercent(question.accuracyRate)}
-                    </span>
-                  </div>
-                </div>
+      <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
+        <Leaderboard
+          items={topicAccuracy.slice(0, 5).map((item) => ({
+            id: item.id,
+            label: item.label,
+            value: formatPercent(item.accuracy)
+          }))}
+          title="En düşük doğruluklu konular"
+        />
+        <SurfaceCard
+          actions={
+            <select
+              className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 focus:border-primary/40 focus:outline-none"
+              onChange={(event) => setTopic(event.target.value)}
+              value={topic}
+            >
+              <option value="">Tüm kategoriler</option>
+              {topics.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
               ))}
-            </div>
-          </SurfaceCard>
-        </div>
-
-        <SurfaceCard title="Detay tablo görünümü" variant="default">
+            </select>
+          }
+          title="Detay tablo görünümü"
+          variant="default"
+        >
           <DataTable
             columns={columns}
             data={rows}
@@ -202,16 +161,6 @@ export function QuestionsPage() {
           />
         </SurfaceCard>
       </div>
-    </div>
-  );
-}
-
-function SummaryLine(props: { title: string; value: string; detail?: string | undefined }) {
-  return (
-    <div className="rounded-[22px] border border-slate-200 bg-white/92 px-4 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{props.title}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-950">{props.value}</p>
-      {props.detail ? <p className="mt-1 text-sm text-slate-500">{props.detail}</p> : null}
     </div>
   );
 }

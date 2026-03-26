@@ -346,7 +346,7 @@ export function PresentationPage() {
             ))}
           </select>
         }
-        eyebrow="Sunum modu"
+        eyebrow="Özet modu"
         metaChips={
           <>
             <MetaChip>{snapshot?.period.title ?? "Dönem bekleniyor"}</MetaChip>
@@ -354,7 +354,7 @@ export function PresentationPage() {
           </>
         }
         subtitle="Toplantı akışına uygun, tam ekran hissi veren özet sahneler hazırlayın."
-        title="Sunum"
+        title="Özet"
       />
 
       <SurfaceCard variant="subtle">

@@ -35,7 +35,7 @@ const navigation: NavigationItem[] = [
   { label: "CSAT", to: "/csat", icon: MessageCircle },
   { label: "QT", to: "/qt", icon: BarChart3 },
   { label: "Temsilciler", to: "/representatives", icon: Users },
-  { label: "Sunum", to: "/presentation", icon: Monitor },
+  { label: "Özet", to: "/presentation", icon: Monitor },
   { label: "Yönetim", to: "/admin", icon: Settings, roles: ["admin", "qt"] }
 ];
 

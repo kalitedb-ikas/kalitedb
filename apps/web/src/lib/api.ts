@@ -1,5 +1,6 @@
 import type {
   Role,
+  ReportDatasets,
   DashboardSnapshot,
   DatasetType,
   KpiMetricKey,
@@ -9,16 +10,20 @@ import type {
   UserRoleAssignment
 } from "@kalitedb/shared";
 import {
+  agentMetricSchema,
+  auditMetricSchema,
   buildDashboardSnapshot,
   DEFAULT_THRESHOLDS as DEFAULT_THRESHOLD_MAP,
+  questionPerformanceSchema,
   qtManualEntrySchema,
+  qtMetricSchema,
   reportPeriodSchema,
   roleSchema,
   selectDefaultReportPeriod,
   thresholdConfigSchema,
   userRoleAssignmentSchema
 } from "@kalitedb/shared";
-import { collection, doc, getDoc, getDocs, orderBy, query, setDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, orderBy, query, setDoc, where } from "firebase/firestore";
 
 import { toPublicAssetPath } from "./asset-path";
 import { firebaseAuth, firebaseDb } from "./firebase";
@@ -68,12 +73,35 @@ type PublicFallbackPayload = {
 
 let publicFallbackPromise: Promise<PublicFallbackPayload | null> | undefined;
 
+const ALL_DATASET_TYPES: DatasetType[] = ["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"];
+
+function emptyDatasets(): ReportDatasets {
+  return {
+    agentMetrics: [],
+    auditMetrics: [],
+    questionPerformance: [],
+    qtMetrics: []
+  };
+}
+
 function normalizeRoleEmail(email: string) {
   return email.trim().toLocaleLowerCase("tr-TR");
 }
 
+function canUseFirebaseReadMode() {
+  return Boolean(firebaseDb);
+}
+
 function canUseFirebaseClientFallback() {
   return Boolean(firebaseDb && firebaseAuth?.currentUser);
+}
+
+function shouldPreferFirebaseReadMode() {
+  if (!canUseFirebaseReadMode() || typeof window === "undefined") {
+    return false;
+  }
+
+  return window.location.hostname.endsWith("github.io");
 }
 
 function shouldPreferFirebaseClientMode() {
@@ -142,12 +170,31 @@ async function getPeriodsFromFirebase(): Promise<ReportPeriod[]> {
     throw new Error("Firebase veritabanı hazır değil.");
   }
 
-  const snapshot = await getDocs(query(collection(firebaseDb, "reportPeriods"), orderBy("month", "desc")));
+  const parsePeriods = (snapshot: Awaited<ReturnType<typeof getDocs>>) =>
+    snapshot.docs
+      .map((periodDoc) => reportPeriodSchema.safeParse({ id: periodDoc.id, ...(periodDoc.data() ?? {}) }))
+      .filter((period): period is { success: true; data: ReportPeriod } => period.success)
+      .map((period) => period.data)
+      .sort((left, right) => right.month.localeCompare(left.month));
 
-  return snapshot.docs
-    .map((periodDoc) => reportPeriodSchema.safeParse({ id: periodDoc.id, ...periodDoc.data() }))
-    .filter((period): period is { success: true; data: ReportPeriod } => period.success)
-    .map((period) => period.data);
+  if (firebaseAuth?.currentUser) {
+    const snapshot = await getDocs(query(collection(firebaseDb, "reportPeriods"), orderBy("month", "desc")));
+    return parsePeriods(snapshot);
+  }
+
+  const publishedSnapshot = await getDocs(
+    query(collection(firebaseDb, "reportPeriods"), where("publishedAt", "!=", null), orderBy("publishedAt", "desc"))
+  );
+  const publishedPeriods = parsePeriods(publishedSnapshot);
+
+  if (publishedPeriods.length > 0) {
+    return publishedPeriods;
+  }
+
+  const statusSnapshot = await getDocs(
+    query(collection(firebaseDb, "reportPeriods"), where("status", "==", "published"), orderBy("month", "desc"))
+  );
+  return parsePeriods(statusSnapshot);
 }
 
 async function getThresholdsFromFirebase(): Promise<Record<KpiMetricKey, ThresholdConfig>> {
@@ -169,6 +216,155 @@ async function getThresholdsFromFirebase(): Promise<Record<KpiMetricKey, Thresho
   });
 
   return thresholds;
+}
+
+async function getReportPeriodFromFirebase(periodId: string, knownPeriods?: ReportPeriod[]) {
+  const knownPeriod = knownPeriods?.find((period) => period.id === periodId);
+  if (knownPeriod) {
+    return knownPeriod;
+  }
+
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const periodSnapshot = await getDoc(doc(firebaseDb, "reportPeriods", periodId));
+  if (!periodSnapshot.exists()) {
+    throw new Error("Dönem bulunamadı.");
+  }
+
+  const parsedPeriod = reportPeriodSchema.safeParse({ id: periodSnapshot.id, ...(periodSnapshot.data() ?? {}) });
+  if (!parsedPeriod.success) {
+    throw new Error("Dönem verisi okunamadı.");
+  }
+
+  return parsedPeriod.data;
+}
+
+async function getPeriodDatasetsFromFirebase(periodId: string, datasetTypes?: DatasetType[]): Promise<ReportDatasets> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const selectedTypes = new Set(datasetTypes?.length ? datasetTypes : ALL_DATASET_TYPES);
+
+  const [agentMetrics, auditMetrics, questionPerformance, qtMetrics] = await Promise.all([
+    selectedTypes.has("agent-metrics")
+      ? getDocs(collection(firebaseDb, "reportPeriods", periodId, "agentMetrics")).then((snapshot) =>
+          snapshot.docs
+            .map((recordDoc) => agentMetricSchema.safeParse(recordDoc.data()))
+            .filter((record): record is { success: true; data: ReportDatasets["agentMetrics"][number] } => record.success)
+            .map((record) => record.data)
+        )
+      : Promise.resolve(emptyDatasets().agentMetrics),
+    selectedTypes.has("audit-metrics")
+      ? getDocs(collection(firebaseDb, "reportPeriods", periodId, "auditMetrics")).then((snapshot) =>
+          snapshot.docs
+            .map((recordDoc) => auditMetricSchema.safeParse(recordDoc.data()))
+            .filter((record): record is { success: true; data: ReportDatasets["auditMetrics"][number] } => record.success)
+            .map((record) => record.data)
+        )
+      : Promise.resolve(emptyDatasets().auditMetrics),
+    selectedTypes.has("question-performance")
+      ? getDocs(collection(firebaseDb, "reportPeriods", periodId, "questionPerformance")).then((snapshot) =>
+          snapshot.docs
+            .map((recordDoc) => questionPerformanceSchema.safeParse(recordDoc.data()))
+            .filter(
+              (record): record is { success: true; data: ReportDatasets["questionPerformance"][number] } =>
+                record.success
+            )
+            .map((record) => record.data)
+        )
+      : Promise.resolve(emptyDatasets().questionPerformance),
+    selectedTypes.has("qt-metrics")
+      ? getDocs(collection(firebaseDb, "reportPeriods", periodId, "qtMetrics")).then((snapshot) =>
+          snapshot.docs
+            .map((recordDoc) => qtMetricSchema.safeParse(recordDoc.data()))
+            .filter((record): record is { success: true; data: ReportDatasets["qtMetrics"][number] } => record.success)
+            .map((record) => record.data)
+        )
+      : Promise.resolve(emptyDatasets().qtMetrics)
+  ]);
+
+  return {
+    agentMetrics,
+    auditMetrics,
+    questionPerformance,
+    qtMetrics
+  };
+}
+
+async function getPeriodDetailsFromFirebase(
+  periodId: string,
+  options?: PeriodDetailsOptions
+): Promise<{
+  period: ReportPeriod;
+  datasets: ReportDatasets;
+  importJobs: Array<{
+    id: string;
+    datasetType: DatasetType;
+    uploadedAt: string;
+    uploadedBy: string;
+    rowCount: number;
+    errorCount: number;
+    status: string;
+  }>;
+}> {
+  const periods = await getPeriodsFromFirebase();
+  const period = await getReportPeriodFromFirebase(periodId, periods);
+  const datasets = await getPeriodDatasetsFromFirebase(periodId, options?.datasetTypes);
+
+  return {
+    period,
+    datasets,
+    importJobs: []
+  };
+}
+
+async function getDashboardFromFirebase(
+  periodId?: string,
+  compareToPeriodId?: string,
+  options?: DashboardOptions
+): Promise<DashboardSnapshot> {
+  const periods = await getPeriodsFromFirebase();
+  const fallbackPeriodId = selectDefaultReportPeriod(periods)?.id;
+  const resolvedPeriodId =
+    periodId && (firebaseAuth?.currentUser || periods.some((period) => period.id === periodId))
+      ? periodId
+      : fallbackPeriodId;
+
+  if (!resolvedPeriodId) {
+    throw new Error("Gösterilecek dönem bulunamadı.");
+  }
+
+  const resolvedCompareToPeriodId =
+    compareToPeriodId && (firebaseAuth?.currentUser || periods.some((period) => period.id === compareToPeriodId))
+      ? compareToPeriodId
+      : undefined;
+
+  const [currentPeriod, currentDatasets, thresholds, compareToPeriod, compareDatasets] = await Promise.all([
+    getReportPeriodFromFirebase(resolvedPeriodId, periods),
+    getPeriodDatasetsFromFirebase(resolvedPeriodId, options?.datasetTypes),
+    getThresholdsFromFirebase(),
+    resolvedCompareToPeriodId
+      ? getReportPeriodFromFirebase(resolvedCompareToPeriodId, periods)
+      : Promise.resolve(undefined),
+    resolvedCompareToPeriodId
+      ? getPeriodDatasetsFromFirebase(resolvedCompareToPeriodId, options?.datasetTypes)
+      : Promise.resolve(undefined)
+  ]);
+
+  return buildDashboardSnapshot({
+    period: currentPeriod,
+    datasets: currentDatasets,
+    ...(compareToPeriod && compareDatasets
+      ? {
+          compareToPeriod,
+          compareDatasets
+        }
+      : {}),
+    thresholds
+  });
 }
 
 function buildDefaultQtManualEntry(periodId: string, user: Awaited<ReturnType<typeof getFirebaseCurrentUser>>): QtManualEntry {
@@ -468,7 +664,15 @@ export const api = {
       return getMeFromFirebase();
     }
   },
-  getPeriods(token: string | null) {
+  async getPeriods(token: string | null) {
+    if (shouldPreferFirebaseReadMode()) {
+      try {
+        return await getPeriodsFromFirebase();
+      } catch {
+        // Static fallback keeps guest pages usable if public Firestore read is unavailable.
+      }
+    }
+
     if (shouldPreferFirebaseClientMode()) {
       return getPeriodsFromFirebase();
     }
@@ -481,7 +685,15 @@ export const api = {
   ) {
     return request<ReportPeriod>("/api/report-periods", { token, method: "POST", body });
   },
-  getPeriodDetails(token: string | null, periodId: string, options?: PeriodDetailsOptions) {
+  async getPeriodDetails(token: string | null, periodId: string, options?: PeriodDetailsOptions) {
+    if (shouldPreferFirebaseReadMode()) {
+      try {
+        return await getPeriodDetailsFromFirebase(periodId, options);
+      } catch {
+        // Backend remains the fallback for admin-heavy screens.
+      }
+    }
+
     const params = new URLSearchParams();
     appendDatasetTypes(params, options?.datasetTypes);
     if (options?.includeImportJobs === false) {
@@ -549,7 +761,15 @@ export const api = {
       method: "POST"
     });
   },
-  getDashboard(token: string | null, periodId?: string, compareToPeriodId?: string, options?: DashboardOptions) {
+  async getDashboard(token: string | null, periodId?: string, compareToPeriodId?: string, options?: DashboardOptions) {
+    if (shouldPreferFirebaseReadMode()) {
+      try {
+        return await getDashboardFromFirebase(periodId, compareToPeriodId, options);
+      } catch {
+        // Static dashboard snapshot stays as the last-resort guest fallback.
+      }
+    }
+
     const params = new URLSearchParams();
     if (periodId) {
       params.set("periodId", periodId);
@@ -594,6 +814,14 @@ export const api = {
     );
   },
   async getThresholds(token: string | null) {
+    if (shouldPreferFirebaseReadMode()) {
+      try {
+        return await getThresholdsFromFirebase();
+      } catch {
+        // Fall through to API fallback.
+      }
+    }
+
     if (shouldPreferFirebaseClientMode()) {
       return getThresholdsFromFirebase();
     }
@@ -626,6 +854,14 @@ export const api = {
     });
   },
   async getQtManualEntries(token: string | null, periodId: string) {
+    if (shouldPreferFirebaseReadMode()) {
+      try {
+        return await getQtManualEntriesFromFirebase(periodId);
+      } catch {
+        // Keep backend as fallback for environments without public Firestore reads.
+      }
+    }
+
     if (shouldPreferFirebaseClientMode()) {
       return getQtManualEntriesFromFirebase(periodId);
     }

@@ -183,9 +183,8 @@ export function AuditPage() {
       enabled: true,
       queryKey: ["audit-history", auth.token, period.id],
       queryFn: () =>
-        api.getPeriodDetails(auth.token, period.id, {
-          datasetTypes: ["audit-metrics"],
-          includeImportJobs: false
+        api.getDashboard(auth.token, period.id, undefined, {
+          datasetTypes: ["audit-metrics"]
         }),
       staleTime: 5 * 60 * 1000
     }))
@@ -194,9 +193,7 @@ export function AuditPage() {
     const points = sortedPeriods
       .map((period, index) => {
         const detail = auditHistoryQueries[index]?.data;
-        const auditAverage = detail
-          ? average(selectAuditMetrics(detail.datasets).map((item) => item.auditScore))
-          : null;
+        const auditAverage = detail ? average(selectAuditMetrics(detail.datasets).map((item) => item.auditScore)) : null;
         return {
           periodId: period.id,
           period: period.month,
