@@ -5,7 +5,6 @@ import {
   LogOut,
   Menu,
   MessageCircle,
-  Monitor,
   Settings,
   Sparkles,
   Users,
@@ -35,7 +34,6 @@ const navigation: NavigationItem[] = [
   { label: "CSAT", to: "/csat", icon: MessageCircle },
   { label: "QT", to: "/qt", icon: BarChart3 },
   { label: "Temsilciler", to: "/representatives", icon: Users },
-  { label: "Özet", to: "/presentation", icon: Monitor },
   { label: "Yönetim", to: "/admin", icon: Settings, roles: ["admin", "qt"] }
 ];
 
