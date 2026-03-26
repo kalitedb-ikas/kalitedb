@@ -379,6 +379,8 @@ export function MetricCarouselCard(props: {
   eyebrow: string;
   title: string;
   value: string;
+  badge?: string | undefined;
+  badgeTone?: Tone | undefined;
   detail?: string | undefined;
   icon?: ReactNode | undefined;
   imageSrc?: string | undefined;
@@ -410,6 +412,11 @@ export function MetricCarouselCard(props: {
           ) : null}
         </div>
         <p className="mt-4 text-sm font-medium text-slate-600">{props.title}</p>
+        {props.badge ? (
+          <span className={cn("mt-3 inline-flex rounded-full px-3 py-1 text-[11px] font-semibold", toneBadgeMap[props.badgeTone ?? "neutral"])}>
+            {props.badge}
+          </span>
+        ) : null}
         <p className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950">{props.value}</p>
         {props.detail ? <p className="mt-2 text-sm leading-6 text-slate-600">{props.detail}</p> : null}
       </div>

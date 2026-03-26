@@ -140,6 +140,8 @@ export function QtPage() {
         {
           eyebrow: "Henüz veri yok",
           title: "QT kartı bekleniyor",
+          badge: undefined,
+          badgeTone: undefined,
           value: "-",
           detail: "QT kullanıcıları kendi girişlerini yaptığında bu alan kişi kişi dolacak.",
           imageAlt: undefined,
@@ -153,10 +155,21 @@ export function QtPage() {
     const tones = ["orange", "violet", "emerald"] as const;
     return entries.map((entry, index) => {
       const displayName = getRepresentativeDisplayName(entry.userName || entry.userEmail);
+      const feedbackThreshold = thresholdsQuery.data?.feedbackCoverage;
+      const feedbackBadgeTone =
+        entry.feedbackCoverage == null || !feedbackThreshold
+          ? ("neutral" as const)
+          : entry.feedbackCoverage >= feedbackThreshold.green
+            ? ("green" as const)
+            : entry.feedbackCoverage >= feedbackThreshold.yellow
+              ? ("yellow" as const)
+              : ("red" as const);
 
       return {
         eyebrow: sanitizeQtCardEyebrow(displayName),
         title: "Toplam dinleme süresi",
+        badge: `Feedback ${entry.feedbackCoverage == null ? "-" : formatNumber(entry.feedbackCoverage, 2)}`,
+        badgeTone: feedbackBadgeTone,
         value:
           entry.totalListeningHours == null ? "-" : `${formatNumber(entry.totalListeningHours, 2)} saat`,
         detail: `Degerlendirilen toplam ${formatEvaluatedTotal(entry.totalEvaluatedCallCount, entry.totalEvaluatedChatMailCount)} • Geri bildirim ${formatNumber(entry.feedbackCount)}`,
@@ -166,7 +179,7 @@ export function QtPage() {
         tone: tones[index % tones.length]
       };
     });
-  }, [qtEntriesQuery.data]);
+  }, [qtEntriesQuery.data, thresholdsQuery.data]);
 
   const overviewStats = useMemo(() => {
     const entries = qtEntriesQuery.data ?? [];
@@ -201,6 +214,8 @@ export function QtPage() {
           {qtCards.map((card) => (
             <MetricCarouselCard
               key={`${card.eyebrow}-${card.title}`}
+              badge={card.badge}
+              badgeTone={card.badgeTone}
               detail={card.detail}
               eyebrow={card.eyebrow}
               icon={card.icon}
