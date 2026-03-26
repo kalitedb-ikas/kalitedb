@@ -168,7 +168,6 @@ export function CsatPage() {
   const csatLeaderNames = formatNameList(csatLeaders.map((leader) => leader.name));
 
   const csatSummary = useMemo(() => {
-    const totalEvaluations = sum(rows.map((row) => row.evaluationCount));
     const totalCalls = snapshot?.period.manualTotalCallCount ?? sum(rows.map((row) => row.totalCallCount));
     const totalDigital = snapshot?.period.manualTotalChatMailCount ?? sum(rows.map((row) => row.totalChatMailCount));
     const totalTickets =
@@ -176,7 +175,6 @@ export function CsatPage() {
     const mixTotal = totalCalls + totalDigital + totalTickets || 1;
 
     return {
-      totalEvaluations,
       totalCalls,
       totalDigital,
       totalTickets,
@@ -269,7 +267,7 @@ export function CsatPage() {
             />
 
             <div className="grid gap-6">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-1">
                 <StatCard
                   badge={`${snapshot.summary.agentCount} temsilci`}
                   badgeTone="green"
@@ -277,12 +275,6 @@ export function CsatPage() {
                   label="Takım CSAT ortalaması"
                   tone={resolveThresholdTone(snapshot.summary.csatAverage, snapshot.thresholds.callEvaluationAverage)}
                   value={formatNumber(snapshot.summary.csatAverage, 3)}
-                />
-                <StatCard
-                  icon={<Users size={18} />}
-                  label="Toplam değerlendirme"
-                  tone="neutral"
-                  value={formatNumber(csatSummary.totalEvaluations)}
                 />
               </div>
 
