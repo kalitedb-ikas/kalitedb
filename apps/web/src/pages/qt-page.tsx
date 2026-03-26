@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatNumber } from "../lib/format";
-import { getRepresentativePhotoSrc } from "../lib/representative-photos";
+import { getRepresentativeDisplayName, getRepresentativePhotoSrc } from "../lib/representative-photos";
 
 function formatEvaluatedTotal(totalEvaluatedCallCount: number | null, totalEvaluatedChatMailCount: number | null) {
   const totalEvaluatedCount =
@@ -151,17 +151,21 @@ export function QtPage() {
     }
 
     const tones = ["orange", "violet", "emerald"] as const;
-    return entries.map((entry, index) => ({
-      eyebrow: sanitizeQtCardEyebrow(entry.userName),
-      title: "Toplam dinleme süresi",
-      value:
-        entry.totalListeningHours == null ? "-" : `${formatNumber(entry.totalListeningHours, 2)} saat`,
-      detail: `Degerlendirilen toplam ${formatEvaluatedTotal(entry.totalEvaluatedCallCount, entry.totalEvaluatedChatMailCount)} • Geri bildirim ${formatNumber(entry.feedbackCount)}`,
-      imageAlt: entry.userName,
-      imageSrc: getRepresentativePhotoSrc(entry.userName) ?? undefined,
-      icon: index % 3 === 0 ? <Timer size={20} /> : index % 3 === 1 ? <Layers size={20} /> : <MessageCircle size={20} />,
-      tone: tones[index % tones.length]
-    }));
+    return entries.map((entry, index) => {
+      const displayName = getRepresentativeDisplayName(entry.userName || entry.userEmail);
+
+      return {
+        eyebrow: sanitizeQtCardEyebrow(displayName),
+        title: "Toplam dinleme süresi",
+        value:
+          entry.totalListeningHours == null ? "-" : `${formatNumber(entry.totalListeningHours, 2)} saat`,
+        detail: `Degerlendirilen toplam ${formatEvaluatedTotal(entry.totalEvaluatedCallCount, entry.totalEvaluatedChatMailCount)} • Geri bildirim ${formatNumber(entry.feedbackCount)}`,
+        imageAlt: displayName,
+        imageSrc: getRepresentativePhotoSrc(displayName) ?? undefined,
+        icon: index % 3 === 0 ? <Timer size={20} /> : index % 3 === 1 ? <Layers size={20} /> : <MessageCircle size={20} />,
+        tone: tones[index % tones.length]
+      };
+    });
   }, [qtEntriesQuery.data]);
 
   const overviewStats = useMemo(() => {

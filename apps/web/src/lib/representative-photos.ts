@@ -59,6 +59,22 @@ const REPRESENTATIVE_PHOTO_MAP: Record<string, string> = Object.fromEntries(
   })
 );
 
+const REPRESENTATIVE_DISPLAY_NAME_MAP: Record<string, string> = {
+  [normalizeKey("baturay.cetinel")]: "Baturay Çetinel",
+  [normalizeKey("baturay.cetinel@ikas.com")]: "Baturay Çetinel",
+  [normalizeKey("sercan.ari")]: "Sercan Arı",
+  [normalizeKey("sercan.ari@ikas.com")]: "Sercan Arı"
+};
+
+export function getRepresentativeDisplayName(value: string) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return trimmedValue;
+  }
+
+  return REPRESENTATIVE_DISPLAY_NAME_MAP[normalizeKey(trimmedValue)] ?? trimmedValue;
+}
+
 export function getRepresentativePhotoSrc(name: string) {
   const photoPath = REPRESENTATIVE_PHOTO_MAP[normalizeKey(name)];
   return photoPath ? toPublicAssetPath(photoPath) : null;

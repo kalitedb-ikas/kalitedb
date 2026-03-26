@@ -41,6 +41,7 @@ import {
   formatNumber,
   formatPercent
 } from "../lib/format";
+import { getRepresentativeDisplayName } from "../lib/representative-photos";
 
 const roleSchema = z.object({
   email: z.string().email(),
@@ -424,19 +425,21 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       }
 
       const normalizedEmail = normalizeEmailValue(assignment.email);
+      const displayName = getRepresentativeDisplayName(assignment.email);
       options.set(normalizedEmail, {
         email: normalizedEmail,
-        name: normalizedEmail,
-        label: normalizedEmail
+        name: displayName,
+        label: displayName === normalizedEmail ? normalizedEmail : `${displayName} (${normalizedEmail})`
       });
     }
 
     for (const entry of qtManualEntriesQuery.data ?? []) {
       const normalizedEmail = normalizeEmailValue(entry.userEmail);
+      const displayName = getRepresentativeDisplayName(entry.userName || entry.userEmail);
       options.set(normalizedEmail, {
         email: normalizedEmail,
-        name: entry.userName,
-        label: entry.userName === normalizedEmail ? normalizedEmail : `${entry.userName} (${normalizedEmail})`
+        name: displayName,
+        label: displayName === normalizedEmail ? normalizedEmail : `${displayName} (${normalizedEmail})`
       });
     }
 
@@ -801,7 +804,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     const columns: ColumnDef<QtManualEntry>[] = [
       {
         header: "QT",
-        accessorFn: (row) => row.userName
+        accessorFn: (row) => getRepresentativeDisplayName(row.userName || row.userEmail)
       },
       {
         header: "Toplam dinleme",
