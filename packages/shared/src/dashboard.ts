@@ -62,6 +62,40 @@ function pickFirst(items: DashboardMetricItem[]): DashboardMetricItem | undefine
   return items[0];
 }
 
+function formatJoinedLabels(labels: string[]): string {
+  if (labels.length <= 1) {
+    return labels[0] ?? "";
+  }
+
+  if (labels.length === 2) {
+    return labels.join(" ve ");
+  }
+
+  return `${labels.slice(0, -1).join(", ")} ve ${labels.at(-1)}`;
+}
+
+function pickTopWithTies(items: DashboardMetricItem[]): DashboardMetricItem | undefined {
+  const firstItem = pickFirst(items);
+
+  if (!firstItem || firstItem.value === null) {
+    return firstItem;
+  }
+
+  const tiedLabels = items
+    .filter((item) => item.value === firstItem.value)
+    .map((item) => item.label)
+    .sort((left, right) => left.localeCompare(right, "tr"));
+
+  if (tiedLabels.length <= 1) {
+    return firstItem;
+  }
+
+  return {
+    ...firstItem,
+    label: formatJoinedLabels(tiedLabels)
+  };
+}
+
 function buildLegacyAuditMetrics(agentMetrics: AgentMetric[]): AuditMetric[] {
   return agentMetrics
     .filter((record) => record.auditScore !== null || record.previousAuditAccuracy !== null)
@@ -214,7 +248,7 @@ export function buildDashboardSnapshot(params: {
   const highlights: DashboardSnapshot["highlights"] = {};
   const bestAudit = pickFirst(auditDesc);
   const lowestAudit = pickFirst(auditAsc);
-  const bestCsat = pickFirst(csatDesc);
+  const bestCsat = pickTopWithTies(csatDesc);
   const lowestCsat = pickFirst(csatAsc);
   const mostImproved = pickFirst(deltaSorted);
   const mostDeclined = pickFirst(deltaAsc);

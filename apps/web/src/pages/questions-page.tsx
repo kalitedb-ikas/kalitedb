@@ -1,9 +1,9 @@
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { BookOpen, Sparkles, Target } from "lucide-react";
+import { BookOpen, Target } from "lucide-react";
 import { useMemo, useState } from "react";
 import { selectDefaultReportPeriod, type QuestionPerformance } from "@kalitedb/shared";
-import { ExecutiveChartCard, Leaderboard, PageHeader, QuestionSpotlight, StatCard, SurfaceCard } from "@kalitedb/ui";
+import { ExecutiveChartCard, PageHeader, QuestionSpotlight, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { useSearchParams } from "react-router-dom";
 
 import { DataTable } from "../components/data-table";
@@ -44,23 +44,6 @@ export function QuestionsPage() {
   }, [allQuestions, topic]);
 
   const topics = useMemo(() => Array.from(new Set(allQuestions.map((item) => item.topic))), [allQuestions]);
-  const topicAccuracy = useMemo(() => {
-    const map = new Map<string, number[]>();
-    for (const question of allQuestions) {
-      const current = map.get(question.topic) ?? [];
-      current.push(question.accuracyRate);
-      map.set(question.topic, current);
-    }
-
-    return Array.from(map.entries())
-      .map(([label, values]) => ({
-        id: label,
-        label,
-        accuracy: values.reduce((sum, value) => sum + value, 0) / values.length
-      }))
-      .sort((left, right) => left.accuracy - right.accuracy);
-  }, [allQuestions]);
-
   const averageAccuracy =
     allQuestions.length > 0
       ? allQuestions.reduce((sum, question) => sum + question.accuracyRate, 0) / allQuestions.length
@@ -68,7 +51,6 @@ export function QuestionsPage() {
 
   const columns: ColumnDef<QuestionPerformance, any>[] = [
     columnHelper.accessor("questionText", { header: "Soru" }),
-    columnHelper.accessor("topic", { header: "Konu" }),
     columnHelper.accessor("accuracyRate", {
       header: "Doğru bilinme oranı",
       cell: (info) => formatPercent(info.getValue())
@@ -81,7 +63,7 @@ export function QuestionsPage() {
     <div className="space-y-6">
       <PageHeader title="Sorular" />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         <StatCard
           emphasis="primary"
           icon={<BookOpen size={18} />}
@@ -94,12 +76,6 @@ export function QuestionsPage() {
           label="Ortalama doğruluk"
           tone={averageAccuracy != null && averageAccuracy >= 80 ? "green" : averageAccuracy != null && averageAccuracy >= 60 ? "yellow" : "red"}
           value={formatPercent(averageAccuracy)}
-        />
-        <StatCard
-          icon={<Sparkles size={18} />}
-          label="Konu başlığı"
-          tone="neutral"
-          value={formatNumber(topics.length)}
         />
       </div>
 
@@ -126,15 +102,7 @@ export function QuestionsPage() {
         </ExecutiveChartCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
-        <Leaderboard
-          items={topicAccuracy.slice(0, 5).map((item) => ({
-            id: item.id,
-            label: item.label,
-            value: formatPercent(item.accuracy)
-          }))}
-          title="En düşük doğruluklu konular"
-        />
+      <div className="grid gap-6">
         <SurfaceCard
           actions={
             <select
