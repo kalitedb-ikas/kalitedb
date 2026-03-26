@@ -10,7 +10,7 @@ import {
   StatCard,
   SurfaceCard
 } from "@kalitedb/ui";
-import { resolveThresholdTone } from "@kalitedb/shared";
+import { resolveThresholdTone, selectDefaultReportPeriod } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -33,7 +33,7 @@ export function DashboardPage() {
     staleTime: 5 * 60 * 1000
   });
 
-  const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
+  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
   const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
 
   const dashboardQuery = useQuery({

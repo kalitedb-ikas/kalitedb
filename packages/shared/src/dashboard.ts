@@ -75,6 +75,46 @@ function buildLegacyAuditMetrics(agentMetrics: AgentMetric[]): AuditMetric[] {
     }));
 }
 
+function getReportPeriodPriority(period: ReportPeriod) {
+  if (period.status === "published") {
+    return 3;
+  }
+
+  if (period.publishedAt) {
+    return 2;
+  }
+
+  if (
+    period.manualTotalCallCount !== undefined ||
+    period.manualTotalChatMailCount !== undefined ||
+    period.manualTotalTicketClosedCount !== undefined
+  ) {
+    return 1;
+  }
+
+  return 0;
+}
+
+export function selectDefaultReportPeriod(periods: ReportPeriod[]): ReportPeriod | undefined {
+  if (!periods.length) {
+    return undefined;
+  }
+
+  return [...periods].sort((left, right) => {
+    const priorityDiff = getReportPeriodPriority(right) - getReportPeriodPriority(left);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+
+    const monthDiff = right.month.localeCompare(left.month);
+    if (monthDiff !== 0) {
+      return monthDiff;
+    }
+
+    return right.updatedAt.localeCompare(left.updatedAt);
+  })[0];
+}
+
 export function selectAuditMetrics(datasets: Pick<ReportDatasets, "agentMetrics" | "auditMetrics">): AuditMetric[] {
   if (datasets.auditMetrics.length > 0) {
     return datasets.auditMetrics;

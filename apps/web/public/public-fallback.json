@@ -1,0 +1,2156 @@
+{
+  "generatedAt": "2026-03-26T14:04:43.170Z",
+  "periods": [
+    {
+      "id": "0be90cd0-d5d6-47a1-946f-0c23a4d2266d",
+      "month": "2026-04",
+      "title": "Customer Success Nisan 2026 CSAT Raporu",
+      "status": "draft",
+      "compareToPeriodId": "7e260529-b82c-4ee3-8c42-2e53646fe982",
+      "createdAt": "2026-03-24T08:06:43.484Z",
+      "updatedAt": "2026-03-24T08:06:43.484Z"
+    },
+    {
+      "id": "7e260529-b82c-4ee3-8c42-2e53646fe982",
+      "month": "2026-03",
+      "title": "Customer Success Mart 2026 CSAT Raporu",
+      "status": "draft",
+      "compareToPeriodId": "304c75e3-7dd6-4965-a469-888c4fa66e09",
+      "createdAt": "2026-03-23T14:42:48.902Z",
+      "updatedAt": "2026-03-25T06:25:57.856Z"
+    },
+    {
+      "id": "304c75e3-7dd6-4965-a469-888c4fa66e09",
+      "month": "2026-02",
+      "title": "Customer Success Şubat CSAT Raporu",
+      "status": "draft",
+      "manualTotalCallCount": 8949,
+      "manualTotalChatMailCount": 14731,
+      "manualTotalTicketClosedCount": 102,
+      "publishedAt": "2026-03-06T13:31:41.654Z",
+      "createdAt": "2026-03-06T13:30:39.492Z",
+      "updatedAt": "2026-03-25T08:18:36.094Z"
+    },
+    {
+      "id": "298027a6-3fe1-43b3-b2fe-05977e0d9e5f",
+      "month": "2026-01",
+      "title": "CS Ocak CSAT",
+      "status": "draft",
+      "createdAt": "2026-03-07T10:44:39.439Z",
+      "updatedAt": "2026-03-07T10:44:39.439Z"
+    }
+  ],
+  "dashboards": {
+    "0be90cd0-d5d6-47a1-946f-0c23a4d2266d": {
+      "period": {
+        "id": "0be90cd0-d5d6-47a1-946f-0c23a4d2266d",
+        "month": "2026-04",
+        "title": "Customer Success Nisan 2026 CSAT Raporu",
+        "status": "draft",
+        "compareToPeriodId": "7e260529-b82c-4ee3-8c42-2e53646fe982",
+        "createdAt": "2026-03-24T08:06:43.484Z",
+        "updatedAt": "2026-03-24T08:06:43.484Z"
+      },
+      "summary": {
+        "auditAverage": null,
+        "previousAuditAccuracyAverage": null,
+        "csatAverage": null,
+        "qtCoverageAverage": null,
+        "totalConversationCount": 0,
+        "agentCount": 0,
+        "questionCount": 0,
+        "qtRepresentativeCount": 0
+      },
+      "highlights": {},
+      "rankings": {
+        "auditTop": [],
+        "auditBottom": [],
+        "csatTop": [],
+        "csatBottom": [],
+        "risers": [],
+        "fallers": [],
+        "weakestQuestions": [],
+        "strongestQuestions": [],
+        "qtCoverage": []
+      },
+      "datasets": {
+        "agentMetrics": [],
+        "auditMetrics": [],
+        "questionPerformance": [],
+        "qtMetrics": []
+      },
+      "thresholds": {
+        "auditScore": {
+          "metric": "auditScore",
+          "label": "Audit Skoru",
+          "direction": "higher_is_better",
+          "red": 60,
+          "yellow": 80,
+          "green": 90,
+          "unit": "percent"
+        },
+        "avgTalkDurationSeconds": {
+          "metric": "avgTalkDurationSeconds",
+          "label": "Ortalama Konusma Suresi",
+          "direction": "lower_is_better",
+          "red": 420,
+          "yellow": 360,
+          "green": 300,
+          "unit": "seconds"
+        },
+        "callEvaluationAverage": {
+          "metric": "callEvaluationAverage",
+          "label": "Cagri Degerlendirme",
+          "direction": "higher_is_better",
+          "red": 4.8,
+          "yellow": 4.9,
+          "green": 4.97,
+          "unit": "number"
+        },
+        "feedbackCoverage": {
+          "metric": "feedbackCoverage",
+          "label": "Feedback Orani",
+          "direction": "higher_is_better",
+          "red": 0.7,
+          "yellow": 0.9,
+          "green": 1,
+          "unit": "number"
+        },
+        "localCloseRate": {
+          "metric": "localCloseRate",
+          "label": "Lokal Kapatma Orani",
+          "direction": "higher_is_better",
+          "red": 70,
+          "yellow": 85,
+          "green": 92,
+          "unit": "percent"
+        },
+        "missingQuestionsAccuracy": {
+          "metric": "missingQuestionsAccuracy",
+          "label": "Onceki Audit Dogruluk",
+          "direction": "higher_is_better",
+          "red": 60,
+          "yellow": 80,
+          "green": 90,
+          "unit": "percent"
+        }
+      }
+    },
+    "7e260529-b82c-4ee3-8c42-2e53646fe982": {
+      "period": {
+        "id": "7e260529-b82c-4ee3-8c42-2e53646fe982",
+        "month": "2026-03",
+        "title": "Customer Success Mart 2026 CSAT Raporu",
+        "status": "draft",
+        "compareToPeriodId": "304c75e3-7dd6-4965-a469-888c4fa66e09",
+        "createdAt": "2026-03-23T14:42:48.902Z",
+        "updatedAt": "2026-03-25T06:25:57.856Z"
+      },
+      "summary": {
+        "auditAverage": null,
+        "previousAuditAccuracyAverage": null,
+        "csatAverage": null,
+        "qtCoverageAverage": null,
+        "totalConversationCount": 0,
+        "agentCount": 0,
+        "questionCount": 0,
+        "qtRepresentativeCount": 0
+      },
+      "highlights": {},
+      "rankings": {
+        "auditTop": [],
+        "auditBottom": [],
+        "csatTop": [],
+        "csatBottom": [],
+        "risers": [],
+        "fallers": [],
+        "weakestQuestions": [],
+        "strongestQuestions": [],
+        "qtCoverage": []
+      },
+      "datasets": {
+        "agentMetrics": [],
+        "auditMetrics": [],
+        "questionPerformance": [],
+        "qtMetrics": []
+      },
+      "thresholds": {
+        "auditScore": {
+          "metric": "auditScore",
+          "label": "Audit Skoru",
+          "direction": "higher_is_better",
+          "red": 60,
+          "yellow": 80,
+          "green": 90,
+          "unit": "percent"
+        },
+        "avgTalkDurationSeconds": {
+          "metric": "avgTalkDurationSeconds",
+          "label": "Ortalama Konusma Suresi",
+          "direction": "lower_is_better",
+          "red": 420,
+          "yellow": 360,
+          "green": 300,
+          "unit": "seconds"
+        },
+        "callEvaluationAverage": {
+          "metric": "callEvaluationAverage",
+          "label": "Cagri Degerlendirme",
+          "direction": "higher_is_better",
+          "red": 4.8,
+          "yellow": 4.9,
+          "green": 4.97,
+          "unit": "number"
+        },
+        "feedbackCoverage": {
+          "metric": "feedbackCoverage",
+          "label": "Feedback Orani",
+          "direction": "higher_is_better",
+          "red": 0.7,
+          "yellow": 0.9,
+          "green": 1,
+          "unit": "number"
+        },
+        "localCloseRate": {
+          "metric": "localCloseRate",
+          "label": "Lokal Kapatma Orani",
+          "direction": "higher_is_better",
+          "red": 70,
+          "yellow": 85,
+          "green": 92,
+          "unit": "percent"
+        },
+        "missingQuestionsAccuracy": {
+          "metric": "missingQuestionsAccuracy",
+          "label": "Onceki Audit Dogruluk",
+          "direction": "higher_is_better",
+          "red": 60,
+          "yellow": 80,
+          "green": 90,
+          "unit": "percent"
+        }
+      }
+    },
+    "304c75e3-7dd6-4965-a469-888c4fa66e09": {
+      "period": {
+        "id": "304c75e3-7dd6-4965-a469-888c4fa66e09",
+        "month": "2026-02",
+        "title": "Customer Success Şubat CSAT Raporu",
+        "status": "draft",
+        "manualTotalCallCount": 8949,
+        "manualTotalChatMailCount": 14731,
+        "manualTotalTicketClosedCount": 102,
+        "publishedAt": "2026-03-06T13:31:41.654Z",
+        "createdAt": "2026-03-06T13:30:39.492Z",
+        "updatedAt": "2026-03-25T08:18:36.094Z"
+      },
+      "summary": {
+        "auditAverage": 75,
+        "previousAuditAccuracyAverage": 94.35,
+        "csatAverage": 4.93,
+        "qtCoverageAverage": null,
+        "totalConversationCount": 18519,
+        "agentCount": 41,
+        "questionCount": 0,
+        "qtRepresentativeCount": 0
+      },
+      "highlights": {
+        "bestAudit": {
+          "id": "d92133af70315eca882a",
+          "label": "Ecenaz Geleş",
+          "value": 95,
+          "delta": null
+        },
+        "lowestAudit": {
+          "id": "efc74d36ebdb14496d8a",
+          "label": "Tuğba Şimşek",
+          "value": 50,
+          "delta": null
+        },
+        "bestCsat": {
+          "id": "15903816684ae9f67ad0",
+          "label": "Seda Cerrah",
+          "value": 5,
+          "delta": null
+        },
+        "lowestCsat": {
+          "id": "77bbc6cab144f20c16c8",
+          "label": "Müberra Merttürk",
+          "value": 4.804,
+          "delta": null
+        },
+        "mostImproved": {
+          "id": "02552d8ea7154aa603ae",
+          "label": "Manolya Yılmaz",
+          "value": 75,
+          "delta": null
+        },
+        "mostDeclined": {
+          "id": "02552d8ea7154aa603ae",
+          "label": "Manolya Yılmaz",
+          "value": 75,
+          "delta": null
+        }
+      },
+      "rankings": {
+        "auditTop": [
+          {
+            "id": "d92133af70315eca882a",
+            "label": "Ecenaz Geleş",
+            "value": 95,
+            "delta": null
+          },
+          {
+            "id": "efe45970d9bbca6b014e",
+            "label": "Uğurhan Özkeleş",
+            "value": 95,
+            "delta": null
+          },
+          {
+            "id": "3dbd2e81c0309d704bd1",
+            "label": "Yaren Ece Koçak",
+            "value": 90,
+            "delta": null
+          },
+          {
+            "id": "b356b554f9d2fc6e7455",
+            "label": "Mehmet Tugay Kasap",
+            "value": 90,
+            "delta": null
+          },
+          {
+            "id": "cd4769cf8dbc1ccd3c8b",
+            "label": "Burak Yegin",
+            "value": 90,
+            "delta": null
+          }
+        ],
+        "auditBottom": [
+          {
+            "id": "efc74d36ebdb14496d8a",
+            "label": "Tuğba Şimşek",
+            "value": 50,
+            "delta": null
+          },
+          {
+            "id": "11b2b0258883a787db38",
+            "label": "Bahadır İçöz",
+            "value": 55,
+            "delta": null
+          },
+          {
+            "id": "6401457b3855a3bc41c5",
+            "label": "Batuhan Demirci",
+            "value": 55,
+            "delta": null
+          },
+          {
+            "id": "7972f65a1db3fae30fdf",
+            "label": "İdil Meral",
+            "value": 55,
+            "delta": null
+          },
+          {
+            "id": "7ed90ad773127c054110",
+            "label": "Ayça Tokkuşoğlu",
+            "value": 55,
+            "delta": null
+          }
+        ],
+        "csatTop": [
+          {
+            "id": "15903816684ae9f67ad0",
+            "label": "Seda Cerrah",
+            "value": 5,
+            "delta": null
+          },
+          {
+            "id": "567b59453dacc73ef190",
+            "label": "Mehmet Tugay Kasap",
+            "value": 5,
+            "delta": null
+          },
+          {
+            "id": "3f0d3aba1105bff0f9e9",
+            "label": "Uğurhan Özkeleş",
+            "value": 4.993,
+            "delta": null
+          },
+          {
+            "id": "db6b34e9128ac9ddeb5a",
+            "label": "Mert Karaalioğlu",
+            "value": 4.975,
+            "delta": null
+          },
+          {
+            "id": "9e1a38295e6750225a1a",
+            "label": "Metehan Açıkgöz",
+            "value": 4.974,
+            "delta": null
+          }
+        ],
+        "csatBottom": [
+          {
+            "id": "77bbc6cab144f20c16c8",
+            "label": "Müberra Merttürk",
+            "value": 4.804,
+            "delta": null
+          },
+          {
+            "id": "8ffc9cd803fb4dc0b13f",
+            "label": "İdil Meral",
+            "value": 4.805,
+            "delta": null
+          },
+          {
+            "id": "9854c056e827f9c059b8",
+            "label": "Ayça Tokkuşoğlu",
+            "value": 4.81,
+            "delta": null
+          },
+          {
+            "id": "8482cd85bf0fc8d1c995",
+            "label": "Ege Beşik",
+            "value": 4.821,
+            "delta": null
+          },
+          {
+            "id": "a12a6a494f823f67e0d8",
+            "label": "Furkan Er",
+            "value": 4.901,
+            "delta": null
+          }
+        ],
+        "risers": [],
+        "fallers": [],
+        "weakestQuestions": [],
+        "strongestQuestions": [],
+        "qtCoverage": []
+      },
+      "datasets": {
+        "agentMetrics": [
+          {
+            "id": "101fbc4db91b0440ff20",
+            "period": "2026-02",
+            "agentKey": "fatih-aktas",
+            "agentName": "Fatih Aktaş",
+            "auditScore": 60,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 367,
+            "totalChatMailCount": 341,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 708,
+            "avgTalkDurationSeconds": 425,
+            "localCloseRate": 85.77,
+            "missedCalls": 2,
+            "callEvaluationAverage": 4.933,
+            "evaluationCount": null
+          },
+          {
+            "id": "15903816684ae9f67ad0",
+            "period": "2026-02",
+            "agentKey": "seda-cerrah",
+            "agentName": "Seda Cerrah",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 0,
+            "totalChatMailCount": 942,
+            "totalTicketClosedCount": 29,
+            "totalConversationCount": 971,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 5,
+            "evaluationCount": null
+          },
+          {
+            "id": "310eff128f47d258ef89",
+            "period": "2026-02",
+            "agentKey": "evren-yavuz",
+            "agentName": "Evren Yavuz",
+            "auditScore": 65,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 299,
+            "totalChatMailCount": 507,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 806,
+            "avgTalkDurationSeconds": 482,
+            "localCloseRate": 89.01,
+            "missedCalls": 0,
+            "callEvaluationAverage": 4.942,
+            "evaluationCount": null
+          },
+          {
+            "id": "3f0d3aba1105bff0f9e9",
+            "period": "2026-02",
+            "agentKey": "ugurhan-ozkeles",
+            "agentName": "Uğurhan Özkeleş",
+            "auditScore": 95,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 1,
+            "totalChatMailCount": 1016,
+            "totalTicketClosedCount": 2,
+            "totalConversationCount": 1019,
+            "avgTalkDurationSeconds": 66,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.993,
+            "evaluationCount": null
+          },
+          {
+            "id": "4b1d98321f882992324b",
+            "period": "2026-02",
+            "agentKey": "ozgun-kazan",
+            "agentName": "Özgün Kazan",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 0,
+            "totalChatMailCount": 1203,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 1203,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.918,
+            "evaluationCount": null
+          },
+          {
+            "id": "567b59453dacc73ef190",
+            "period": "2026-02",
+            "agentKey": "mehmet-tugay-kasap",
+            "agentName": "Mehmet Tugay Kasap",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 3,
+            "totalChatMailCount": 1337,
+            "totalTicketClosedCount": 2,
+            "totalConversationCount": 1342,
+            "avgTalkDurationSeconds": 510,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 5,
+            "evaluationCount": null
+          },
+          {
+            "id": "77bbc6cab144f20c16c8",
+            "period": "2026-02",
+            "agentKey": "muberra-mertturk",
+            "agentName": "Müberra Merttürk",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 478,
+            "totalChatMailCount": 62,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 540,
+            "avgTalkDurationSeconds": 449,
+            "localCloseRate": 72.73,
+            "missedCalls": 3,
+            "callEvaluationAverage": 4.804,
+            "evaluationCount": null
+          },
+          {
+            "id": "8482cd85bf0fc8d1c995",
+            "period": "2026-02",
+            "agentKey": "ege-besik",
+            "agentName": "Ege Beşik",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 595,
+            "totalChatMailCount": 553,
+            "totalTicketClosedCount": 1,
+            "totalConversationCount": 1149,
+            "avgTalkDurationSeconds": 326,
+            "localCloseRate": 83.33,
+            "missedCalls": 3,
+            "callEvaluationAverage": 4.821,
+            "evaluationCount": null
+          },
+          {
+            "id": "8ba1bb51cf08c3dc9bf6",
+            "period": "2026-02",
+            "agentKey": "batuhan-demirci",
+            "agentName": "Batuhan Demirci",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 394,
+            "totalChatMailCount": 344,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 738,
+            "avgTalkDurationSeconds": 314,
+            "localCloseRate": 94.63,
+            "missedCalls": 0,
+            "callEvaluationAverage": 4.958,
+            "evaluationCount": null
+          },
+          {
+            "id": "8ffc9cd803fb4dc0b13f",
+            "period": "2026-02",
+            "agentKey": "idil-meral",
+            "agentName": "İdil Meral",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 105,
+            "totalChatMailCount": 586,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 691,
+            "avgTalkDurationSeconds": 356,
+            "localCloseRate": 82.14,
+            "missedCalls": 5,
+            "callEvaluationAverage": 4.805,
+            "evaluationCount": null
+          },
+          {
+            "id": "9854c056e827f9c059b8",
+            "period": "2026-02",
+            "agentKey": "ayca-tokkusoglu",
+            "agentName": "Ayça Tokkuşoğlu",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 421,
+            "totalChatMailCount": 464,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 885,
+            "avgTalkDurationSeconds": 394,
+            "localCloseRate": 83.17,
+            "missedCalls": 6,
+            "callEvaluationAverage": 4.81,
+            "evaluationCount": null
+          },
+          {
+            "id": "9b3332d8184af5670156",
+            "period": "2026-02",
+            "agentKey": "ogun-baris-bayraktar",
+            "agentName": "Ogün Barış Bayraktar",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 527,
+            "totalChatMailCount": 256,
+            "totalTicketClosedCount": 1,
+            "totalConversationCount": 784,
+            "avgTalkDurationSeconds": 336,
+            "localCloseRate": 82.56,
+            "missedCalls": 12,
+            "callEvaluationAverage": 4.957,
+            "evaluationCount": null
+          },
+          {
+            "id": "9e1a38295e6750225a1a",
+            "period": "2026-02",
+            "agentKey": "metehan-acikgoz",
+            "agentName": "Metehan Açıkgöz",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 323,
+            "totalChatMailCount": 406,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 729,
+            "avgTalkDurationSeconds": 386,
+            "localCloseRate": 77.5,
+            "missedCalls": 2,
+            "callEvaluationAverage": 4.974,
+            "evaluationCount": null
+          },
+          {
+            "id": "a12a6a494f823f67e0d8",
+            "period": "2026-02",
+            "agentKey": "furkan-er",
+            "agentName": "Furkan Er",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 252,
+            "totalChatMailCount": 281,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 533,
+            "avgTalkDurationSeconds": 439,
+            "localCloseRate": 88.99,
+            "missedCalls": 4,
+            "callEvaluationAverage": 4.901,
+            "evaluationCount": null
+          },
+          {
+            "id": "af963d34ea801d26de40",
+            "period": "2026-02",
+            "agentKey": "mehmet-onur-aykut",
+            "agentName": "Mehmet Onur Aykut",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 298,
+            "totalChatMailCount": 386,
+            "totalTicketClosedCount": 1,
+            "totalConversationCount": 685,
+            "avgTalkDurationSeconds": 461,
+            "localCloseRate": 69.42,
+            "missedCalls": 1,
+            "callEvaluationAverage": 4.969,
+            "evaluationCount": null
+          },
+          {
+            "id": "c8582495e9986d946e6d",
+            "period": "2026-02",
+            "agentKey": "abdulkerim-gurer",
+            "agentName": "Abdülkerim Gürer",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 0,
+            "totalChatMailCount": 857,
+            "totalTicketClosedCount": 39,
+            "totalConversationCount": 896,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.942,
+            "evaluationCount": null
+          },
+          {
+            "id": "d3274d8d3af51130e619",
+            "period": "2026-02",
+            "agentKey": "manolya-yilmaz",
+            "agentName": "Manolya Yılmaz",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 335,
+            "totalChatMailCount": 610,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 945,
+            "avgTalkDurationSeconds": 361,
+            "localCloseRate": 94.47,
+            "missedCalls": 0,
+            "callEvaluationAverage": 4.953,
+            "evaluationCount": null
+          },
+          {
+            "id": "d344d31762c81a68af50",
+            "period": "2026-02",
+            "agentKey": "yaren-ece-kocak",
+            "agentName": "Yaren Ece Koçak",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 328,
+            "totalChatMailCount": 484,
+            "totalTicketClosedCount": 3,
+            "totalConversationCount": 815,
+            "avgTalkDurationSeconds": 348,
+            "localCloseRate": 78.92,
+            "missedCalls": 3,
+            "callEvaluationAverage": 4.932,
+            "evaluationCount": null
+          },
+          {
+            "id": "db6b34e9128ac9ddeb5a",
+            "period": "2026-02",
+            "agentKey": "mert-karaalioglu",
+            "agentName": "Mert Karaalioğlu",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 1,
+            "totalChatMailCount": 1473,
+            "totalTicketClosedCount": 2,
+            "totalConversationCount": 1476,
+            "avgTalkDurationSeconds": 536,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.975,
+            "evaluationCount": null
+          },
+          {
+            "id": "e21a7b87907b29287040",
+            "period": "2026-02",
+            "agentKey": "hikmet-ertem-ciftlik",
+            "agentName": "Hikmet Ertem Çiftlik",
+            "auditScore": 70,
+            "previousAuditAccuracy": 50,
+            "totalCallCount": 0,
+            "totalChatMailCount": 780,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 780,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.971,
+            "evaluationCount": null
+          },
+          {
+            "id": "f60ebbafc8b8c4423562",
+            "period": "2026-02",
+            "agentKey": "afra-sak",
+            "agentName": "Afra Sak",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100,
+            "totalCallCount": 0,
+            "totalChatMailCount": 796,
+            "totalTicketClosedCount": 28,
+            "totalConversationCount": 824,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.969,
+            "evaluationCount": null
+          }
+        ],
+        "auditMetrics": [
+          {
+            "id": "02552d8ea7154aa603ae",
+            "period": "2026-02",
+            "agentKey": "manolya-yilmaz",
+            "agentName": "Manolya Yılmaz",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "0f0fb521c6f36371013a",
+            "period": "2026-02",
+            "agentKey": "samet-doruk",
+            "agentName": "Samet Doruk",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "103c4294335f51588ffb",
+            "period": "2026-02",
+            "agentKey": "ege-besik",
+            "agentName": "Ege Beşik",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "11b2b0258883a787db38",
+            "period": "2026-02",
+            "agentKey": "bahadir-icoz",
+            "agentName": "Bahadır İçöz",
+            "auditScore": 55,
+            "previousAuditAccuracy": 75
+          },
+          {
+            "id": "19a9ff072c6470c6ab99",
+            "period": "2026-02",
+            "agentKey": "hikmet-ertem-ciftlik",
+            "agentName": "Hikmet Ertem Çiftlik",
+            "auditScore": 70,
+            "previousAuditAccuracy": 50
+          },
+          {
+            "id": "1a0c8b394801a0ed062b",
+            "period": "2026-02",
+            "agentKey": "cagla-bebek",
+            "agentName": "Çağla Bebek",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "1e5745c0de151ab8ae1c",
+            "period": "2026-02",
+            "agentKey": "enes-elmasoglu",
+            "agentName": "Enes Elmasoglu",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "3799ff4896376bfceeb5",
+            "period": "2026-02",
+            "agentKey": "ogun-baris-bayraktar",
+            "agentName": "Ogün Barış Bayraktar",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "3dbd2e81c0309d704bd1",
+            "period": "2026-02",
+            "agentKey": "yaren-ece-kocak",
+            "agentName": "Yaren Ece Koçak",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "4b54047143cc6f889718",
+            "period": "2026-02",
+            "agentKey": "ortalama",
+            "agentName": "Ortalama",
+            "auditScore": 75,
+            "previousAuditAccuracy": 94.35
+          },
+          {
+            "id": "4b8859fe74e5fea581b7",
+            "period": "2026-02",
+            "agentKey": "dilsad-gergin",
+            "agentName": "Dilşad Gergin",
+            "auditScore": 60,
+            "previousAuditAccuracy": 80
+          },
+          {
+            "id": "58b81e57e72033457bf6",
+            "period": "2026-02",
+            "agentKey": "seval-ciracioglu",
+            "agentName": "Seval Çıracıoğlu",
+            "auditScore": 70,
+            "previousAuditAccuracy": 50
+          },
+          {
+            "id": "619f2ad52f2d7bfc4b0c",
+            "period": "2026-02",
+            "agentKey": "afra-sak",
+            "agentName": "Afra Sak",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "6401457b3855a3bc41c5",
+            "period": "2026-02",
+            "agentKey": "batuhan-demirci",
+            "agentName": "Batuhan Demirci",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "7972f65a1db3fae30fdf",
+            "period": "2026-02",
+            "agentKey": "idil-meral",
+            "agentName": "İdil Meral",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "7ed90ad773127c054110",
+            "period": "2026-02",
+            "agentKey": "ayca-tokkusoglu",
+            "agentName": "Ayça Tokkuşoğlu",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "8132345dbd7e790b660d",
+            "period": "2026-02",
+            "agentKey": "fatih-aktas",
+            "agentName": "Fatih Aktaş",
+            "auditScore": 60,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "827f6f130594e204e961",
+            "period": "2026-02",
+            "agentKey": "ozgun-kazan",
+            "agentName": "Özgün Kazan",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "8769d718c7bf2419a36f",
+            "period": "2026-02",
+            "agentKey": "huseyin-gunder",
+            "agentName": "Hüseyin Günder",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "987390d69372288c07f3",
+            "period": "2026-02",
+            "agentKey": "mehmet-onur-aykut",
+            "agentName": "Mehmet Onur Aykut",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "9e4916990dcc16be954a",
+            "period": "2026-02",
+            "agentKey": "kaan-mete",
+            "agentName": "Kaan Mete",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "a31e10430deff355630f",
+            "period": "2026-02",
+            "agentKey": "selen-kilinc",
+            "agentName": "Selen Kılınç",
+            "auditScore": 82,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "a81242513c9335872f30",
+            "period": "2026-02",
+            "agentKey": "esin-kotil",
+            "agentName": "Esin Kotil",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "b356b554f9d2fc6e7455",
+            "period": "2026-02",
+            "agentKey": "mehmet-tugay-kasap",
+            "agentName": "Mehmet Tugay Kasap",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "b6677e54142a58fa1792",
+            "period": "2026-02",
+            "agentKey": "ahmet-onur-yarici",
+            "agentName": "Ahmet Onur Yarıcı",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "bb424a3fea30bd30cbcd",
+            "period": "2026-02",
+            "agentKey": "melike-er",
+            "agentName": "Melike ER",
+            "auditScore": 80,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "cd4769cf8dbc1ccd3c8b",
+            "period": "2026-02",
+            "agentKey": "burak-yegin",
+            "agentName": "Burak Yegin",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "d8269bac69773ac982b1",
+            "period": "2026-02",
+            "agentKey": "celal-semi-savci",
+            "agentName": "Celal Semi Savcı",
+            "auditScore": 89,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "d92133af70315eca882a",
+            "period": "2026-02",
+            "agentKey": "ecenaz-geles",
+            "agentName": "Ecenaz Geleş",
+            "auditScore": 95,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "daef688b4f972bfe1537",
+            "period": "2026-02",
+            "agentKey": "furkan-er",
+            "agentName": "Furkan Er",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "dd74f5bb0d223e2c18c9",
+            "period": "2026-02",
+            "agentKey": "mert-karaalioglu",
+            "agentName": "Mert Karaalioğlu",
+            "auditScore": 85,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "e48881ce08598fe25d53",
+            "period": "2026-02",
+            "agentKey": "gulbadem-durmus",
+            "agentName": "Gülbadem Durmuş",
+            "auditScore": 80,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "ebf80c58c61c1b12c41f",
+            "period": "2026-02",
+            "agentKey": "evren-yavuz",
+            "agentName": "Evren Yavuz",
+            "auditScore": 65,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "efc74d36ebdb14496d8a",
+            "period": "2026-02",
+            "agentKey": "tugba-simsek",
+            "agentName": "Tuğba Şimşek",
+            "auditScore": 50,
+            "previousAuditAccuracy": 75
+          },
+          {
+            "id": "efe45970d9bbca6b014e",
+            "period": "2026-02",
+            "agentKey": "ugurhan-ozkeles",
+            "agentName": "Uğurhan Özkeleş",
+            "auditScore": 95,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "f345549d8a4acee0b814",
+            "period": "2026-02",
+            "agentKey": "omer-bekin",
+            "agentName": "Ömer Bekin",
+            "auditScore": 80,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "fdfde12119f4d781691c",
+            "period": "2026-02",
+            "agentKey": "rumeysa-ekmen",
+            "agentName": "Rumeysa Ekmen",
+            "auditScore": 84,
+            "previousAuditAccuracy": 66.67
+          }
+        ],
+        "questionPerformance": [],
+        "qtMetrics": []
+      },
+      "thresholds": {
+        "auditScore": {
+          "metric": "auditScore",
+          "label": "Audit Skoru",
+          "direction": "higher_is_better",
+          "red": 60,
+          "yellow": 80,
+          "green": 90,
+          "unit": "percent"
+        },
+        "avgTalkDurationSeconds": {
+          "metric": "avgTalkDurationSeconds",
+          "label": "Ortalama Konusma Suresi",
+          "direction": "lower_is_better",
+          "red": 420,
+          "yellow": 360,
+          "green": 300,
+          "unit": "seconds"
+        },
+        "callEvaluationAverage": {
+          "metric": "callEvaluationAverage",
+          "label": "Cagri Degerlendirme",
+          "direction": "higher_is_better",
+          "red": 4.8,
+          "yellow": 4.9,
+          "green": 4.97,
+          "unit": "number"
+        },
+        "feedbackCoverage": {
+          "metric": "feedbackCoverage",
+          "label": "Feedback Orani",
+          "direction": "higher_is_better",
+          "red": 0.7,
+          "yellow": 0.9,
+          "green": 1,
+          "unit": "number"
+        },
+        "localCloseRate": {
+          "metric": "localCloseRate",
+          "label": "Lokal Kapatma Orani",
+          "direction": "higher_is_better",
+          "red": 70,
+          "yellow": 85,
+          "green": 92,
+          "unit": "percent"
+        },
+        "missingQuestionsAccuracy": {
+          "metric": "missingQuestionsAccuracy",
+          "label": "Onceki Audit Dogruluk",
+          "direction": "higher_is_better",
+          "red": 60,
+          "yellow": 80,
+          "green": 90,
+          "unit": "percent"
+        }
+      }
+    },
+    "298027a6-3fe1-43b3-b2fe-05977e0d9e5f": {
+      "period": {
+        "id": "298027a6-3fe1-43b3-b2fe-05977e0d9e5f",
+        "month": "2026-01",
+        "title": "CS Ocak CSAT",
+        "status": "draft",
+        "createdAt": "2026-03-07T10:44:39.439Z",
+        "updatedAt": "2026-03-07T10:44:39.439Z"
+      },
+      "summary": {
+        "auditAverage": 79.76,
+        "previousAuditAccuracyAverage": 94.8,
+        "csatAverage": 4.91,
+        "qtCoverageAverage": null,
+        "totalConversationCount": 18883,
+        "agentCount": 48,
+        "questionCount": 0,
+        "qtRepresentativeCount": 0
+      },
+      "highlights": {
+        "bestAudit": {
+          "id": "6bafec399cc211a685d7",
+          "label": "Ozan Berk Fettahlı",
+          "value": 100,
+          "delta": null
+        },
+        "lowestAudit": {
+          "id": "02768f5b3edc03c2b57d",
+          "label": "Selman Gümüş",
+          "value": 35,
+          "delta": null
+        },
+        "bestCsat": {
+          "id": "22987c2f1a16f4dbb4fd",
+          "label": "Mert Karaalioğlu",
+          "value": 5,
+          "delta": null
+        },
+        "lowestCsat": {
+          "id": "5b1d4919ba7435e7a584",
+          "label": "Ege Beşik",
+          "value": 4.72,
+          "delta": null
+        },
+        "mostImproved": {
+          "id": "02768f5b3edc03c2b57d",
+          "label": "Selman Gümüş",
+          "value": 35,
+          "delta": null
+        },
+        "mostDeclined": {
+          "id": "02768f5b3edc03c2b57d",
+          "label": "Selman Gümüş",
+          "value": 35,
+          "delta": null
+        }
+      },
+      "rankings": {
+        "auditTop": [
+          {
+            "id": "6bafec399cc211a685d7",
+            "label": "Ozan Berk Fettahlı",
+            "value": 100,
+            "delta": null
+          },
+          {
+            "id": "3ed999d269cb2d78646e",
+            "label": "Ecenaz Geleş",
+            "value": 95,
+            "delta": null
+          },
+          {
+            "id": "7cdc0e56beb9d26ff601",
+            "label": "Metehan Açıkgöz",
+            "value": 95,
+            "delta": null
+          },
+          {
+            "id": "aa4102dd0c3d1e928562",
+            "label": "Batuhan Emre Andaç",
+            "value": 95,
+            "delta": null
+          },
+          {
+            "id": "c3a29952e96e8cb878ba",
+            "label": "Tolga Özen Kabasakal",
+            "value": 95,
+            "delta": null
+          }
+        ],
+        "auditBottom": [
+          {
+            "id": "02768f5b3edc03c2b57d",
+            "label": "Selman Gümüş",
+            "value": 35,
+            "delta": null
+          },
+          {
+            "id": "2a702d31fa8917196fe8",
+            "label": "Samet Doruk",
+            "value": 55,
+            "delta": null
+          },
+          {
+            "id": "9432d02e4cc013206eff",
+            "label": "Tuğba Şimşek",
+            "value": 60,
+            "delta": null
+          },
+          {
+            "id": "20eee3b16f2300f8c4cf",
+            "label": "Adil Hanedan",
+            "value": 65,
+            "delta": null
+          },
+          {
+            "id": "83ab0c3579cf93b2bbec",
+            "label": "Fatih Aktaş",
+            "value": 65,
+            "delta": null
+          }
+        ],
+        "csatTop": [
+          {
+            "id": "22987c2f1a16f4dbb4fd",
+            "label": "Mert Karaalioğlu",
+            "value": 5,
+            "delta": null
+          },
+          {
+            "id": "5d269cc386740dc02ce3",
+            "label": "Abdülkerim Gürer",
+            "value": 4.99,
+            "delta": null
+          },
+          {
+            "id": "8e5bbeffc5a0b1a77f46",
+            "label": "Metehan Açıkgöz",
+            "value": 4.99,
+            "delta": null
+          },
+          {
+            "id": "90c3c6a6e89fa959603e",
+            "label": "Uğurhan Özkeleş",
+            "value": 4.99,
+            "delta": null
+          },
+          {
+            "id": "e164b17da10789501c4f",
+            "label": "Mehmet Tugay Kasap",
+            "value": 4.99,
+            "delta": null
+          }
+        ],
+        "csatBottom": [
+          {
+            "id": "5b1d4919ba7435e7a584",
+            "label": "Ege Beşik",
+            "value": 4.72,
+            "delta": null
+          },
+          {
+            "id": "13767840f1779b5a1ff6",
+            "label": "Batuhan Demirci",
+            "value": 4.8,
+            "delta": null
+          },
+          {
+            "id": "4093bdffdedee33def57",
+            "label": "Yaren Ece Koçak",
+            "value": 4.85,
+            "delta": null
+          },
+          {
+            "id": "9e375466d9e45947a1b6",
+            "label": "Ayça Tokkuşoğlu",
+            "value": 4.85,
+            "delta": null
+          },
+          {
+            "id": "1ad1ded41a64d1a06f4c",
+            "label": "Manolya Yılmaz",
+            "value": 4.86,
+            "delta": null
+          }
+        ],
+        "risers": [],
+        "fallers": [],
+        "weakestQuestions": [],
+        "strongestQuestions": [],
+        "qtCoverage": []
+      },
+      "datasets": {
+        "agentMetrics": [
+          {
+            "id": "13767840f1779b5a1ff6",
+            "period": "2026-01",
+            "agentKey": "batuhan-demirci",
+            "agentName": "Batuhan Demirci",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 248,
+            "totalChatMailCount": 421,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 669,
+            "avgTalkDurationSeconds": 319,
+            "localCloseRate": 95.6,
+            "missedCalls": 5,
+            "callEvaluationAverage": 4.8,
+            "evaluationCount": 100
+          },
+          {
+            "id": "1ad1ded41a64d1a06f4c",
+            "period": "2026-01",
+            "agentKey": "manolya-yilmaz",
+            "agentName": "Manolya Yılmaz",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 227,
+            "totalChatMailCount": 476,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 703,
+            "avgTalkDurationSeconds": 385,
+            "localCloseRate": 98.66,
+            "missedCalls": 0,
+            "callEvaluationAverage": 4.86,
+            "evaluationCount": 78
+          },
+          {
+            "id": "1e7cc20acf50775ae4a5",
+            "period": "2026-01",
+            "agentKey": "idil-meral",
+            "agentName": "İdil Meral",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 381,
+            "totalChatMailCount": 298,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 679,
+            "avgTalkDurationSeconds": 395,
+            "localCloseRate": 78.51,
+            "missedCalls": 11,
+            "callEvaluationAverage": 4.95,
+            "evaluationCount": 84
+          },
+          {
+            "id": "22987c2f1a16f4dbb4fd",
+            "period": "2026-01",
+            "agentKey": "mert-karaalioglu",
+            "agentName": "Mert Karaalioğlu",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 0,
+            "totalChatMailCount": 1274,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 1274,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 5,
+            "evaluationCount": 287
+          },
+          {
+            "id": "4093bdffdedee33def57",
+            "period": "2026-01",
+            "agentKey": "yaren-ece-kocak",
+            "agentName": "Yaren Ece Koçak",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 657,
+            "totalChatMailCount": 183,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 840,
+            "avgTalkDurationSeconds": 286,
+            "localCloseRate": 78.06,
+            "missedCalls": 6,
+            "callEvaluationAverage": 4.85,
+            "evaluationCount": 59
+          },
+          {
+            "id": "5b1d4919ba7435e7a584",
+            "period": "2026-01",
+            "agentKey": "ege-besik",
+            "agentName": "Ege Beşik",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 404,
+            "totalChatMailCount": 708,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 1112,
+            "avgTalkDurationSeconds": 332,
+            "localCloseRate": 88.93,
+            "missedCalls": 2,
+            "callEvaluationAverage": 4.72,
+            "evaluationCount": 178
+          },
+          {
+            "id": "5d269cc386740dc02ce3",
+            "period": "2026-01",
+            "agentKey": "abdulkerim-gurer",
+            "agentName": "Abdülkerim Gürer",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 0,
+            "totalChatMailCount": 714,
+            "totalTicketClosedCount": 32,
+            "totalConversationCount": 746,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.99,
+            "evaluationCount": 161
+          },
+          {
+            "id": "6310f89856ffd3530cdb",
+            "period": "2026-01",
+            "agentKey": "evren-yavuz",
+            "agentName": "Evren Yavuz",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 520,
+            "totalChatMailCount": 220,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 740,
+            "avgTalkDurationSeconds": 461,
+            "localCloseRate": 91.1,
+            "missedCalls": 1,
+            "callEvaluationAverage": 4.94,
+            "evaluationCount": 72
+          },
+          {
+            "id": "69f6d12a0dddbe08f4d1",
+            "period": "2026-01",
+            "agentKey": "furkan-er",
+            "agentName": "Furkan Er",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 246,
+            "totalChatMailCount": 344,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 590,
+            "avgTalkDurationSeconds": 427,
+            "localCloseRate": 85.71,
+            "missedCalls": 2,
+            "callEvaluationAverage": 4.91,
+            "evaluationCount": 77
+          },
+          {
+            "id": "7ac570fe4e0935d6019f",
+            "period": "2026-01",
+            "agentKey": "ogun-baris-bayraktar",
+            "agentName": "Ogün Barış Bayraktar",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 646,
+            "totalChatMailCount": 146,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 792,
+            "avgTalkDurationSeconds": 293,
+            "localCloseRate": 89.18,
+            "missedCalls": 8,
+            "callEvaluationAverage": 4.89,
+            "evaluationCount": 47
+          },
+          {
+            "id": "84f57e70a44c5c1470f3",
+            "period": "2026-01",
+            "agentKey": "seda-cerrah",
+            "agentName": "Seda Cerrah",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 0,
+            "totalChatMailCount": 975,
+            "totalTicketClosedCount": 47,
+            "totalConversationCount": 1022,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.97,
+            "evaluationCount": 146
+          },
+          {
+            "id": "8e5bbeffc5a0b1a77f46",
+            "period": "2026-01",
+            "agentKey": "metehan-acikgoz",
+            "agentName": "Metehan Açıkgöz",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 319,
+            "totalChatMailCount": 344,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 663,
+            "avgTalkDurationSeconds": 382,
+            "localCloseRate": 87.3,
+            "missedCalls": 4,
+            "callEvaluationAverage": 4.99,
+            "evaluationCount": 91
+          },
+          {
+            "id": "90c3c6a6e89fa959603e",
+            "period": "2026-01",
+            "agentKey": "ugurhan-ozkeles",
+            "agentName": "Uğurhan Özkeleş",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 42,
+            "totalChatMailCount": 1014,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 1056,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.99,
+            "evaluationCount": 241
+          },
+          {
+            "id": "9e375466d9e45947a1b6",
+            "period": "2026-01",
+            "agentKey": "ayca-tokkusoglu",
+            "agentName": "Ayça Tokkuşoğlu",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 821,
+            "totalChatMailCount": 177,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 998,
+            "avgTalkDurationSeconds": 426,
+            "localCloseRate": 83.33,
+            "missedCalls": 14,
+            "callEvaluationAverage": 4.85,
+            "evaluationCount": 58
+          },
+          {
+            "id": "a5034740d60ce25e25a8",
+            "period": "2026-01",
+            "agentKey": "ozgun-kazan",
+            "agentName": "Özgün Kazan",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 1,
+            "totalChatMailCount": 1336,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 1337,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.94,
+            "evaluationCount": 287
+          },
+          {
+            "id": "c058fc067f310ac59d2d",
+            "period": "2026-01",
+            "agentKey": "mehmet-onur-aykut",
+            "agentName": "Mehmet Onur Aykut",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 393,
+            "totalChatMailCount": 324,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 717,
+            "avgTalkDurationSeconds": 562,
+            "localCloseRate": 73.3,
+            "missedCalls": 3,
+            "callEvaluationAverage": 4.98,
+            "evaluationCount": 74
+          },
+          {
+            "id": "d04261d2a75fe3feeb55",
+            "period": "2026-01",
+            "agentKey": "fatih-aktas",
+            "agentName": "Fatih Aktaş",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 231,
+            "totalChatMailCount": 377,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 608,
+            "avgTalkDurationSeconds": 394,
+            "localCloseRate": 82.22,
+            "missedCalls": 1,
+            "callEvaluationAverage": 4.9,
+            "evaluationCount": 102
+          },
+          {
+            "id": "de7b23745b98b5c1e783",
+            "period": "2026-01",
+            "agentKey": "adil-hanedan",
+            "agentName": "Adil Hanedan",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 355,
+            "totalChatMailCount": 14,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 369,
+            "avgTalkDurationSeconds": 494,
+            "localCloseRate": 79.81,
+            "missedCalls": 4,
+            "callEvaluationAverage": 4.87,
+            "evaluationCount": 103
+          },
+          {
+            "id": "e164b17da10789501c4f",
+            "period": "2026-01",
+            "agentKey": "mehmet-tugay-kasap",
+            "agentName": "Mehmet Tugay Kasap",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 123,
+            "totalChatMailCount": 1371,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 1494,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.99,
+            "evaluationCount": 340
+          },
+          {
+            "id": "f0d4dce16d4fcf20d753",
+            "period": "2026-01",
+            "agentKey": "seval-ciracioglu",
+            "agentName": "Seval Çıracıoğlu",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 10,
+            "totalChatMailCount": 667,
+            "totalTicketClosedCount": 63,
+            "totalConversationCount": 740,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.87,
+            "evaluationCount": 124
+          },
+          {
+            "id": "f6c300cdddf8d9d03435",
+            "period": "2026-01",
+            "agentKey": "hikmet-ertem-ciftlik",
+            "agentName": "Hikmet Ertem Çiftlik",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 56,
+            "totalChatMailCount": 761,
+            "totalTicketClosedCount": 0,
+            "totalConversationCount": 817,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.94,
+            "evaluationCount": 227
+          },
+          {
+            "id": "fdd708625de48be892af",
+            "period": "2026-01",
+            "agentKey": "afra-sak",
+            "agentName": "Afra Sak",
+            "auditScore": null,
+            "previousAuditAccuracy": null,
+            "totalCallCount": 85,
+            "totalChatMailCount": 768,
+            "totalTicketClosedCount": 64,
+            "totalConversationCount": 917,
+            "avgTalkDurationSeconds": null,
+            "localCloseRate": null,
+            "missedCalls": null,
+            "callEvaluationAverage": 4.92,
+            "evaluationCount": 153
+          }
+        ],
+        "auditMetrics": [
+          {
+            "id": "02768f5b3edc03c2b57d",
+            "period": "2026-01",
+            "agentKey": "selman-gumus",
+            "agentName": "Selman Gümüş",
+            "auditScore": 35,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "0ae86bdda3efac5ea701",
+            "period": "2026-01",
+            "agentKey": "ortalama",
+            "agentName": "Ortalama",
+            "auditScore": 79.52,
+            "previousAuditAccuracy": 94
+          },
+          {
+            "id": "10f1d61621f0c88cbc86",
+            "period": "2026-01",
+            "agentKey": "esin-kotil",
+            "agentName": "Esin Kotil",
+            "auditScore": 74,
+            "previousAuditAccuracy": 75
+          },
+          {
+            "id": "11ca873ef3c71fb7f415",
+            "period": "2026-01",
+            "agentKey": "seda-cerrah",
+            "agentName": "Seda Cerrah",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "16cdfae0c43c1b3a8a32",
+            "period": "2026-01",
+            "agentKey": "rumeysa-ekmen",
+            "agentName": "Rumeysa Ekmen",
+            "auditScore": 80,
+            "previousAuditAccuracy": 50
+          },
+          {
+            "id": "20eee3b16f2300f8c4cf",
+            "period": "2026-01",
+            "agentKey": "adil-hanedan",
+            "agentName": "Adil Hanedan",
+            "auditScore": 65,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "2274712b3fe330910650",
+            "period": "2026-01",
+            "agentKey": "ugurhan-ozkeles",
+            "agentName": "Uğurhan Özkeleş",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "2a1096aae0c0c1aa23d2",
+            "period": "2026-01",
+            "agentKey": "selen-kilinc",
+            "agentName": "Selen Kılınç",
+            "auditScore": 80,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "2a702d31fa8917196fe8",
+            "period": "2026-01",
+            "agentKey": "samet-doruk",
+            "agentName": "Samet Doruk",
+            "auditScore": 55,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "2c8d4bdf9a7c563cd811",
+            "period": "2026-01",
+            "agentKey": "dilsad-gergin",
+            "agentName": "Dilşad Gergin",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "2d5b0044069869c1f932",
+            "period": "2026-01",
+            "agentKey": "kaan-mete",
+            "agentName": "Kaan Mete",
+            "auditScore": 75,
+            "previousAuditAccuracy": 50
+          },
+          {
+            "id": "37fea13a803b882fc16c",
+            "period": "2026-01",
+            "agentKey": "seval-ciracioglu",
+            "agentName": "Seval Çıracıoğlu",
+            "auditScore": 80,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "3ec4755c5512e6961782",
+            "period": "2026-01",
+            "agentKey": "ege-besik",
+            "agentName": "Ege Beşik",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "3ed999d269cb2d78646e",
+            "period": "2026-01",
+            "agentKey": "ecenaz-geles",
+            "agentName": "Ecenaz Geleş",
+            "auditScore": 95,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "4376625f0de1b0a747d5",
+            "period": "2026-01",
+            "agentKey": "ayca-tokkusoglu",
+            "agentName": "Ayça Tokkuşoğlu",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "4c048f54bbd83de2a69b",
+            "period": "2026-01",
+            "agentKey": "mehmet-tugay-kasap",
+            "agentName": "Mehmet Tugay Kasap",
+            "auditScore": 85,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "5086c0d0f0f672a076a7",
+            "period": "2026-01",
+            "agentKey": "mert-karaalioglu",
+            "agentName": "Mert Karaalioğlu",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "5650025913f30f8791d3",
+            "period": "2026-01",
+            "agentKey": "ogun-baris-bayraktar",
+            "agentName": "Ogün Barış Bayraktar",
+            "auditScore": 85,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "643e435272d976bab858",
+            "period": "2026-01",
+            "agentKey": "enes-elmasoglu",
+            "agentName": "Enes Elmasoglu",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "64d75b86d5fbbf8eb3f6",
+            "period": "2026-01",
+            "agentKey": "ahmet-onur-yarici",
+            "agentName": "Ahmet Onur Yarıcı",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "6bafec399cc211a685d7",
+            "period": "2026-01",
+            "agentKey": "ozan-berk-fettahli",
+            "agentName": "Ozan Berk Fettahlı",
+            "auditScore": 100,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "6e890b1572fb55e39502",
+            "period": "2026-01",
+            "agentKey": "manolya-yilmaz",
+            "agentName": "Manolya Yılmaz",
+            "auditScore": 80,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "76197126dfdd54b5be07",
+            "period": "2026-01",
+            "agentKey": "melike-er",
+            "agentName": "Melike ER",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "7cdc0e56beb9d26ff601",
+            "period": "2026-01",
+            "agentKey": "metehan-acikgoz",
+            "agentName": "Metehan Açıkgöz",
+            "auditScore": 95,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "7fa4b32f4eea43bad151",
+            "period": "2026-01",
+            "agentKey": "bahadir-icoz",
+            "agentName": "Bahadır İçöz",
+            "auditScore": 80,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "83ab0c3579cf93b2bbec",
+            "period": "2026-01",
+            "agentKey": "fatih-aktas",
+            "agentName": "Fatih Aktaş",
+            "auditScore": 65,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "8979a00f33907a78cd59",
+            "period": "2026-01",
+            "agentKey": "cagla-bebek",
+            "agentName": "Çağla Bebek",
+            "auditScore": 80,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "8e5a2e0879d05272dbbe",
+            "period": "2026-01",
+            "agentKey": "hikmet-ertem-ciftlik",
+            "agentName": "Hikmet Ertem Çiftlik",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "93088a27ce047a35d3b6",
+            "period": "2026-01",
+            "agentKey": "ozgun-kazan",
+            "agentName": "Özgün Kazan",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "9432d02e4cc013206eff",
+            "period": "2026-01",
+            "agentKey": "tugba-simsek",
+            "agentName": "Tuğba Şimşek",
+            "auditScore": 60,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "95c7c09cf10cad4440dc",
+            "period": "2026-01",
+            "agentKey": "evren-yavuz",
+            "agentName": "Evren Yavuz",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "9a462fcbba487169f923",
+            "period": "2026-01",
+            "agentKey": "aysel-sebnem-palta",
+            "agentName": "Aysel Şebnem Palta",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "a278c6b67213ee3a51a0",
+            "period": "2026-01",
+            "agentKey": "bartu-akcay",
+            "agentName": "Bartu Akçay",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "aa4102dd0c3d1e928562",
+            "period": "2026-01",
+            "agentKey": "batuhan-emre-andac",
+            "agentName": "Batuhan Emre Andaç",
+            "auditScore": 95,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "acec23e43e01b139cc5d",
+            "period": "2026-01",
+            "agentKey": "omer-bekin",
+            "agentName": "Ömer Bekin",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "b245d23a553971173805",
+            "period": "2026-01",
+            "agentKey": "abdulkerim-gurer",
+            "agentName": "Abdülkerim Gürer",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "b54299a46b1d5b1c7717",
+            "period": "2026-01",
+            "agentKey": "batuhan-demirci",
+            "agentName": "Batuhan Demirci",
+            "auditScore": 65,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "bcc41b6019a12ef4d72c",
+            "period": "2026-01",
+            "agentKey": "fatih-furkan-er",
+            "agentName": "Fatih Furkan Er",
+            "auditScore": 65,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "c3a29952e96e8cb878ba",
+            "period": "2026-01",
+            "agentKey": "tolga-ozen-kabasakal",
+            "agentName": "Tolga Özen Kabasakal",
+            "auditScore": 95,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "cc44d259e01f3761964b",
+            "period": "2026-01",
+            "agentKey": "mehmet-onur-aykut",
+            "agentName": "Mehmet Onur Aykut",
+            "auditScore": 90,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "d5ff5572a07ba9e1d3c1",
+            "period": "2026-01",
+            "agentKey": "yaren-ece-kocak",
+            "agentName": "Yaren Ece Koçak",
+            "auditScore": 70,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "d9d95eb053ef87ba90f6",
+            "period": "2026-01",
+            "agentKey": "afra-sak",
+            "agentName": "Afra Sak",
+            "auditScore": 85,
+            "previousAuditAccuracy": null
+          },
+          {
+            "id": "dd897dca1d3c904842f4",
+            "period": "2026-01",
+            "agentKey": "celal-semi-savci",
+            "agentName": "Celal Semi Savcı",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "df63ca1b14cb852f083b",
+            "period": "2026-01",
+            "agentKey": "huseyin-gunder",
+            "agentName": "Hüseyin Günder",
+            "auditScore": 75,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "dfc91e8bdd0ef9b2214c",
+            "period": "2026-01",
+            "agentKey": "idil-meral",
+            "agentName": "İdil Meral",
+            "auditScore": 65,
+            "previousAuditAccuracy": 100
+          },
+          {
+            "id": "f282e2a2610663a1437c",
+            "period": "2026-01",
+            "agentKey": "gulbadem-durmus",
+            "agentName": "Gülbadem Durmuş",
+            "auditScore": 85,
+            "previousAuditAccuracy": 75
+          },
+          {
+            "id": "f877c4f987e4fbe07211",
+            "period": "2026-01",
+            "agentKey": "burak-yegin",
+            "agentName": "Burak Yegin",
+            "auditScore": 90,
+            "previousAuditAccuracy": 100
+          }
+        ],
+        "questionPerformance": [],
+        "qtMetrics": []
+      },
+      "thresholds": {
+        "auditScore": {
+          "metric": "auditScore",
+          "label": "Audit Skoru",
+          "direction": "higher_is_better",
+          "red": 60,
+          "yellow": 80,
+          "green": 90,
+          "unit": "percent"
+        },
+        "avgTalkDurationSeconds": {
+          "metric": "avgTalkDurationSeconds",
+          "label": "Ortalama Konusma Suresi",
+          "direction": "lower_is_better",
+          "red": 420,
+          "yellow": 360,
+          "green": 300,
+          "unit": "seconds"
+        },
+        "callEvaluationAverage": {
+          "metric": "callEvaluationAverage",
+          "label": "Cagri Degerlendirme",
+          "direction": "higher_is_better",
+          "red": 4.8,
+          "yellow": 4.9,
+          "green": 4.97,
+          "unit": "number"
+        },
+        "feedbackCoverage": {
+          "metric": "feedbackCoverage",
+          "label": "Feedback Orani",
+          "direction": "higher_is_better",
+          "red": 0.7,
+          "yellow": 0.9,
+          "green": 1,
+          "unit": "number"
+        },
+        "localCloseRate": {
+          "metric": "localCloseRate",
+          "label": "Lokal Kapatma Orani",
+          "direction": "higher_is_better",
+          "red": 70,
+          "yellow": 85,
+          "green": 92,
+          "unit": "percent"
+        },
+        "missingQuestionsAccuracy": {
+          "metric": "missingQuestionsAccuracy",
+          "label": "Onceki Audit Dogruluk",
+          "direction": "higher_is_better",
+          "red": 60,
+          "yellow": 80,
+          "green": 90,
+          "unit": "percent"
+        }
+      }
+    }
+  }
+}

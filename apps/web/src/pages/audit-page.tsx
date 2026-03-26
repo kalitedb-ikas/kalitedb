@@ -1,7 +1,7 @@
 import { ChampionSpotlightCard, ExecutiveChartCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
-import { average, normalizeKey, resolveThresholdTone, selectAuditMetrics } from "@kalitedb/shared";
+import { average, normalizeKey, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -42,7 +42,7 @@ export function AuditPage() {
     () => [...(periodsQuery.data ?? [])].sort((left, right) => left.month.localeCompare(right.month)),
     [periodsQuery.data]
   );
-  const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
+  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
   const selectedPeriod = periodsQuery.data?.find((period) => period.id === periodId);
   const selectedYear = selectedPeriod?.month.slice(0, 4);
   const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
