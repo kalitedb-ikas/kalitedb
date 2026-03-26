@@ -32,8 +32,8 @@ const navigation: NavigationItem[] = [
   { label: "Audit", to: "/audit", icon: ClipboardList },
   { label: "Sorular", to: "/questions", icon: Sparkles },
   { label: "CSAT", to: "/csat", icon: MessageCircle },
-  { label: "QT", to: "/qt", icon: BarChart3 },
   { label: "Temsilciler", to: "/representatives", icon: Users },
+  { label: "QT", to: "/qt", icon: BarChart3 },
   { label: "Yönetim", to: "/admin", icon: Settings, roles: ["admin", "qt"] }
 ];
 
