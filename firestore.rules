@@ -28,8 +28,24 @@ service cloud.firestore {
       return hasRole('admin');
     }
 
-    function isOwnQtEntry(userKey) {
-      return isAuthed() && hasRole('qt') && request.auth.uid == userKey;
+    function isQtEntryOwnerEmail(email) {
+      return isAuthed() && hasRole('qt') && request.auth.token.email != null && request.auth.token.email == email;
+    }
+
+    function canCreateOwnQtEntry(userKey) {
+      return isAuthed() &&
+        hasRole('qt') &&
+        request.resource.data.userKey == userKey &&
+        (request.auth.uid == userKey || isQtEntryOwnerEmail(request.resource.data.userEmail));
+    }
+
+    function canUpdateOwnQtEntry(userKey) {
+      return isAuthed() &&
+        hasRole('qt') &&
+        resource.data.userKey == userKey &&
+        request.resource.data.userKey == resource.data.userKey &&
+        request.resource.data.userEmail == resource.data.userEmail &&
+        (request.auth.uid == userKey || isQtEntryOwnerEmail(resource.data.userEmail));
     }
 
     match /reportPeriods/{periodId} {
@@ -59,7 +75,8 @@ service cloud.firestore {
 
     match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
       allow get, list: if true;
-      allow create, update: if canManageReports() || isOwnQtEntry(userKey);
+      allow create: if canManageReports() || canCreateOwnQtEntry(userKey);
+      allow update: if canManageReports() || canUpdateOwnQtEntry(userKey);
       allow delete: if isAdmin();
     }
 
