@@ -24,6 +24,19 @@ service cloud.firestore {
       return hasRole('admin') || hasRole('team') || hasRole('ceo') || hasRole('qt');
     }
 
+    function isPublishedPeriodData(periodData) {
+      return periodData.status == 'published' || periodData.publishedAt != null;
+    }
+
+    function isPublishedPeriodResource() {
+      return resource != null && isPublishedPeriodData(resource.data);
+    }
+
+    function isPublishedPeriod(periodId) {
+      return exists(/databases/$(database)/documents/reportPeriods/$(periodId)) &&
+        isPublishedPeriodData(get(/databases/$(database)/documents/reportPeriods/$(periodId)).data);
+    }
+
     function canManageReports() {
       return hasRole('admin') || hasRole('team');
     }
@@ -37,38 +50,38 @@ service cloud.firestore {
     }
 
     match /reportPeriods/{periodId} {
-      allow get, list: if canReadReports();
+      allow get, list: if canReadReports() || isPublishedPeriodResource();
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/agentMetrics/{recordId} {
-      allow get, list: if canReadReports();
+      allow get, list: if canReadReports() || isPublishedPeriod(periodId);
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/auditMetrics/{recordId} {
-      allow get, list: if canReadReports();
+      allow get, list: if canReadReports() || isPublishedPeriod(periodId);
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/questionPerformance/{recordId} {
-      allow get, list: if canReadReports();
+      allow get, list: if canReadReports() || isPublishedPeriod(periodId);
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/qtMetrics/{recordId} {
-      allow get, list: if canReadReports();
+      allow get, list: if canReadReports() || isPublishedPeriod(periodId);
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
-      allow get, list: if canReadReports();
+      allow get, list: if canReadReports() || isPublishedPeriod(periodId);
       allow create, update: if canManageReports() || isOwnQtEntry(userKey);
       allow delete: if isAdmin();
     }
 
     match /thresholdConfigs/{metricId} {
-      allow get, list: if canReadReports();
+      allow get, list: if true;
       allow create, update, delete: if isAdmin();
     }
 
