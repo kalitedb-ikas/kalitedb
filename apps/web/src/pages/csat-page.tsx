@@ -101,14 +101,37 @@ export function CsatPage() {
       ])
     );
 
-    return snapshot.datasets.agentMetrics.map((item) => {
-      const audit = auditMap.get(item.agentKey);
-      return {
-        ...item,
-        auditScoreDisplay: audit?.auditScore ?? item.auditScore,
-        previousAuditAccuracyDisplay: audit?.previousAuditAccuracy ?? item.previousAuditAccuracy
-      };
-    });
+    return snapshot.datasets.agentMetrics
+      .map((item) => {
+        const audit = auditMap.get(item.agentKey);
+        return {
+          ...item,
+          auditScoreDisplay: audit?.auditScore ?? item.auditScore,
+          previousAuditAccuracyDisplay: audit?.previousAuditAccuracy ?? item.previousAuditAccuracy
+        };
+      })
+      .sort((left, right) => {
+        const leftCsat = left.callEvaluationAverage;
+        const rightCsat = right.callEvaluationAverage;
+
+        if (leftCsat === null && rightCsat === null) {
+          return left.agentName.localeCompare(right.agentName, "tr");
+        }
+
+        if (leftCsat === null) {
+          return 1;
+        }
+
+        if (rightCsat === null) {
+          return -1;
+        }
+
+        if (rightCsat !== leftCsat) {
+          return rightCsat - leftCsat;
+        }
+
+        return left.agentName.localeCompare(right.agentName, "tr");
+      });
   }, [snapshot]);
   const csatLeaders = useMemo(() => {
     const scoredAgents = rows.filter(
@@ -223,11 +246,6 @@ export function CsatPage() {
         <>
           <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
             <ChampionSpotlightCard
-              delta={
-                snapshot.highlights.bestCsat?.delta != null
-                  ? `Değişim ${snapshot.highlights.bestCsat.delta > 0 ? "+" : ""}${formatNumber(snapshot.highlights.bestCsat.delta, 2)}`
-                  : undefined
-              }
               kicker="Müşteri memnuniyeti"
               metricLabel={csatLeaders.length > 1 ? "Lider temsilciler" : "Lider temsilci"}
               name={csatLeaderNames || (snapshot.highlights.bestCsat?.label ?? "Takip ediliyor")}
@@ -337,8 +355,7 @@ export function CsatPage() {
               items={snapshot.rankings.csatTop.slice(0, 5).map((item) => ({
                 id: item.id,
                 label: item.label,
-                value: formatNumber(item.value, 3),
-                ...(item.delta != null ? { delta: `Değişim ${formatNumber(item.delta, 2)}` } : {})
+                value: formatNumber(item.value, 3)
               }))}
               title="En güçlü CSAT"
             />
