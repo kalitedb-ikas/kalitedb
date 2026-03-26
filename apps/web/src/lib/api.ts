@@ -23,7 +23,7 @@ import {
   thresholdConfigSchema,
   userRoleAssignmentSchema
 } from "@kalitedb/shared";
-import { collection, doc, getDoc, getDocs, orderBy, query, setDoc, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, orderBy, query, setDoc } from "firebase/firestore";
 
 import { toPublicAssetPath } from "./asset-path";
 import { firebaseAuth, firebaseDb } from "./firebase";
@@ -170,31 +170,13 @@ async function getPeriodsFromFirebase(): Promise<ReportPeriod[]> {
     throw new Error("Firebase veritabanı hazır değil.");
   }
 
-  const parsePeriods = (snapshot: Awaited<ReturnType<typeof getDocs>>) =>
-    snapshot.docs
-      .map((periodDoc) => reportPeriodSchema.safeParse({ id: periodDoc.id, ...(periodDoc.data() ?? {}) }))
-      .filter((period): period is { success: true; data: ReportPeriod } => period.success)
-      .map((period) => period.data)
-      .sort((left, right) => right.month.localeCompare(left.month));
+  const snapshot = await getDocs(query(collection(firebaseDb, "reportPeriods"), orderBy("month", "desc")));
 
-  if (firebaseAuth?.currentUser) {
-    const snapshot = await getDocs(query(collection(firebaseDb, "reportPeriods"), orderBy("month", "desc")));
-    return parsePeriods(snapshot);
-  }
-
-  const publishedSnapshot = await getDocs(
-    query(collection(firebaseDb, "reportPeriods"), where("publishedAt", "!=", null), orderBy("publishedAt", "desc"))
-  );
-  const publishedPeriods = parsePeriods(publishedSnapshot);
-
-  if (publishedPeriods.length > 0) {
-    return publishedPeriods;
-  }
-
-  const statusSnapshot = await getDocs(
-    query(collection(firebaseDb, "reportPeriods"), where("status", "==", "published"), orderBy("month", "desc"))
-  );
-  return parsePeriods(statusSnapshot);
+  return snapshot.docs
+    .map((periodDoc) => reportPeriodSchema.safeParse({ id: periodDoc.id, ...(periodDoc.data() ?? {}) }))
+    .filter((period): period is { success: true; data: ReportPeriod } => period.success)
+    .map((period) => period.data)
+    .sort((left, right) => right.month.localeCompare(left.month));
 }
 
 async function getThresholdsFromFirebase(): Promise<Record<KpiMetricKey, ThresholdConfig>> {
