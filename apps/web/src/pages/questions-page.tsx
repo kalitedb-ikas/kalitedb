@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { BookOpen, Target } from "lucide-react";
 import { useMemo, useState } from "react";
 import { selectDefaultReportPeriod, type QuestionPerformance } from "@kalitedb/shared";
-import { ExecutiveChartCard, PageHeader, QuestionSpotlight, StatCard, SurfaceCard } from "@kalitedb/ui";
+import { ExecutiveChartCard, HeatChip, PageHeader, QuestionSpotlight, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { useSearchParams } from "react-router-dom";
 
 import { DataTable } from "../components/data-table";
@@ -12,6 +12,18 @@ import { api } from "../lib/api";
 import { formatPercent, formatNumber } from "../lib/format";
 
 const columnHelper = createColumnHelper<QuestionPerformance>();
+
+function resolveQuestionAccuracyTone(value: number) {
+  if (value >= 80) {
+    return "green" as const;
+  }
+
+  if (value >= 60) {
+    return "yellow" as const;
+  }
+
+  return "red" as const;
+}
 
 export function QuestionsPage() {
   const auth = useAuth();
@@ -53,7 +65,9 @@ export function QuestionsPage() {
     columnHelper.accessor("questionText", { header: "Soru" }),
     columnHelper.accessor("accuracyRate", {
       header: "Doğru bilinme oranı",
-      cell: (info) => formatPercent(info.getValue())
+      cell: (info) => (
+        <HeatChip tone={resolveQuestionAccuracyTone(info.getValue())} value={formatPercent(info.getValue())} />
+      )
     }),
     columnHelper.accessor("correctCount", { header: "Doğru" }),
     columnHelper.accessor("wrongCount", { header: "Yanlış" })
