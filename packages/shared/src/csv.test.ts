@@ -202,4 +202,26 @@ describe("csv parser", () => {
     expect(preview.validRows[0]?.correctCount).toBe(0);
     expect(preview.validRows[0]?.wrongCount).toBe(0);
   });
+
+  it("audit bilinme orani csv basliklarini ve bos konu alanini kabul eder", () => {
+    const preview = parseDatasetCsv({
+      datasetType: "question-performance",
+      expectedPeriod: "2026-02",
+      text: [
+        "Soru,Yanlış Bilinme Oranı,Doğru Adet,Yanlış Adet,KONU",
+        'Ornek soru,"38,24%",13,21,'
+      ].join("\n")
+    });
+
+    if (preview.datasetType !== "question-performance") {
+      throw new Error("question performance preview bekleniyordu");
+    }
+
+    expect(preview.errors).toHaveLength(0);
+    expect(preview.validRows[0]?.questionText).toBe("Ornek soru");
+    expect(preview.validRows[0]?.correctCount).toBe(13);
+    expect(preview.validRows[0]?.wrongCount).toBe(21);
+    expect(preview.validRows[0]?.accuracyRate).toBe(38.24);
+    expect(preview.validRows[0]?.topic).toBe("Genel");
+  });
 });
