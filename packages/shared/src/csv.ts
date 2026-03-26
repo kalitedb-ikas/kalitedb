@@ -72,11 +72,11 @@ const HEADER_ALIASES: Record<DatasetType, Record<string, string[]>> = {
   },
   "question-performance": {
     period: ["period"],
-    question_text: ["sorularcskey", "sorumetni", "questiontext"],
+    question_text: ["sorularcskey", "sorumetni", "questiontext", "soru"],
     accuracy_rate: ["dogrubilinmeorani", "accuracyrate"],
-    correct_count: ["dogru", "correctcount"],
-    wrong_count: ["yanlis", "wrongcount"],
-    topic: ["konubasliklari", "topic"]
+    correct_count: ["dogru", "correctcount", "dogruadet"],
+    wrong_count: ["yanlis", "wrongcount", "yanlisadet"],
+    topic: ["konubasliklari", "topic", "konu"]
   },
   "qt-metrics": {
     period: ["period"],
@@ -617,14 +617,15 @@ function parseQuestionPerformance(
     const rowErrors: ImportPreviewError[] = [];
     ensurePeriod(row.period, expectedPeriod, rowNumber, errors);
 
-    const topic = readTextField(
+    const topic =
+      readTextField(
       row.topic,
       rowNumber,
       "topic",
       getHeaderLabel("question-performance", "topic"),
       rowErrors,
-      true
-    );
+      false
+    ) || "Genel";
     const questionText = readTextField(
       row.question_text,
       rowNumber,
