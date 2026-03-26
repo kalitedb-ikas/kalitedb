@@ -1,7 +1,8 @@
-node_modules
+.git
+.github
+.claude
 .DS_Store
-.env
-.env.local
+node_modules
 .next
 dist
 coverage
@@ -9,7 +10,7 @@ playwright-report
 test-results
 .turbo
 .data
-*.tsbuildinfo
 apps/web/dist
 apps/api/.next
+*.tsbuildinfo
 gha-creds-*.json
