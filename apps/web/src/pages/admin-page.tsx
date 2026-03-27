@@ -26,6 +26,7 @@ import {
   Trash2,
   Upload,
   UserPlus,
+  UserRoundX,
   Users
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -83,7 +84,7 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
   return { value, label: label.charAt(0).toUpperCase() + label.slice(1) };
 });
 
-type AdminSection = "periods" | DatasetType | "thresholds" | "roles";
+type AdminSection = "periods" | DatasetType | "thresholds" | "roles" | "representatives";
 type DatasetRow = AgentMetric | AuditMetric | QuestionPerformance;
 
 type ImportPreviewResult = {
@@ -142,6 +143,12 @@ const adminSections: Array<{
     label: "Eşikler",
     description: "Renk ve hedef sınırlarını düzenle",
     icon: Settings2
+  },
+  {
+    id: "representatives",
+    label: "Temsilci görünürlüğü",
+    description: "İşten ayrılan temsilcileri gizle veya göster",
+    icon: UserRoundX
   },
   {
     id: "roles",
@@ -221,6 +228,20 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     enabled: auth.token !== null && isAdminUser,
     queryKey: ["roles", auth.token],
     queryFn: () => api.getRoles(auth.token)
+  });
+
+  const hiddenRepresentativesQuery = useQuery({
+    enabled: auth.token !== null && isAdminUser,
+    queryKey: ["hidden-representatives"],
+    queryFn: () => api.getHiddenRepresentatives()
+  });
+
+  const hiddenRepresentativesMutation = useMutation({
+    mutationFn: async (input: { agentKey: string; agentName: string; hidden: boolean }) =>
+      api.setRepresentativeHidden(input.agentKey, input.agentName, input.hidden),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["hidden-representatives"] });
+    }
   });
 
   const periodDetailsQuery = useQuery({
@@ -383,7 +404,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   }, [props.currentUserRole, selectedSection]);
 
   useEffect(() => {
-    if (!isAdminUser && (selectedSection === "thresholds" || selectedSection === "roles")) {
+    if (!isAdminUser && (selectedSection === "thresholds" || selectedSection === "roles" || selectedSection === "representatives")) {
       setSelectedSection(props.currentUserRole === "qt" ? "qt-metrics" : "periods");
     }
   }, [isAdminUser, props.currentUserRole, selectedSection]);
@@ -546,7 +567,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     () =>
       props.currentUserRole === "qt"
         ? adminSections.filter((section) => section.id === "qt-metrics")
-        : adminSections.filter((section) => isAdminUser || (section.id !== "thresholds" && section.id !== "roles")),
+        : adminSections.filter((section) => isAdminUser || (section.id !== "thresholds" && section.id !== "roles" && section.id !== "representatives")),
     [isAdminUser, props.currentUserRole]
   );
   const visibleDatasetSections = useMemo(
@@ -556,6 +577,19 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         : (Object.keys(datasetLabels) as DatasetType[]),
     [props.currentUserRole]
   );
+  const allRepresentativeNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const record of periodDetailsQuery.data?.datasets.agentMetrics ?? []) {
+      names.set(record.agentKey, record.agentName);
+    }
+    for (const record of periodDetailsQuery.data?.datasets.auditMetrics ?? []) {
+      names.set(record.agentKey, record.agentName);
+    }
+    return Array.from(names.entries())
+      .map(([agentKey, agentName]) => ({ agentKey, agentName }))
+      .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
+  }, [periodDetailsQuery.data]);
+
   const selectedSectionMeta = visibleAdminSections.find((section) => section.id === selectedSection) ?? visibleAdminSections[0]!;
   const availableYears = useMemo(
     () =>
@@ -612,7 +646,9 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           : "CSV"
         : selectedSection === "thresholds"
           ? "Ayarlar"
-          : "Yetki";
+          : selectedSection === "representatives"
+            ? "Görünürlük"
+            : "Yetki";
   const datasetCount =
     (periodDetailsQuery.data?.datasets.agentMetrics.length ?? 0) +
     (periodDetailsQuery.data?.datasets.auditMetrics.length ?? 0) +
@@ -1477,6 +1513,77 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                   </>
                 )}
               </div>
+            ) : null}
+
+            {selectedSection === "representatives" ? (
+              <SurfaceCard
+                description="İşten ayrılan veya geçici olarak gizlenmesi gereken temsilcileri bu alandan yönetin. Gizlenen temsilciler rapor sayfalarında görünmez."
+                title="Temsilci Görünürlüğü"
+                variant="default"
+              >
+                {hiddenRepresentativesQuery.isError ? (
+                  <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {hiddenRepresentativesQuery.error instanceof Error
+                      ? hiddenRepresentativesQuery.error.message
+                      : "Gizli temsilci listesi alınırken bir hata oluştu."}
+                  </div>
+                ) : null}
+                {allRepresentativeNames.length === 0 ? (
+                  <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                    Seçili dönemde temsilci bulunamadı. Önce bir dönem seçip veri aktarın.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {allRepresentativeNames.map((rep) => {
+                      const isHidden = hiddenRepresentativesQuery.data?.has(rep.agentKey) ?? false;
+                      return (
+                        <div
+                          className={[
+                            "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition",
+                            isHidden ? "border-rose-200 bg-rose-50/70" : "border-slate-200 bg-white"
+                          ].join(" ")}
+                          key={rep.agentKey}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-semibold text-slate-900">{rep.agentName}</span>
+                            {isHidden ? (
+                              <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
+                                Gizli
+                              </span>
+                            ) : null}
+                          </div>
+                          <button
+                            className={[
+                              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition",
+                              isHidden
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100"
+                                : "border-rose-200 bg-white text-rose-700 hover:border-rose-300 hover:bg-rose-50"
+                            ].join(" ")}
+                            disabled={hiddenRepresentativesMutation.isPending}
+                            onClick={() =>
+                              hiddenRepresentativesMutation.mutate({
+                                agentKey: rep.agentKey,
+                                agentName: rep.agentName,
+                                hidden: !isHidden
+                              })
+                            }
+                            type="button"
+                          >
+                            {isHidden ? "Göster" : "Gizle"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {hiddenRepresentativesMutation.isError ? (
+                  <div className="mt-4 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {hiddenRepresentativesMutation.error instanceof Error
+                      ? hiddenRepresentativesMutation.error.message
+                      : "Temsilci görünürlüğü güncellenirken bir hata oluştu."}
+                  </div>
+                ) : null}
+              </SurfaceCard>
             ) : null}
 
             {selectedSection === "thresholds" ? (

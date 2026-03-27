@@ -106,6 +106,13 @@ export function RepresentativesPage() {
   });
 
   const snapshot = dashboardQuery.data;
+  const hiddenQuery = useQuery({
+    queryKey: ["hidden-representatives"],
+    queryFn: () => api.getHiddenRepresentatives(),
+    staleTime: 5 * 60 * 1000
+  });
+  const hiddenKeys = hiddenQuery.data ?? new Set<string>();
+
   const auditMetrics = useMemo(
     () => selectAuditMetrics(snapshot?.datasets ?? { agentMetrics: [], auditMetrics: [] }),
     [snapshot]
@@ -117,6 +124,7 @@ export function RepresentativesPage() {
     auditMetrics.forEach((record) => options.set(record.agentKey, record.agentName));
 
     return Array.from(options.entries())
+      .filter(([agentKey]) => !hiddenKeys.has(agentKey))
       .map(([agentKey, agentName]) => ({ agentKey, agentName }))
       .sort((left, right) => left.agentName.localeCompare(right.agentName, "tr"))
       .map((item, index) => ({
@@ -124,7 +132,7 @@ export function RepresentativesPage() {
         avatarSrc: buildRepresentativeAvatar(item.agentName, index, "square"),
         portraitSrc: buildRepresentativeAvatar(item.agentName, index, "landscape")
       }));
-  }, [auditMetrics, snapshot]);
+  }, [auditMetrics, hiddenKeys, snapshot]);
 
   const selectedAgentKey = searchParams.get("agentKey") ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
