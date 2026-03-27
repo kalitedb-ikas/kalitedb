@@ -1,0 +1,161 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - zafercobannn
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      VITE_PUBLIC_BASE_PATH: /kalitedb/
+      VITE_DEV_AUTH_MODE: "false"
+      VITE_FIREBASE_API_KEY: "AIzaSyCACBgSJML9GQ8xDcLrHQWMav7254FWM0k"
+      VITE_FIREBASE_AUTH_DOMAIN: "kalitedb-5a7eb.firebaseapp.com"
+      VITE_FIREBASE_PROJECT_ID: "kalitedb-5a7eb"
+      VITE_FIREBASE_STORAGE_BUCKET: "kalitedb-5a7eb.firebasestorage.app"
+      VITE_FIREBASE_MESSAGING_SENDER_ID: "838169214324"
+      VITE_FIREBASE_APP_ID: "1:838169214324:web:0fce6826dfddceb6ed8021"
+      VITE_FIREBASE_MEASUREMENT_ID: "G-LQ8LQMJZBJ"
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'kalitedb-5a7eb' }}
+      CLOUD_RUN_REGION: ${{ vars.CLOUD_RUN_REGION || 'europe-west1' }}
+      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'kalitedb-api' }}
+      APP_WEB_ORIGIN: https://zafercobannn.github.io
+      FIREBASE_STORAGE_BUCKET: kalitedb-5a7eb.firebasestorage.app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Cloud Run auth mode
+        id: cloudrun_auth
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$GCP_WORKLOAD_IDENTITY_PROVIDER" ] && [ -n "$GCP_SERVICE_ACCOUNT" ]; then
+            echo "mode=wif" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "$GCP_SA_KEY" ]; then
+            echo "mode=key" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "mode=none" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Cloud with Workload Identity
+        id: auth_wif
+        if: ${{ steps.cloudrun_auth.outputs.mode == 'wif' }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Authenticate to Google Cloud with service account key
+        id: auth_key
+        if: ${{ steps.cloudrun_auth.outputs.mode == 'key' }}
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Deploy API to Cloud Run
+        id: deploy_api
+        if: ${{ steps.auth_wif.outcome == 'success' || steps.auth_key.outcome == 'success' }}
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.CLOUD_RUN_SERVICE }}
+          region: ${{ env.CLOUD_RUN_REGION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          source: .
+          env_vars: |-
+            APP_DATA_DRIVER=auto
+            APP_AUTH_BYPASS=false
+            APP_ALLOW_FIRST_ADMIN_BOOTSTRAP=false
+            APP_WEB_ORIGIN=${{ env.APP_WEB_ORIGIN }}
+            FIREBASE_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
+            FIREBASE_STORAGE_BUCKET=${{ env.FIREBASE_STORAGE_BUCKET }}
+          flags: >-
+            --allow-unauthenticated
+            --port=8080
+            --cpu=1
+            --memory=512Mi
+            --min-instances=0
+            --max-instances=3
+
+      - name: Resolve API base URL
+        id: resolve_api_url
+        env:
+          DEPLOYED_API_URL: ${{ steps.deploy_api.outputs.url }}
+          FALLBACK_API_URL: ${{ vars.VITE_API_BASE_URL }}
+        run: |
+          api_url="${DEPLOYED_API_URL:-$FALLBACK_API_URL}"
+
+          if [ -z "$api_url" ]; then
+            echo "Kalici bir API adresi bulunamadi. Cloud Run auth ayarlari veya VITE_API_BASE_URL eksik." >&2
+            exit 1
+          fi
+
+          echo "value=$api_url" >> "$GITHUB_OUTPUT"
+
+      - name: Warn when Cloud Run deployment is skipped
+        if: ${{ steps.deploy_api.outcome != 'success' && steps.cloudrun_auth.outputs.mode == 'none' }}
+        run: |
+          echo "::warning::Cloud Run deploy atlandi. GCP auth ayarlari yapilmadigi icin workflow mevcut VITE_API_BASE_URL degeriyle devam ediyor."
+
+      - name: Warn for transient API URL
+        env:
+          VITE_API_BASE_URL: ${{ steps.resolve_api_url.outputs.value }}
+        if: contains(steps.resolve_api_url.outputs.value, '.lhr.life') || contains(steps.resolve_api_url.outputs.value, '.loca.lt') || contains(steps.resolve_api_url.outputs.value, 'localhost')
+        run: |
+          echo "::warning::VITE_API_BASE_URL gecici veya yerel bir host gibi gorunuyor (${VITE_API_BASE_URL}). GitHub Pages dagitiminda login icin stabil ve CORS izinli bir API adresi kullanin."
+
+      - name: Build web app
+        env:
+          VITE_API_BASE_URL: ${{ steps.resolve_api_url.outputs.value }}
+        run: pnpm --filter @kalitedb/web build
+
+      - name: Create SPA fallback
+        run: cp apps/web/dist/index.html apps/web/dist/404.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

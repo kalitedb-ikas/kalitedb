@@ -1,0 +1,16 @@
+.git
+.github
+.claude
+.DS_Store
+node_modules
+.next
+dist
+coverage
+playwright-report
+test-results
+.turbo
+.data
+apps/web/dist
+apps/api/.next
+*.tsbuildinfo
+gha-creds-*.json

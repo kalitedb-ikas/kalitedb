@@ -5,36 +5,104 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function hasRole(role) {
-      return isAuthed() && request.auth.token.role == role;
+    function currentRole() {
+      return !isAuthed()
+        ? null
+        : request.auth.token.role != null
+          ? request.auth.token.role
+          : request.auth.token.email != null &&
+            exists(/databases/$(database)/documents/userRoles/$(request.auth.token.email))
+            ? get(/databases/$(database)/documents/userRoles/$(request.auth.token.email)).data.role
+            : null;
     }
 
-    function isPrivileged() {
+    function hasRole(role) {
+      return currentRole() == role;
+    }
+
+    function canRead() {
+      return isAuthed();
+    }
+
+    function canManageReports() {
       return hasRole('admin') || hasRole('team');
     }
 
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isQtEntryOwnerEmail(email) {
+      return isAuthed() && hasRole('qt') && request.auth.token.email != null && request.auth.token.email == email;
+    }
+
+    function canCreateOwnQtEntry(userKey) {
+      return isAuthed() &&
+        hasRole('qt') &&
+        request.resource.data.userKey == userKey &&
+        (request.auth.uid == userKey || isQtEntryOwnerEmail(request.resource.data.userEmail));
+    }
+
+    function canUpdateOwnQtEntry(userKey) {
+      return isAuthed() &&
+        hasRole('qt') &&
+        resource.data.userKey == userKey &&
+        request.resource.data.userKey == resource.data.userKey &&
+        request.resource.data.userEmail == resource.data.userEmail &&
+        (request.auth.uid == userKey || isQtEntryOwnerEmail(resource.data.userEmail));
+    }
+
     match /reportPeriods/{periodId} {
-      allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
-      allow write: if hasRole('admin') || hasRole('team');
-
-      match /{document=**} {
-        allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
-        allow write: if hasRole('admin') || hasRole('team');
-      }
+      allow get, list: if canRead();
+      allow create, update, delete: if canManageReports();
     }
 
-    match /thresholdConfigs/{document=**} {
-      allow read: if hasRole('admin') || hasRole('team') || hasRole('ceo');
-      allow write: if hasRole('admin');
+    match /reportPeriods/{periodId}/agentMetrics/{recordId} {
+      allow get, list: if canRead();
+      allow create, update, delete: if canManageReports();
     }
 
-    match /userRoles/{document=**} {
-      allow read, write: if hasRole('admin');
+    match /reportPeriods/{periodId}/auditMetrics/{recordId} {
+      allow get, list: if canRead();
+      allow create, update, delete: if canManageReports();
     }
 
-    match /importJobs/{document=**} {
-      allow read, write: if isPrivileged();
+    match /reportPeriods/{periodId}/questionPerformance/{recordId} {
+      allow get, list: if canRead();
+      allow create, update, delete: if canManageReports();
+    }
+
+    match /reportPeriods/{periodId}/qtMetrics/{recordId} {
+      allow get, list: if canRead();
+      allow create, update, delete: if canManageReports();
+    }
+
+    match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
+      allow get, list: if canRead();
+      allow create: if canManageReports() || canCreateOwnQtEntry(userKey);
+      allow update: if canManageReports() || canUpdateOwnQtEntry(userKey);
+      allow delete: if isAdmin();
+    }
+
+    match /thresholdConfigs/{metricId} {
+      allow get, list: if canRead();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /userRoles/{emailKey} {
+      allow get: if isAdmin() || (isAuthed() && request.auth.token.email == emailKey);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /importJobs/{jobId} {
+      allow get, list: if canManageReports();
+      allow create, update, delete: if canManageReports();
+    }
+
+    match /hiddenRepresentatives/{agentKey} {
+      allow get, list: if canRead();
+      allow create, update, delete: if isAdmin();
     }
   }
 }
-

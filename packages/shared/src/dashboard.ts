@@ -1,6 +1,7 @@
 import {
   DEFAULT_THRESHOLDS,
   type AgentMetric,
+  type AuditMetric,
   type DashboardMetricItem,
   type DashboardSnapshot,
   type KpiMetricKey,
@@ -30,18 +31,18 @@ function buildMetricItem(
   return item;
 }
 
-function buildAgentDeltaMap(
-  current: AgentMetric[],
-  previous: AgentMetric[],
-  metric: "auditScore" | "callEvaluationAverage"
+function buildMetricDeltaMap<TRecord extends { id: string; agentKey: string; agentName: string }>(
+  current: TRecord[],
+  previous: TRecord[],
+  getValue: (record: TRecord) => number | null
 ): DashboardMetricItem[] {
   const previousMap = new Map(previous.map((record) => [record.agentKey, record]));
 
   return current
     .map((record) => {
       const previousRecord = previousMap.get(record.agentKey);
-      const currentValue = record[metric];
-      const previousValue = previousRecord?.[metric] ?? null;
+      const currentValue = getValue(record);
+      const previousValue = previousRecord ? getValue(previousRecord) : null;
 
       if (currentValue === null) {
         return null;
@@ -61,14 +62,119 @@ function pickFirst(items: DashboardMetricItem[]): DashboardMetricItem | undefine
   return items[0];
 }
 
-function buildSummary(agentMetrics: AgentMetric[], questionPerformance: QuestionPerformance[], qtMetrics: QtMetric[]) {
+function formatJoinedLabels(labels: string[]): string {
+  if (labels.length <= 1) {
+    return labels[0] ?? "";
+  }
+
+  if (labels.length === 2) {
+    return labels.join(" ve ");
+  }
+
+  return `${labels.slice(0, -1).join(", ")} ve ${labels.at(-1)}`;
+}
+
+function pickTopWithTies(items: DashboardMetricItem[]): DashboardMetricItem | undefined {
+  const firstItem = pickFirst(items);
+
+  if (!firstItem || firstItem.value === null) {
+    return firstItem;
+  }
+
+  const tiedLabels = items
+    .filter((item) => item.value === firstItem.value)
+    .map((item) => item.label)
+    .sort((left, right) => left.localeCompare(right, "tr"));
+
+  if (tiedLabels.length <= 1) {
+    return firstItem;
+  }
+
   return {
-    auditAverage: average(agentMetrics.map((record) => record.auditScore)),
-    missingQuestionsAverage: average(agentMetrics.map((record) => record.missingQuestionsAccuracy)),
+    ...firstItem,
+    label: formatJoinedLabels(tiedLabels)
+  };
+}
+
+function buildLegacyAuditMetrics(agentMetrics: AgentMetric[]): AuditMetric[] {
+  return agentMetrics
+    .filter((record) => record.auditScore !== null || record.previousAuditAccuracy !== null)
+    .map((record) => ({
+      id: record.id,
+      period: record.period,
+      agentKey: record.agentKey,
+      agentName: record.agentName,
+      auditScore: record.auditScore,
+      previousAuditAccuracy: record.previousAuditAccuracy
+    }));
+}
+
+function getReportPeriodPriority(period: ReportPeriod) {
+  if (period.status === "published") {
+    return 3;
+  }
+
+  if (period.publishedAt) {
+    return 2;
+  }
+
+  if (
+    period.manualTotalCallCount !== undefined ||
+    period.manualTotalChatMailCount !== undefined ||
+    period.manualTotalTicketClosedCount !== undefined
+  ) {
+    return 1;
+  }
+
+  return 0;
+}
+
+export function selectDefaultReportPeriod(periods: ReportPeriod[]): ReportPeriod | undefined {
+  if (!periods.length) {
+    return undefined;
+  }
+
+  return [...periods].sort((left, right) => {
+    const priorityDiff = getReportPeriodPriority(right) - getReportPeriodPriority(left);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+
+    const monthDiff = right.month.localeCompare(left.month);
+    if (monthDiff !== 0) {
+      return monthDiff;
+    }
+
+    return right.updatedAt.localeCompare(left.updatedAt);
+  })[0];
+}
+
+export function selectAuditMetrics(datasets: Pick<ReportDatasets, "agentMetrics" | "auditMetrics">): AuditMetric[] {
+  if (datasets.auditMetrics.length > 0) {
+    return datasets.auditMetrics;
+  }
+
+  return buildLegacyAuditMetrics(datasets.agentMetrics);
+}
+
+function buildSummary(
+  agentMetrics: AgentMetric[],
+  auditMetrics: AuditMetric[],
+  questionPerformance: QuestionPerformance[],
+  qtMetrics: QtMetric[]
+) {
+  const agentKeys = new Set([
+    ...agentMetrics.map((record) => record.agentKey),
+    ...auditMetrics.map((record) => record.agentKey)
+  ]);
+
+  return {
+    auditAverage: average(auditMetrics.map((record) => record.auditScore)),
+    previousAuditAccuracyAverage: average(auditMetrics.map((record) => record.previousAuditAccuracy)),
     csatAverage: average(agentMetrics.map((record) => record.callEvaluationAverage)),
     qtCoverageAverage: average(qtMetrics.map((record) => record.feedbackCoverage)),
     totalConversationCount: sum(agentMetrics.map((record) => record.totalConversationCount)),
-    agentCount: agentMetrics.length,
+    agentCount: agentKeys.size,
     questionCount: questionPerformance.length,
     qtRepresentativeCount: qtMetrics.length
   };
@@ -121,12 +227,16 @@ export function buildDashboardSnapshot(params: {
   datasets: ReportDatasets;
   compareDatasets?: ReportDatasets;
   thresholds?: ThresholdMap;
+  hiddenAgentKeys?: Set<string>;
 }): DashboardSnapshot {
   const thresholds = params.thresholds ?? structuredClone(DEFAULT_THRESHOLDS);
-  const currentAgents = params.datasets.agentMetrics;
-  const compareAgents = params.compareDatasets?.agentMetrics ?? [];
-  const auditItems = buildAgentDeltaMap(currentAgents, compareAgents, "auditScore");
-  const csatItems = buildAgentDeltaMap(currentAgents, compareAgents, "callEvaluationAverage");
+  const hidden = params.hiddenAgentKeys ?? new Set<string>();
+  const currentAgents = params.datasets.agentMetrics.filter((r) => !hidden.has(r.agentKey));
+  const compareAgents = (params.compareDatasets?.agentMetrics ?? []).filter((r) => !hidden.has(r.agentKey));
+  const currentAudits = selectAuditMetrics(params.datasets).filter((r) => !hidden.has(r.agentKey));
+  const compareAudits = (params.compareDatasets ? selectAuditMetrics(params.compareDatasets) : []).filter((r) => !hidden.has(r.agentKey));
+  const auditItems = buildMetricDeltaMap(currentAudits, compareAudits, (record) => record.auditScore);
+  const csatItems = buildMetricDeltaMap(currentAgents, compareAgents, (record) => record.callEvaluationAverage);
   const auditDesc = sortMetricItems(auditItems, "desc");
   const auditAsc = sortMetricItems(auditItems, "asc");
   const csatDesc = sortMetricItems(csatItems, "desc");
@@ -140,7 +250,7 @@ export function buildDashboardSnapshot(params: {
   const highlights: DashboardSnapshot["highlights"] = {};
   const bestAudit = pickFirst(auditDesc);
   const lowestAudit = pickFirst(auditAsc);
-  const bestCsat = pickFirst(csatDesc);
+  const bestCsat = pickTopWithTies(csatDesc);
   const lowestCsat = pickFirst(csatAsc);
   const mostImproved = pickFirst(deltaSorted);
   const mostDeclined = pickFirst(deltaAsc);
@@ -157,6 +267,7 @@ export function buildDashboardSnapshot(params: {
     ...(params.compareToPeriod ? { compareToPeriod: params.compareToPeriod } : {}),
     summary: buildSummary(
       params.datasets.agentMetrics,
+      currentAudits,
       params.datasets.questionPerformance,
       params.datasets.qtMetrics
     ),

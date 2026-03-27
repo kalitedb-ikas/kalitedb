@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import type { Role } from "@kalitedb/shared";
+import { isDevelopment } from "./env";
 import { getFirebaseAdminAuth } from "./firebase-admin";
 import { getRepository } from "./repository";
 import { ApiError } from "./responses";
@@ -21,34 +22,50 @@ function getBearerToken(request: NextRequest) {
   return authorization.slice("Bearer ".length).trim();
 }
 
-const BYPASS_USERS: Record<string, AuthUser> = {
-  "dev-admin": { uid: "dev-admin", email: "admin@local.dev", displayName: "Dev Admin", role: "admin" },
-  "dev-team": { uid: "dev-team", email: "team@local.dev", displayName: "Dev Team", role: "team" },
-  "dev-ceo": { uid: "dev-ceo", email: "ceo@local.dev", displayName: "Dev CEO", role: "ceo" }
-};
-
 function getBypassUser(token: string | undefined): AuthUser | undefined {
-  if (process.env.APP_AUTH_BYPASS !== "true" || !token) {
+  if (!isDevelopment() || process.env.APP_AUTH_BYPASS !== "true" || !token) {
     return undefined;
   }
 
-  return BYPASS_USERS[token];
+  const bypassUsers: Record<string, AuthUser> = {
+    "dev-admin": {
+      uid: "dev-admin",
+      email: "admin@local.dev",
+      displayName: "Dev Admin",
+      role: "admin"
+    },
+    "dev-team": {
+      uid: "dev-team",
+      email: "team@local.dev",
+      displayName: "Dev Team",
+      role: "team"
+    },
+    "dev-ceo": {
+      uid: "dev-ceo",
+      email: "ceo@local.dev",
+      displayName: "Dev CEO",
+      role: "ceo"
+    },
+    "dev-qt": {
+      uid: "dev-qt",
+      email: "qt@local.dev",
+      displayName: "Dev QT",
+      role: "qt"
+    }
+  };
+
+  return bypassUsers[token];
 }
 
-export async function requireAuth(request: NextRequest, allowedRoles?: Role[]): Promise<AuthUser> {
-  const token = getBearerToken(request);
+function canBootstrapFirstAdmin() {
+  return isDevelopment() && process.env.APP_ALLOW_FIRST_ADMIN_BOOTSTRAP === "true";
+}
+
+async function authenticateToken(token: string): Promise<AuthUser> {
   const bypassUser = getBypassUser(token);
 
   if (bypassUser) {
-    if (allowedRoles && !allowedRoles.includes(bypassUser.role)) {
-      throw new ApiError(403, "Bu işlem için yetkiniz yok.");
-    }
-
     return bypassUser;
-  }
-
-  if (!token) {
-    throw new ApiError(401, "Yetkilendirme bilgisi eksik.");
   }
 
   const decoded = await getFirebaseAdminAuth().verifyIdToken(token);
@@ -58,14 +75,22 @@ export async function requireAuth(request: NextRequest, allowedRoles?: Role[]): 
   }
 
   const repository = await getRepository();
-  const mappedRole = (decoded.role as Role | undefined) ?? (await repository.findRoleByEmail(email));
+  let mappedRole = (decoded.role as Role | undefined) ?? (await repository.findRoleByEmail(email));
+
+  if (!mappedRole && canBootstrapFirstAdmin() && !(await repository.hasAnyUserRoles())) {
+    const now = new Date().toISOString();
+    const bootstrapAssignment = await repository.upsertUserRole({
+      uid: decoded.uid,
+      email,
+      role: "admin",
+      createdAt: now,
+      updatedAt: now
+    });
+    mappedRole = bootstrapAssignment.role;
+  }
 
   if (!mappedRole) {
     throw new ApiError(403, "Kullanıcı rol tanımı bulunamadı.");
-  }
-
-  if (allowedRoles && !allowedRoles.includes(mappedRole)) {
-    throw new ApiError(403, "Bu işlem için yetkiniz yok.");
   }
 
   return {
@@ -74,4 +99,39 @@ export async function requireAuth(request: NextRequest, allowedRoles?: Role[]): 
     displayName: decoded.name ?? email,
     role: mappedRole
   };
+}
+
+export async function getOptionalAuth(request: NextRequest, allowedRoles?: Role[]): Promise<AuthUser | null> {
+  const token = getBearerToken(request);
+  if (!token) {
+    return null;
+  }
+
+  let user: AuthUser;
+  try {
+    user = await authenticateToken(token);
+  } catch {
+    return null;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return null;
+  }
+
+  return user;
+}
+
+export async function requireAuth(request: NextRequest, allowedRoles?: Role[]): Promise<AuthUser> {
+  const token = getBearerToken(request);
+
+  if (!token) {
+    throw new ApiError(401, "Yetkilendirme bilgisi eksik.");
+  }
+
+  const user = await authenticateToken(token);
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    throw new ApiError(403, "Bu işlem için yetkiniz yok.");
+  }
+
+  return user;
 }

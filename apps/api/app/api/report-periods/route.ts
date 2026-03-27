@@ -12,9 +12,8 @@ const createPeriodSchema = z.object({
   compareToPeriodId: z.string().optional()
 });
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    await requireAuth(request as never, ["admin", "team", "ceo"]);
     const repository = await getRepository();
     const periods = await repository.listReportPeriods();
     return jsonResponse(periods);

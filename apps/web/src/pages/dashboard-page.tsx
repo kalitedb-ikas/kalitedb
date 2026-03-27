@@ -1,136 +1,202 @@
-import { useQuery } from "@tanstack/react-query";
-import { Leaderboard, SectionCard, StatCard } from "@kalitedb/ui";
+import {
+  Award,
+  BookOpen,
+  CheckCircle2,
+} from "lucide-react";
+import {
+  ExecutiveChartCard,
+  Leaderboard,
+  PageHeader,
+  StatCard,
+  SurfaceCard
+} from "@kalitedb/ui";
+import { resolveThresholdTone, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { MetricBarChart } from "../components/metric-chart";
-import { PeriodFilters } from "../components/period-filters";
+import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
-import { formatDelta, formatNumber, formatPercent } from "../lib/format";
+import { formatAuditScore, formatDelta, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
+import { brand, chart } from "../theme/colors";
+
+const TREND_DATASET_TYPES = ["agent-metrics", "audit-metrics"] as const;
 
 export function DashboardPage() {
   const auth = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
-    queryFn: () => api.getPeriods(auth.token)
+    queryFn: () => api.getPeriods(auth.token),
+    staleTime: 5 * 60 * 1000
   });
 
-  const periodId = searchParams.get("periodId") ?? periodsQuery.data?.[0]?.id;
+  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
   const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
 
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
     queryKey: ["dashboard", auth.token, periodId, compareToPeriodId],
-    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId)
+    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000
   });
 
   const snapshot = dashboardQuery.data;
+  const selectedPeriod = periodsQuery.data?.find((period) => period.id === periodId);
+  const selectedYear = selectedPeriod?.month.slice(0, 4);
+
+  const yearPeriods = useMemo(
+    () =>
+      selectedYear
+        ? (periodsQuery.data ?? [])
+            .filter((period) => period.month.startsWith(`${selectedYear}-`))
+            .sort((left, right) => left.month.localeCompare(right.month))
+        : [],
+    [periodsQuery.data, selectedYear]
+  );
+
+  const yearlyTrendQuery = useQuery({
+    enabled: yearPeriods.length > 0,
+    queryKey: ["dashboard-yearly-trends", auth.token, selectedYear, yearPeriods.map((period) => period.id).join(",")],
+    queryFn: async () => {
+      const results = await Promise.all(
+        yearPeriods.map(async (period) => {
+          const summary = await api.getDashboard(auth.token, period.id, undefined, {
+            datasetTypes: [...TREND_DATASET_TYPES]
+          });
+
+          return {
+            periodId: period.id,
+            period: period.month,
+            title: period.title,
+            audit: summary.summary.auditAverage,
+            csat: summary.summary.csatAverage
+          };
+        })
+      );
+
+      return buildYearTrendPoints({
+        year: selectedYear!,
+        currentPeriodId: periodId,
+        points: results
+      });
+    },
+    staleTime: 5 * 60 * 1000
+  });
+
+  const previousAuditAccuracyAverage = snapshot?.summary.previousAuditAccuracyAverage ?? null;
+  const previousAuditAccuracyLabel = useMemo(() => {
+    const previousPeriod = getPreviousPeriod(snapshot?.period.month);
+    return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
+  }, [snapshot?.period.month]);
+
+  const previousAuditAccuracyTone = useMemo(() => {
+    if (previousAuditAccuracyAverage === null) {
+      return "neutral" as const;
+    }
+    if (previousAuditAccuracyAverage >= 80) return "green" as const;
+    if (previousAuditAccuracyAverage >= 60) return "yellow" as const;
+    return "red" as const;
+  }, [previousAuditAccuracyAverage]);
+
+  const yearlyTrend = yearlyTrendQuery.data ?? [];
 
   return (
     <div className="space-y-6">
-      <PeriodFilters
-        compareToPeriodId={compareToPeriodId}
-        onCompareChange={(value) => {
-          const next = new URLSearchParams(searchParams);
-          if (value) {
-            next.set("compareToPeriodId", value);
-          } else {
-            next.delete("compareToPeriodId");
-          }
-          setSearchParams(next);
-        }}
-        onPeriodChange={(value) => {
-          const next = new URLSearchParams(searchParams);
-          next.set("periodId", value);
-          setSearchParams(next);
-        }}
-        periodId={periodId}
-        periods={periodsQuery.data ?? []}
-      />
+      <PageHeader title="Genel Bakış" />
 
       {snapshot ? (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Audit ortalaması" tone="green" value={formatPercent(snapshot.summary.auditAverage)} />
-            <StatCard label="Kayıp Sorular" tone="yellow" value={formatPercent(snapshot.summary.missingQuestionsAverage)} />
-            <StatCard label="CSAT ortalaması" tone="neutral" value={formatNumber(snapshot.summary.csatAverage, 3)} />
+          <div className="grid gap-4 lg:grid-cols-3">
             <StatCard
-              label="Toplam görüşme"
-              tone="neutral"
-              value={formatNumber(snapshot.summary.totalConversationCount)}
+              emphasis="primary"
+              icon={<CheckCircle2 size={18} />}
+              label="Audit ortalaması"
+              tone={snapshot.thresholds.auditScore ? resolveThresholdTone(snapshot.summary.auditAverage, snapshot.thresholds.auditScore) : "neutral"}
+              value={formatAuditScore(snapshot.summary.auditAverage)}
+            />
+            <StatCard
+              icon={<Award size={18} />}
+              label="CSAT ortalaması"
+              tone={
+                snapshot.thresholds.callEvaluationAverage
+                  ? resolveThresholdTone(snapshot.summary.csatAverage, snapshot.thresholds.callEvaluationAverage)
+                  : "neutral"
+              }
+              value={formatNumber(snapshot.summary.csatAverage, 3)}
+            />
+            <StatCard
+              icon={<BookOpen size={18} />}
+              label={previousAuditAccuracyLabel}
+              tone={previousAuditAccuracyTone}
+              value={formatPercent(previousAuditAccuracyAverage)}
             />
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <SectionCard title="Aylık özet" description="Yükselen ve düşen isimler seçilen karşılaştırma ayına göre hesaplanır.">
-              <div className="grid gap-4 md:grid-cols-2">
-                <StatCard
-                  hint={snapshot.highlights.bestAudit ? snapshot.highlights.bestAudit.label : "Veri yok"}
-                  label="En yüksek audit"
-                  tone="green"
-                  value={formatPercent(snapshot.highlights.bestAudit?.value)}
-                />
-                <StatCard
-                  hint={snapshot.highlights.lowestAudit ? snapshot.highlights.lowestAudit.label : "Veri yok"}
-                  label="En düşük audit"
-                  tone="red"
-                  value={formatPercent(snapshot.highlights.lowestAudit?.value)}
-                />
-                <StatCard
-                  hint={snapshot.highlights.bestCsat ? snapshot.highlights.bestCsat.label : "Veri yok"}
-                  label="En yüksek CSAT"
-                  tone="green"
-                  value={formatNumber(snapshot.highlights.bestCsat?.value, 3)}
-                />
-                <StatCard
-                  hint={
-                    snapshot.highlights.mostImproved
-                      ? `${snapshot.highlights.mostImproved.label} (${formatDelta(snapshot.highlights.mostImproved.delta)})`
-                      : "Veri yok"
-                  }
-                  label="En çok yükselen"
-                  tone="yellow"
-                  value={snapshot.highlights.mostImproved?.label ?? "-"}
-                />
-              </div>
-            </SectionCard>
+          <ExecutiveChartCard title="Yıllık">
+            <div className="grid gap-4 xl:grid-cols-2">
+              <TrendLineCard
+                color={chart.barDefault}
+                data={yearlyTrend}
+                emptyMessage={
+                  yearlyTrendQuery.isPending
+                    ? "Yıllık audit verisi yükleniyor..."
+                    : yearlyTrendQuery.isError
+                      ? "Audit verisi alınamadı."
+                      : "Bu yıl için audit verisi bulunamadı."
+                }
+                metricKey="audit"
+                title="Audit"
+                valueFormatter={(value) => formatAuditScore(value)}
+                yDomain={[0, 100]}
+              />
+              <TrendLineCard
+                color={brand.sky}
+                data={yearlyTrend}
+                emptyMessage={
+                  yearlyTrendQuery.isPending
+                    ? "Yıllık CSAT verisi yükleniyor..."
+                    : yearlyTrendQuery.isError
+                      ? "CSAT verisi alınamadı."
+                      : "Bu yıl için CSAT verisi bulunamadı."
+                }
+                metricKey="csat"
+                title="CSAT"
+                valueFormatter={(value) => formatNumber(value, 3)}
+                yDomain={[4.5, 5]}
+                yTicks={[4.5, 4.6, 4.7, 4.8, 4.9, 5]}
+              />
+            </div>
+          </ExecutiveChartCard>
 
-            <MetricBarChart
-              color="#EB7155"
-              data={(snapshot.rankings.auditTop ?? []).map((item) => ({
-                label: item.label,
-                value: item.value ?? 0
-              }))}
-            />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-6 xl:grid-cols-2">
             <Leaderboard
-              items={snapshot.rankings.auditTop.map((item) => ({
-                id: item.id,
-                label: item.label,
-                value: formatPercent(item.value),
-                delta: formatDelta(item.delta)
+              items={snapshot.rankings.auditTop.slice(0, 5).map((agent) => ({
+                id: agent.id,
+                label: agent.label,
+                value: formatAuditScore(agent.value),
+                ...(agent.delta != null ? { delta: `Değişim ${formatDelta(agent.delta)}` } : {})
               }))}
-              title="Audit liderleri"
+              title="Audit lider tablosu"
             />
             <Leaderboard
-              items={snapshot.rankings.csatTop.map((item) => ({
-                id: item.id,
-                label: item.label,
-                value: formatNumber(item.value, 3),
-                delta: formatDelta(item.delta)
+              items={snapshot.rankings.csatTop.slice(0, 5).map((agent) => ({
+                id: agent.id,
+                label: agent.label,
+                value: formatNumber(agent.value, 3),
+                ...(agent.delta != null ? { delta: `Değişim ${formatNumber(agent.delta, 2)}` } : {})
               }))}
-              title="CSAT liderleri"
+              title="CSAT lider tablosu"
             />
           </div>
         </>
       ) : (
-        <SectionCard title="Genel Bakış">
-          <p className="text-sm text-slate-500">Veri yükleniyor veya henüz dönem bulunmuyor.</p>
-        </SectionCard>
+        <SurfaceCard title="Genel Bakış" variant="default">
+          <p className="text-sm text-slate-600">Veri yükleniyor veya henüz dönem bulunmuyor.</p>
+        </SurfaceCard>
       )}
     </div>
   );

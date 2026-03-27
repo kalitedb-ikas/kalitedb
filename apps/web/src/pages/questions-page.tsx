@@ -1,113 +1,148 @@
-import { HeatChip, Leaderboard, SectionCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { BookOpen, Target } from "lucide-react";
 import { useMemo, useState } from "react";
-import { type QuestionPerformance } from "@kalitedb/shared";
+import { selectDefaultReportPeriod, type QuestionPerformance } from "@kalitedb/shared";
+import { ExecutiveChartCard, HeatChip, PageHeader, QuestionSpotlight, StatCard, SurfaceCard } from "@kalitedb/ui";
+import { useSearchParams } from "react-router-dom";
 
 import { DataTable } from "../components/data-table";
-import { PeriodFilters } from "../components/period-filters";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
-import { formatPercent } from "../lib/format";
+import { formatPercent, formatNumber } from "../lib/format";
 
 const columnHelper = createColumnHelper<QuestionPerformance>();
 
+function resolveQuestionAccuracyTone(value: number) {
+  if (value >= 80) {
+    return "green" as const;
+  }
+
+  if (value >= 60) {
+    return "yellow" as const;
+  }
+
+  return "red" as const;
+}
+
 export function QuestionsPage() {
   const auth = useAuth();
+  const [searchParams] = useSearchParams();
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
-    queryFn: () => api.getPeriods(auth.token)
+    queryFn: () => api.getPeriods(auth.token),
+    staleTime: 5 * 60 * 1000
   });
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string | undefined>();
-  const [compareToPeriodId, setCompareToPeriodId] = useState<string | undefined>();
   const [topic, setTopic] = useState("");
-  const periodId = selectedPeriodId ?? periodsQuery.data?.[0]?.id;
+  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
+  const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
+
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
     queryKey: ["dashboard", auth.token, periodId, compareToPeriodId],
-    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId)
+    queryFn: () => api.getDashboard(auth.token, periodId, compareToPeriodId),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000
   });
 
+  const snapshot = dashboardQuery.data;
+  const allQuestions = useMemo(() => snapshot?.datasets.questionPerformance ?? [], [snapshot]);
+  const weakestQuestions = useMemo(() => snapshot?.rankings.weakestQuestions ?? [], [snapshot]);
+  const strongestQuestions = useMemo(() => snapshot?.rankings.strongestQuestions ?? [], [snapshot]);
+
   const rows = useMemo(() => {
-    const dataset = dashboardQuery.data?.datasets.questionPerformance ?? [];
-    if (!topic) {
-      return dataset;
-    }
+    if (!topic) return allQuestions;
+    return allQuestions.filter((item) => item.topic === topic);
+  }, [allQuestions, topic]);
 
-    return dataset.filter((item) => item.topic === topic);
-  }, [dashboardQuery.data?.datasets.questionPerformance, topic]);
+  const topics = useMemo(() => Array.from(new Set(allQuestions.map((item) => item.topic))), [allQuestions]);
+  const averageAccuracy =
+    allQuestions.length > 0
+      ? allQuestions.reduce((sum, question) => sum + question.accuracyRate, 0) / allQuestions.length
+      : null;
 
-  const topics = Array.from(new Set((dashboardQuery.data?.datasets.questionPerformance ?? []).map((item) => item.topic)));
   const columns: ColumnDef<QuestionPerformance, any>[] = [
-    columnHelper.accessor("questionText", {
-      header: "Sorular (CS-KEY)"
-    }),
+    columnHelper.accessor("questionText", { header: "Soru" }),
     columnHelper.accessor("accuracyRate", {
-      header: "Doğru Bilinme Oranı",
+      header: "Doğru bilinme oranı",
       cell: (info) => (
-        <HeatChip
-          tone={info.getValue() >= 90 ? "green" : info.getValue() >= 70 ? "yellow" : "red"}
-          value={formatPercent(info.getValue())}
-        />
+        <HeatChip tone={resolveQuestionAccuracyTone(info.getValue())} value={formatPercent(info.getValue())} />
       )
     }),
-    columnHelper.accessor("correctCount", {
-      header: "Doğru"
-    }),
-    columnHelper.accessor("wrongCount", {
-      header: "Yanlış"
-    }),
-    columnHelper.accessor("topic", {
-      header: "Konu Başlıkları"
-    })
+    columnHelper.accessor("correctCount", { header: "Doğru" }),
+    columnHelper.accessor("wrongCount", { header: "Yanlış" })
   ];
 
   return (
     <div className="space-y-6">
-      <PeriodFilters
-        compareToPeriodId={compareToPeriodId}
-        onCompareChange={(value) => setCompareToPeriodId(value || undefined)}
-        onPeriodChange={(value) => setSelectedPeriodId(value)}
-        periodId={periodId}
-        periods={periodsQuery.data ?? []}
-      />
+      <PageHeader title="Sorular" />
 
-      <SectionCard
-        title="Konu filtresi"
-        actions={
-          <select className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setTopic(event.target.value)} value={topic}>
-            <option value="">Tüm konu başlıkları</option>
-            {topics.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        }
-      >
-        <div className="grid gap-4 xl:grid-cols-2">
-          <Leaderboard
-            items={(dashboardQuery.data?.rankings.weakestQuestions ?? []).map((item) => ({
-              id: item.id,
-              label: item.questionText,
-              value: formatPercent(item.accuracyRate)
-            }))}
-            title="En zayıf sorular"
-          />
-          <Leaderboard
-            items={(dashboardQuery.data?.rankings.strongestQuestions ?? []).map((item) => ({
-              id: item.id,
-              label: item.questionText,
-              value: formatPercent(item.accuracyRate)
-            }))}
-            title="En güçlü sorular"
-          />
-        </div>
-      </SectionCard>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatCard
+          emphasis="primary"
+          icon={<BookOpen size={18} />}
+          label="Toplam soru"
+          tone="neutral"
+          value={formatNumber(allQuestions.length)}
+        />
+        <StatCard
+          icon={<Target size={18} />}
+          label="Ortalama doğruluk"
+          tone={averageAccuracy != null && averageAccuracy >= 80 ? "green" : averageAccuracy != null && averageAccuracy >= 60 ? "yellow" : "red"}
+          value={formatPercent(averageAccuracy)}
+        />
+      </div>
 
-      <SectionCard title="Soru performansı tablosu">
-        <DataTable columns={columns} data={rows} />
-      </SectionCard>
+      <div className="grid gap-6">
+        <ExecutiveChartCard title="Soru performans görünümü">
+          <div className="grid gap-4 md:grid-cols-2">
+            <QuestionSpotlight
+              accent="from-rose-100 to-transparent"
+              label="En kırılgan soru"
+              score={formatPercent(weakestQuestions[0]?.accuracyRate)}
+              title={weakestQuestions[0]?.questionText ?? "Veri bekleniyor"}
+              topic={weakestQuestions[0]?.topic ?? "Başlık yok"}
+              tone="text-rose-600"
+            />
+            <QuestionSpotlight
+              accent="from-emerald-100 to-transparent"
+              label="En güçlü soru"
+              score={formatPercent(strongestQuestions[0]?.accuracyRate)}
+              title={strongestQuestions[0]?.questionText ?? "Veri bekleniyor"}
+              topic={strongestQuestions[0]?.topic ?? "Başlık yok"}
+              tone="text-emerald-600"
+            />
+          </div>
+        </ExecutiveChartCard>
+      </div>
+
+      <div className="grid gap-6">
+        <SurfaceCard
+          actions={
+            <select
+              className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 focus:border-primary/40 focus:outline-none"
+              onChange={(event) => setTopic(event.target.value)}
+              value={topic}
+            >
+              <option value="">Tüm kategoriler</option>
+              {topics.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          }
+          title="Detay tablo görünümü"
+          variant="default"
+        >
+          <DataTable
+            columns={columns}
+            data={rows}
+            density="comfortable"
+            emptyState="Seçilen dönemde gösterilecek soru verisi bulunamadı."
+          />
+        </SurfaceCard>
+      </div>
     </div>
   );
 }

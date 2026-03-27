@@ -5,6 +5,7 @@ import {
 } from "@kalitedb/shared";
 
 import { requireAuth } from "@/src/lib/auth";
+import { MAX_UPLOAD_BYTES } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository";
 import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
 
@@ -19,9 +20,13 @@ export async function POST(
     const { periodId, datasetType: rawDatasetType } = await context.params;
     const datasetType = datasetTypeSchema.parse(rawDatasetType);
     const repository = await getRepository();
-    const details = await repository.getPeriodDetails(periodId);
-    if (!details) {
+    const period = await repository.getReportPeriod(periodId);
+    if (!period) {
       throw new ApiError(404, "Dönem bulunamadı.");
+    }
+
+    if (datasetType === "qt-metrics") {
+      throw new ApiError(400, "QT verileri artık CSV ile değil, QT kullanıcıları tarafından manuel giriliyor.");
     }
 
     const formData = await request.formData();
@@ -32,8 +37,36 @@ export async function POST(
       throw new ApiError(400, "CSV dosyası gerekli.");
     }
 
+    if (file.size > MAX_UPLOAD_BYTES) {
+      const limitMB = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024));
+      throw new ApiError(413, `Dosya boyutu ${limitMB} MB sınırını aşıyor.`);
+    }
+
     const text = await file.text();
-    const preview = parseDatasetCsv({ datasetType, text, expectedPeriod: details.period.month });
+    const preview =
+      datasetType === "agent-metrics"
+        ? parseDatasetCsv({
+            datasetType,
+            text,
+            expectedPeriod: period.month
+          })
+        : datasetType === "audit-metrics"
+          ? parseDatasetCsv({
+              datasetType,
+              text,
+              expectedPeriod: period.month
+            })
+          : datasetType === "question-performance"
+            ? parseDatasetCsv({
+                datasetType,
+                text,
+                expectedPeriod: period.month
+              })
+            : parseDatasetCsv({
+                datasetType,
+                text,
+                expectedPeriod: period.month
+              });
 
     if (preview.errors.length > 0 || !commit) {
       return jsonResponse({

@@ -11,7 +11,7 @@ const patchThresholdSchema = z.record(kpiMetricKeySchema, thresholdConfigSchema.
 
 export async function GET(request: Request) {
   try {
-    await requireAuth(request as never, ["admin", "team", "ceo"]);
+    await requireAuth(request as never, ["admin", "team", "ceo", "qt"]);
     const repository = await getRepository();
     const thresholds = await repository.getThresholds();
     return jsonResponse(thresholds);
@@ -37,4 +37,3 @@ export async function PATCH(request: Request) {
     return handleRouteError(error);
   }
 }
-
