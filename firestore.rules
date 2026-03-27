@@ -99,5 +99,10 @@ service cloud.firestore {
       allow get, list: if canManageReports();
       allow create, update, delete: if canManageReports();
     }
+
+    match /hiddenRepresentatives/{agentKey} {
+      allow get, list: if canRead();
+      allow create, update, delete: if isAdmin();
+    }
   }
 }

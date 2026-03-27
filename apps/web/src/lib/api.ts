@@ -23,7 +23,7 @@ import {
   thresholdConfigSchema,
   userRoleAssignmentSchema
 } from "@kalitedb/shared";
-import { collection, doc, getDoc, getDocs, orderBy, query, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, setDoc } from "firebase/firestore";
 
 import { toPublicAssetPath } from "./asset-path";
 import { firebaseAuth, firebaseDb } from "./firebase";
@@ -354,7 +354,7 @@ async function getDashboardFromFirebase(
       ? compareToPeriodId
       : undefined;
 
-  const [currentPeriod, currentDatasets, thresholds, compareToPeriod, compareDatasets] = await Promise.all([
+  const [currentPeriod, currentDatasets, thresholds, compareToPeriod, compareDatasets, hiddenAgentKeys] = await Promise.all([
     getReportPeriodFromFirebase(resolvedPeriodId, periods),
     getPeriodDatasetsFromFirebase(resolvedPeriodId, options?.datasetTypes),
     getThresholdsFromFirebase(),
@@ -363,7 +363,8 @@ async function getDashboardFromFirebase(
       : Promise.resolve(undefined),
     resolvedCompareToPeriodId
       ? getPeriodDatasetsFromFirebase(resolvedCompareToPeriodId, options?.datasetTypes)
-      : Promise.resolve(undefined)
+      : Promise.resolve(undefined),
+    getHiddenRepresentativesFromFirebase().catch(() => new Set<string>())
   ]);
 
   return buildDashboardSnapshot({
@@ -375,7 +376,8 @@ async function getDashboardFromFirebase(
           compareDatasets
         }
       : {}),
-    thresholds
+    thresholds,
+    hiddenAgentKeys
   });
 }
 
@@ -505,6 +507,29 @@ async function updateQtManualEntryFromFirebase(
 
   await setDoc(doc(firebaseDb, "reportPeriods", periodId, "qtManualEntries", currentEntry.userKey), nextEntry);
   return nextEntry;
+}
+
+async function getHiddenRepresentativesFromFirebase(): Promise<Set<string>> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const snapshot = await getDocs(collection(firebaseDb, "hiddenRepresentatives"));
+  return new Set(snapshot.docs.map((d) => d.id));
+}
+
+async function setRepresentativeHiddenFromFirebase(agentKey: string, agentName: string, hidden: boolean): Promise<void> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const ref = doc(firebaseDb, "hiddenRepresentatives", agentKey);
+
+  if (hidden) {
+    await setDoc(ref, { agentKey, agentName, hiddenAt: new Date().toISOString() });
+  } else {
+    await deleteDoc(ref);
+  }
 }
 
 function appendDatasetTypes(params: URLSearchParams, datasetTypes?: DatasetType[]) {
@@ -1008,5 +1033,19 @@ export const api = {
 
       return updateQtManualEntryFromFirebase(periodId, body, target);
     }
+  },
+  async getHiddenRepresentatives(): Promise<Set<string>> {
+    if (shouldPreferFirebaseReadMode() || shouldPreferFirebaseClientMode()) {
+      return getHiddenRepresentativesFromFirebase();
+    }
+
+    try {
+      return await getHiddenRepresentativesFromFirebase();
+    } catch {
+      return new Set();
+    }
+  },
+  async setRepresentativeHidden(agentKey: string, agentName: string, hidden: boolean): Promise<void> {
+    return setRepresentativeHiddenFromFirebase(agentKey, agentName, hidden);
   }
 };

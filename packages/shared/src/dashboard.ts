@@ -227,12 +227,14 @@ export function buildDashboardSnapshot(params: {
   datasets: ReportDatasets;
   compareDatasets?: ReportDatasets;
   thresholds?: ThresholdMap;
+  hiddenAgentKeys?: Set<string>;
 }): DashboardSnapshot {
   const thresholds = params.thresholds ?? structuredClone(DEFAULT_THRESHOLDS);
-  const currentAgents = params.datasets.agentMetrics;
-  const compareAgents = params.compareDatasets?.agentMetrics ?? [];
-  const currentAudits = selectAuditMetrics(params.datasets);
-  const compareAudits = params.compareDatasets ? selectAuditMetrics(params.compareDatasets) : [];
+  const hidden = params.hiddenAgentKeys ?? new Set<string>();
+  const currentAgents = params.datasets.agentMetrics.filter((r) => !hidden.has(r.agentKey));
+  const compareAgents = (params.compareDatasets?.agentMetrics ?? []).filter((r) => !hidden.has(r.agentKey));
+  const currentAudits = selectAuditMetrics(params.datasets).filter((r) => !hidden.has(r.agentKey));
+  const compareAudits = (params.compareDatasets ? selectAuditMetrics(params.compareDatasets) : []).filter((r) => !hidden.has(r.agentKey));
   const auditItems = buildMetricDeltaMap(currentAudits, compareAudits, (record) => record.auditScore);
   const csatItems = buildMetricDeltaMap(currentAgents, compareAgents, (record) => record.callEvaluationAverage);
   const auditDesc = sortMetricItems(auditItems, "desc");
