@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
+import { isDevelopment, isProduction } from "./env";
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -11,23 +13,37 @@ export class ApiError extends Error {
   }
 }
 
-function shouldUseWildcardCors(origin: string | undefined) {
-  if (!origin) {
-    return true;
+function resolveAllowedOrigin(): string {
+  const configuredOrigin = process.env.APP_WEB_ORIGIN?.trim();
+
+  if (configuredOrigin && configuredOrigin !== "") {
+    if (configuredOrigin.includes("localhost") || configuredOrigin.includes("127.0.0.1")) {
+      return "*";
+    }
+    return configuredOrigin;
   }
 
-  return origin.includes("localhost") || origin.includes("127.0.0.1");
+  if (isProduction()) {
+    throw new Error("APP_WEB_ORIGIN must be set in production.");
+  }
+
+  return "*";
 }
 
 export function getCorsHeaders() {
-  const configuredOrigin = process.env.APP_WEB_ORIGIN;
-  const origin = shouldUseWildcardCors(configuredOrigin) ? "*" : configuredOrigin ?? "*";
+  const origin = resolveAllowedOrigin();
 
-  return {
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, bypass-tunnel-reminder"
+    "Access-Control-Allow-Headers": "Content-Type, Authorization"
   };
+
+  if (isDevelopment()) {
+    headers["Access-Control-Allow-Headers"] += ", bypass-tunnel-reminder";
+  }
+
+  return headers;
 }
 
 export function optionsResponse() {
@@ -52,20 +68,27 @@ export function jsonResponse(data: unknown, init?: ResponseInit) {
 
 export function handleRouteError(error: unknown) {
   if (error instanceof ApiError) {
-    return NextResponse.json(
-      { error: error.message, details: error.details },
-      { status: error.status, headers: getCorsHeaders() }
-    );
+    const body: Record<string, unknown> = { error: error.message };
+    if (!isProduction()) {
+      body.details = error.details;
+    }
+    return NextResponse.json(body, {
+      status: error.status,
+      headers: getCorsHeaders()
+    });
   }
 
   if (error instanceof ZodError) {
-    return jsonResponse(
-      {
-        error: error.issues[0]?.message ?? "Gönderilen veri doğrulanamadı.",
-        details: error.issues
-      },
-      { status: 400 }
-    );
+    const body: Record<string, unknown> = {
+      error: error.issues[0]?.message ?? "Gönderilen veri doğrulanamadı."
+    };
+    if (!isProduction()) {
+      body.details = error.issues;
+    }
+    return NextResponse.json({ data: body }, {
+      status: 400,
+      headers: getCorsHeaders()
+    });
   }
 
   console.error(error);

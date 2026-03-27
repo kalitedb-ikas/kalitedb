@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import type { Role } from "@kalitedb/shared";
+import { isDevelopment } from "./env";
 import { getFirebaseAdminAuth } from "./firebase-admin";
 import { getRepository } from "./repository";
 import { ApiError } from "./responses";
@@ -22,7 +23,7 @@ function getBearerToken(request: NextRequest) {
 }
 
 function getBypassUser(token: string | undefined): AuthUser | undefined {
-  if (process.env.APP_AUTH_BYPASS !== "true" || !token) {
+  if (!isDevelopment() || process.env.APP_AUTH_BYPASS !== "true" || !token) {
     return undefined;
   }
 
@@ -57,7 +58,7 @@ function getBypassUser(token: string | undefined): AuthUser | undefined {
 }
 
 function canBootstrapFirstAdmin() {
-  return process.env.APP_ALLOW_FIRST_ADMIN_BOOTSTRAP === "true";
+  return isDevelopment() && process.env.APP_ALLOW_FIRST_ADMIN_BOOTSTRAP === "true";
 }
 
 async function authenticateToken(token: string): Promise<AuthUser> {

@@ -20,6 +20,10 @@ service cloud.firestore {
       return currentRole() == role;
     }
 
+    function canRead() {
+      return isAuthed();
+    }
+
     function canManageReports() {
       return hasRole('admin') || hasRole('team');
     }
@@ -49,39 +53,39 @@ service cloud.firestore {
     }
 
     match /reportPeriods/{periodId} {
-      allow get, list: if true;
+      allow get, list: if canRead();
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/agentMetrics/{recordId} {
-      allow get, list: if true;
+      allow get, list: if canRead();
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/auditMetrics/{recordId} {
-      allow get, list: if true;
+      allow get, list: if canRead();
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/questionPerformance/{recordId} {
-      allow get, list: if true;
+      allow get, list: if canRead();
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/qtMetrics/{recordId} {
-      allow get, list: if true;
+      allow get, list: if canRead();
       allow create, update, delete: if canManageReports();
     }
 
     match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
-      allow get, list: if true;
+      allow get, list: if canRead();
       allow create: if canManageReports() || canCreateOwnQtEntry(userKey);
       allow update: if canManageReports() || canUpdateOwnQtEntry(userKey);
       allow delete: if isAdmin();
     }
 
     match /thresholdConfigs/{metricId} {
-      allow get, list: if true;
+      allow get, list: if canRead();
       allow create, update, delete: if isAdmin();
     }
 
