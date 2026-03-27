@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, signInWithRedirect, signOut, type User } from "firebase/auth";
 
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "./firebase";
 
@@ -90,11 +90,7 @@ export function AuthProvider(props: { children: ReactNode }) {
           return;
         }
 
-        const credential = await signInWithPopup(firebaseAuth, googleProvider);
-        setUser(credential.user);
-        const freshToken = await credential.user.getIdToken();
-        setToken(freshToken);
-        startRefreshTimer(credential.user);
+        await signInWithRedirect(firebaseAuth, googleProvider);
       },
       loginAsDev(role) {
         const nextToken = `dev-${role}`;
