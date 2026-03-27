@@ -737,6 +737,16 @@ async function requestWithPublicFallback<T>(
 
 export const api = {
   async getMe(token: string | null) {
+    if (token?.startsWith("dev-")) {
+      const role = token.slice(4) as AuthenticatedUser["role"];
+      return {
+        uid: "dev-user",
+        email: "dev@localhost",
+        displayName: `Dev (${role})`,
+        role
+      } satisfies AuthenticatedUser;
+    }
+
     if (shouldPreferFirebaseClientMode()) {
       return getMeFromFirebase();
     }
