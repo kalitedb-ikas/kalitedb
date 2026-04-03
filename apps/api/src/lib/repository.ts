@@ -10,9 +10,12 @@ import {
   qtManualEntrySchema,
   qtMetricSchema,
   reportPeriodSchema,
+  teamSchema,
+  userSchema,
   type AgentMetric,
   type AuditMetric,
   type DatasetType,
+  type Department,
   type ImportJob,
   type KpiMetricKey,
   type QuestionPerformance,
@@ -20,7 +23,9 @@ import {
   type QtMetric,
   type ReportDatasets,
   type ReportPeriod,
+  type Team,
   type ThresholdConfig,
+  type User,
   type UserRoleAssignment
 } from "@kalitedb/shared";
 import {
@@ -50,6 +55,8 @@ type LocalDb = {
   thresholds: Record<KpiMetricKey, ThresholdConfig>;
   importJobs: ImportJob[];
   userRoles: UserRoleAssignment[];
+  users: User[];
+  teams: Team[];
   qtManualEntries: QtManualEntry[];
 };
 
@@ -77,6 +84,7 @@ export type Repository = {
   createReportPeriod(input: {
     month: string;
     title: string;
+    department?: Department;
     compareToPeriodId?: string;
   }): Promise<ReportPeriod>;
   updateReportPeriod(periodId: string, patch: ReportPeriodDraftPatch): Promise<ReportPeriod>;
@@ -95,9 +103,20 @@ export type Repository = {
   reopenPeriod(periodId: string): Promise<ReportPeriod>;
   getThresholds(): Promise<Record<KpiMetricKey, ThresholdConfig>>;
   updateThresholds(input: Partial<Record<KpiMetricKey, ThresholdConfig>>): Promise<Record<KpiMetricKey, ThresholdConfig>>;
+  // Eski kullanıcı rolleri (geriye dönük uyumluluk)
   listUserRoles(): Promise<UserRoleAssignment[]>;
   upsertUserRole(input: UserRoleAssignment): Promise<UserRoleAssignment>;
   findRoleByEmail(email: string): Promise<UserRoleAssignment["role"] | undefined>;
+  // Yeni kullanıcı yönetimi
+  listUsers(): Promise<User[]>;
+  findUserByEmail(email: string): Promise<User | undefined>;
+  upsertUser(user: User): Promise<User>;
+  // Takım yönetimi
+  listTeams(department?: Department): Promise<Team[]>;
+  getTeam(teamId: string): Promise<Team | undefined>;
+  createTeam(input: { name: string; department: Department; leaderEmail: string }): Promise<Team>;
+  updateTeam(teamId: string, patch: Partial<Pick<Team, "name" | "leaderEmail" | "memberEmails">>): Promise<Team>;
+  // QT
   getQtManualEntry(periodId: string, userKey: string): Promise<QtManualEntry | undefined>;
   listQtManualEntries(periodId: string): Promise<QtManualEntry[]>;
   upsertQtManualEntry(entry: QtManualEntry): Promise<QtManualEntry>;
@@ -126,6 +145,8 @@ async function ensureLocalDb(): Promise<LocalDb> {
       thresholds: parsed.thresholds ?? structuredClone(DEFAULT_THRESHOLDS),
       importJobs: parsed.importJobs ?? [],
       userRoles: parsed.userRoles ?? [],
+      users: parsed.users ?? [],
+      teams: parsed.teams ?? [],
       qtManualEntries: parsed.qtManualEntries ?? []
     };
   } catch {
@@ -135,6 +156,8 @@ async function ensureLocalDb(): Promise<LocalDb> {
       thresholds: structuredClone(DEFAULT_THRESHOLDS),
       importJobs: [],
       userRoles: [],
+      users: [],
+      teams: [],
       qtManualEntries: []
     };
 
@@ -266,6 +289,7 @@ async function createFileRepository(): Promise<Repository> {
         month: input.month,
         title: input.title,
         status: "draft",
+        department: input.department ?? "cs",
         compareToPeriodId: input.compareToPeriodId,
         createdAt: now,
         updatedAt: now
@@ -437,6 +461,52 @@ async function createFileRepository(): Promise<Repository> {
       await persistLocalDb(db);
       return parsed;
     },
+    async listUsers() {
+      const db = await ensureLocalDb();
+      return db.users.sort((a, b) => a.email.localeCompare(b.email));
+    },
+    async findUserByEmail(email) {
+      const db = await ensureLocalDb();
+      return db.users.find((u) => normalizeRoleEmail(u.email) === normalizeRoleEmail(email));
+    },
+    async upsertUser(user) {
+      const db = await ensureLocalDb();
+      const parsed = userSchema.parse(user);
+      const index = db.users.findIndex((u) => normalizeRoleEmail(u.email) === normalizeRoleEmail(parsed.email));
+      if (index >= 0) {
+        db.users[index] = parsed;
+      } else {
+        db.users.push(parsed);
+      }
+      await persistLocalDb(db);
+      return parsed;
+    },
+    async listTeams(department) {
+      const db = await ensureLocalDb();
+      const teams = db.teams ?? [];
+      return department ? teams.filter((t) => t.department === department) : teams;
+    },
+    async getTeam(teamId) {
+      const db = await ensureLocalDb();
+      return (db.teams ?? []).find((t) => t.id === teamId);
+    },
+    async createTeam(input) {
+      const db = await ensureLocalDb();
+      const now = new Date().toISOString();
+      const team = teamSchema.parse({ id: crypto.randomUUID(), ...input, memberEmails: [], createdAt: now, updatedAt: now });
+      db.teams = [...(db.teams ?? []), team];
+      await persistLocalDb(db);
+      return team;
+    },
+    async updateTeam(teamId, patch) {
+      const db = await ensureLocalDb();
+      const index = (db.teams ?? []).findIndex((t) => t.id === teamId);
+      if (index < 0) throw new ApiError(404, "Takım bulunamadı.");
+      const updated = teamSchema.parse({ ...db.teams[index], ...patch, updatedAt: new Date().toISOString() });
+      db.teams[index] = updated;
+      await persistLocalDb(db);
+      return updated;
+    },
     async storeImportFile(storagePath, content) {
       const filePath = path.join(process.cwd(), ".data", storagePath);
       await mkdir(path.dirname(filePath), { recursive: true });
@@ -564,6 +634,7 @@ async function createFirebaseRepository(): Promise<Repository> {
         month: input.month,
         title: input.title,
         status: "draft",
+        department: input.department ?? "cs",
         compareToPeriodId: input.compareToPeriodId,
         createdAt: now,
         updatedAt: now
@@ -573,6 +644,7 @@ async function createFirebaseRepository(): Promise<Repository> {
         month: payload.month,
         title: payload.title,
         status: payload.status,
+        department: payload.department,
         compareToPeriodId: payload.compareToPeriodId,
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt
@@ -728,6 +800,46 @@ async function createFirebaseRepository(): Promise<Repository> {
         .doc(parsed.userKey)
         .set(parsed);
       return parsed;
+    },
+    async listUsers() {
+      const snapshot = await db.collection("users").orderBy("email", "asc").get();
+      return snapshot.docs.map((doc) => userSchema.parse({ email: doc.id, ...doc.data() }));
+    },
+    async findUserByEmail(email) {
+      const doc = await db.collection("users").doc(normalizeRoleEmail(email)).get();
+      return doc.exists ? userSchema.parse({ email: doc.id, ...doc.data() }) : undefined;
+    },
+    async upsertUser(user) {
+      const parsed = userSchema.parse(user);
+      const key = normalizeRoleEmail(parsed.email);
+      await db.collection("users").doc(key).set(parsed);
+      if (parsed.uid) {
+        await auth.setCustomUserClaims(parsed.uid, { role: parsed.role });
+      }
+      return parsed;
+    },
+    async listTeams(department) {
+      const base = db.collection("teams");
+      const snapshot = await (department ? base.where("department", "==", department) : base).orderBy("name", "asc").get();
+      return snapshot.docs.map((doc) => teamSchema.parse({ id: doc.id, ...doc.data() }));
+    },
+    async getTeam(teamId) {
+      const doc = await db.collection("teams").doc(teamId).get();
+      return doc.exists ? teamSchema.parse({ id: doc.id, ...doc.data() }) : undefined;
+    },
+    async createTeam(input) {
+      const now = new Date().toISOString();
+      const team = teamSchema.parse({ id: crypto.randomUUID(), ...input, memberEmails: [], createdAt: now, updatedAt: now });
+      await db.collection("teams").doc(team.id).set(team);
+      return team;
+    },
+    async updateTeam(teamId, patch) {
+      const doc = await db.collection("teams").doc(teamId).get();
+      if (!doc.exists) throw new ApiError(404, "Takım bulunamadı.");
+      const current = teamSchema.parse({ id: doc.id, ...doc.data() });
+      const updated = teamSchema.parse({ ...current, ...patch, updatedAt: new Date().toISOString() });
+      await db.collection("teams").doc(teamId).set(updated);
+      return updated;
     },
     async storeImportFile(storagePath, content) {
       const bucket = storage.bucket();

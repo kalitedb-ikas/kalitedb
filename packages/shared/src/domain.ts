@@ -3,7 +3,20 @@ import { z } from "zod";
 export const reportStatusSchema = z.enum(["draft", "published"]);
 export const datasetTypeSchema = z.enum(["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"]);
 export const thresholdDirectionSchema = z.enum(["higher_is_better", "lower_is_better"]);
-export const roleSchema = z.enum(["admin", "team", "ceo", "qt"]);
+export const departmentSchema = z.enum(["cs", "sales"]);
+export const managerLevelSchema = z.enum(["senior", "mid", "junior"]);
+export const roleSchema = z.enum([
+  // Yeni roller
+  "admin",
+  "manager",
+  "team_leader",
+  "quality",
+  "representative",
+  // Eski roller (geriye dönük uyumluluk)
+  "team",
+  "ceo",
+  "qt"
+]);
 export const periodSchema = z.string().regex(/^\d{4}-\d{2}$/);
 
 export const kpiMetricKeySchema = z.enum([
@@ -17,6 +30,8 @@ export const kpiMetricKeySchema = z.enum([
 export type ReportStatus = z.infer<typeof reportStatusSchema>;
 export type DatasetType = z.infer<typeof datasetTypeSchema>;
 export type ThresholdDirection = z.infer<typeof thresholdDirectionSchema>;
+export type Department = z.infer<typeof departmentSchema>;
+export type ManagerLevel = z.infer<typeof managerLevelSchema>;
 export type Role = z.infer<typeof roleSchema>;
 export type KpiMetricKey = z.infer<typeof kpiMetricKeySchema>;
 
@@ -27,6 +42,7 @@ export const reportPeriodSchema = z.object({
   month: periodSchema,
   title: z.string().min(1),
   status: reportStatusSchema,
+  department: departmentSchema.default("cs"),
   compareToPeriodId: z.string().optional(),
   manualTotalCallCount: z.number().int().nonnegative().nullable().optional(),
   manualTotalChatMailCount: z.number().int().nonnegative().nullable().optional(),
@@ -129,6 +145,36 @@ export const userRoleAssignmentSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
+// Bir kullanıcının tek bir departmandaki rol tanımı
+export const userRoleEntrySchema = z.object({
+  department: departmentSchema.optional(), // admin için boş (global erişim)
+  role: roleSchema,
+  level: managerLevelSchema.optional(),    // sadece manager için
+  teamId: z.string().optional()            // team_leader / representative için
+});
+
+// Yeni kullanıcı dokümanı (userRoles'un yerini alır)
+export const userSchema = z.object({
+  uid: z.string().optional(),
+  email: z.string().email(),
+  displayName: z.string().optional(),
+  role: roleSchema,                               // birincil rol (kural ve claim uyumu için)
+  roles: z.array(userRoleEntrySchema).default([]), // tüm departman atamaları
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+// Takım dokümanı
+export const teamSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+  department: departmentSchema,
+  leaderEmail: z.string().email(),
+  memberEmails: z.array(z.string().email()).default([]),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
 export const qtManualEntrySchema = z.object({
   id: z.string(),
   periodId: z.string(),
@@ -153,6 +199,9 @@ export type QtMetric = z.infer<typeof qtMetricSchema>;
 export type ThresholdConfig = z.infer<typeof thresholdConfigSchema>;
 export type ImportJob = z.infer<typeof importJobSchema>;
 export type UserRoleAssignment = z.infer<typeof userRoleAssignmentSchema>;
+export type UserRoleEntry = z.infer<typeof userRoleEntrySchema>;
+export type User = z.infer<typeof userSchema>;
+export type Team = z.infer<typeof teamSchema>;
 export type QtManualEntry = z.infer<typeof qtManualEntrySchema>;
 
 export type ImportPreviewError = {
