@@ -199,8 +199,22 @@ export function RepresentativesPage() {
               <div className="grid gap-6 xl:grid-cols-2 xl:items-stretch">
                 <div className="flex items-center justify-center rounded-[28px] border border-slate-200/80 bg-[linear-gradient(135deg,#f8fbff,#eaf4ff)] p-5">
                   <div className="w-full max-w-[420px]">
-                    <div className="relative aspect-[4/3] overflow-hidden rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                      <img alt={selectedName} className="h-full w-full object-cover" src={selectedRepresentative.portraitSrc} />
+                    <div className="relative isolate aspect-[4/3] overflow-hidden rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
+                      <div aria-hidden="true" className="absolute inset-0">
+                        <img
+                          alt=""
+                          className="h-full w-full scale-110 object-cover opacity-25 blur-2xl"
+                          src={selectedRepresentative.portraitSrc}
+                        />
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.4),transparent_55%)]" />
+                      </div>
+                      <div className="relative flex h-full w-full items-center justify-center p-4 sm:p-5">
+                        <img
+                          alt={selectedName}
+                          className="h-full w-full rounded-[22px] object-contain"
+                          src={selectedRepresentative.portraitSrc}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>

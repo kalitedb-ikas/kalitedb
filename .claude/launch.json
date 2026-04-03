@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "API (Next.js)",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@kalitedb/api", "dev"],
+      "port": 3001
+    },
+    {
+      "name": "Web (Vite)",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@kalitedb/web", "dev"],
+      "port": 5173
+    }
+  ]
+}
