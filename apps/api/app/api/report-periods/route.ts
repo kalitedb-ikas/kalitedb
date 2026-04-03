@@ -9,6 +9,7 @@ export const OPTIONS = optionsResponse;
 const createPeriodSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/),
   title: z.string().min(1),
+  department: z.enum(["cs", "sales"]).default("cs"),
   compareToPeriodId: z.string().optional()
 });
 
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     const period = await repository.createReportPeriod({
       month: body.month,
       title: body.title,
+      department: body.department,
       ...(body.compareToPeriodId ? { compareToPeriodId: body.compareToPeriodId } : {})
     });
     return jsonResponse(period, { status: 201 });

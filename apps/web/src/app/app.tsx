@@ -13,6 +13,7 @@ import { LoginPage } from "../pages/login-page";
 import { QtPage } from "../pages/qt-page";
 import { QuestionsPage } from "../pages/questions-page";
 import { RepresentativesPage } from "../pages/representatives-page";
+import { SalesAdminPage } from "../pages/sales-admin-page";
 import { SalesAuditPage } from "../pages/sales-audit-page";
 import { SalesDashboardPage } from "../pages/sales-dashboard-page";
 
@@ -25,7 +26,8 @@ function LoadingScreen() {
 }
 
 function canAccessAdmin(currentUser: AuthenticatedUser | undefined) {
-  return currentUser?.role === "admin" || currentUser?.role === "qt";
+  if (!currentUser) return false;
+  return ["admin", "manager", "team_leader", "team", "qt"].includes(currentUser.role);
 }
 
 function AppRoutes() {
@@ -59,6 +61,18 @@ function AppRoutes() {
         {/* Satış rotaları */}
         <Route element={<SalesDashboardPage />} path="/sales" />
         <Route element={<SalesAuditPage />} path="/sales/audit" />
+        <Route
+          element={
+            auth.token && meQuery.isPending
+              ? <LoadingScreen />
+              : canAccessAdmin(currentUser)
+              ? <SalesAdminPage />
+              : auth.token
+                ? <Navigate replace to="/sales" />
+                : <Navigate replace to="/login" />
+          }
+          path="/sales/admin"
+        />
 
         {/* Yönetim */}
         <Route
