@@ -9,6 +9,7 @@ function buildPeriod(overrides: Partial<ReportPeriod> & Pick<ReportPeriod, "id" 
     month: overrides.month,
     title: overrides.title,
     status: overrides.status ?? "draft",
+    department: overrides.department ?? "cs",
     createdAt: overrides.createdAt ?? "2026-03-01T00:00:00.000Z",
     updatedAt: overrides.updatedAt ?? "2026-03-01T00:00:00.000Z",
     ...(overrides.compareToPeriodId ? { compareToPeriodId: overrides.compareToPeriodId } : {}),

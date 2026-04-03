@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import type { Role } from "@kalitedb/shared";
+import type { Department, Role, UserRoleEntry } from "@kalitedb/shared";
 import { isDevelopment } from "./env";
 import { getFirebaseAdminAuth } from "./firebase-admin";
 import { getRepository } from "./repository";
@@ -10,8 +10,32 @@ export type AuthUser = {
   uid: string;
   email: string;
   displayName: string;
-  role: Role;
+  role: Role;              // birincil rol (geriye dönük uyumluluk)
+  roles: UserRoleEntry[]; // tüm departman atamaları
 };
+
+export function isAdmin(user: AuthUser): boolean {
+  return user.role === "admin";
+}
+
+export function hasRoleInDepartment(user: AuthUser, department: Department, roles: Role[]): boolean {
+  if (isAdmin(user)) return true;
+  return user.roles.some((entry) => entry.department === department && roles.includes(entry.role));
+}
+
+export function canManageReports(user: AuthUser, department?: Department): boolean {
+  if (isAdmin(user)) return true;
+  const managerRoles: Role[] = ["manager", "team_leader", "team"];
+  if (!department) return user.roles.some((entry) => managerRoles.includes(entry.role));
+  return hasRoleInDepartment(user, department, managerRoles);
+}
+
+export function canEnterData(user: AuthUser, department?: Department): boolean {
+  if (canManageReports(user, department)) return true;
+  const qualityRoles: Role[] = ["quality", "qt"];
+  if (!department) return user.roles.some((entry) => qualityRoles.includes(entry.role));
+  return hasRoleInDepartment(user, department, qualityRoles);
+}
 
 function getBearerToken(request: NextRequest) {
   const authorization = request.headers.get("authorization");
@@ -32,25 +56,43 @@ function getBypassUser(token: string | undefined): AuthUser | undefined {
       uid: "dev-admin",
       email: "admin@local.dev",
       displayName: "Dev Admin",
-      role: "admin"
+      role: "admin",
+      roles: [{ role: "admin" }]
     },
     "dev-team": {
       uid: "dev-team",
       email: "team@local.dev",
       displayName: "Dev Team",
-      role: "team"
+      role: "team_leader",
+      roles: [{ department: "cs", role: "team_leader" }]
     },
     "dev-ceo": {
       uid: "dev-ceo",
       email: "ceo@local.dev",
       displayName: "Dev CEO",
-      role: "ceo"
+      role: "manager",
+      roles: [{ department: "cs", role: "manager", level: "senior" }]
     },
     "dev-qt": {
       uid: "dev-qt",
       email: "qt@local.dev",
       displayName: "Dev QT",
-      role: "qt"
+      role: "quality",
+      roles: [{ department: "cs", role: "quality" }]
+    },
+    "dev-sales-manager": {
+      uid: "dev-sales-manager",
+      email: "sales-manager@local.dev",
+      displayName: "Dev Sales Manager",
+      role: "manager",
+      roles: [{ department: "sales", role: "manager", level: "mid" }]
+    },
+    "dev-representative": {
+      uid: "dev-representative",
+      email: "rep@local.dev",
+      displayName: "Dev Representative",
+      role: "representative",
+      roles: [{ department: "cs", role: "representative" }]
     }
   };
 
@@ -75,19 +117,25 @@ async function authenticateToken(token: string): Promise<AuthUser> {
   }
 
   const repository = await getRepository();
-  let mappedRole = (decoded.role as Role | undefined) ?? (await repository.findRoleByEmail(email));
 
-  if (!mappedRole && canBootstrapFirstAdmin() && !(await repository.hasAnyUserRoles())) {
+  // Önce yeni users koleksiyonuna bak, yoksa eski userRoles'a düş
+  let user = await repository.findUserByEmail(email);
+
+  if (!user && canBootstrapFirstAdmin() && !(await repository.hasAnyUserRoles())) {
     const now = new Date().toISOString();
-    const bootstrapAssignment = await repository.upsertUserRole({
+    user = await repository.upsertUser({
       uid: decoded.uid,
       email,
       role: "admin",
+      roles: [{ role: "admin" }],
       createdAt: now,
       updatedAt: now
     });
-    mappedRole = bootstrapAssignment.role;
+    // Eski koleksiyona da yaz (geriye dönük uyumluluk)
+    await repository.upsertUserRole({ uid: decoded.uid, email, role: "admin", createdAt: now, updatedAt: now });
   }
+
+  const mappedRole = (decoded.role as Role | undefined) ?? user?.role ?? (await repository.findRoleByEmail(email));
 
   if (!mappedRole) {
     throw new ApiError(403, "Kullanıcı rol tanımı bulunamadı.");
@@ -97,7 +145,8 @@ async function authenticateToken(token: string): Promise<AuthUser> {
     uid: decoded.uid,
     email,
     displayName: decoded.name ?? email,
-    role: mappedRole
+    role: mappedRole,
+    roles: user?.roles ?? []
   };
 }
 

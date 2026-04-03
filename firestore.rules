@@ -1,103 +1,175 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ─── Kimlik doğrulama ────────────────────────────────────────────────────
+
     function isAuthed() {
       return request.auth != null;
     }
 
-    function currentRole() {
+    function userEmail() {
+      return request.auth.token.email;
+    }
+
+    // Birincil rolü döndürür: önce custom claim, sonra users koleksiyonu,
+    // son olarak geriye dönük uyumluluk için userRoles koleksiyonu.
+    function primaryRole() {
       return !isAuthed()
         ? null
         : request.auth.token.role != null
           ? request.auth.token.role
-          : request.auth.token.email != null &&
-            exists(/databases/$(database)/documents/userRoles/$(request.auth.token.email))
-            ? get(/databases/$(database)/documents/userRoles/$(request.auth.token.email)).data.role
-            : null;
+          : exists(/databases/$(database)/documents/users/$(userEmail()))
+            ? get(/databases/$(database)/documents/users/$(userEmail())).data.role
+            : exists(/databases/$(database)/documents/userRoles/$(userEmail()))
+              ? get(/databases/$(database)/documents/userRoles/$(userEmail())).data.role
+              : null;
     }
 
-    function hasRole(role) {
-      return currentRole() == role;
-    }
-
-    function canRead() {
-      return isAuthed();
-    }
-
-    function canManageReports() {
-      return hasRole('admin') || hasRole('team');
-    }
+    // ─── Rol kontrolleri ─────────────────────────────────────────────────────
 
     function isAdmin() {
-      return hasRole('admin');
+      return primaryRole() == 'admin';
     }
 
-    function isQtEntryOwnerEmail(email) {
-      return isAuthed() && hasRole('qt') && request.auth.token.email != null && request.auth.token.email == email;
+    function isManager() {
+      return primaryRole() == 'manager';
     }
 
-    function canCreateOwnQtEntry(userKey) {
-      return isAuthed() &&
-        hasRole('qt') &&
-        request.resource.data.userKey == userKey &&
-        (request.auth.uid == userKey || isQtEntryOwnerEmail(request.resource.data.userEmail));
+    function isTeamLeader() {
+      return primaryRole() == 'team_leader' || primaryRole() == 'team';
     }
 
-    function canUpdateOwnQtEntry(userKey) {
-      return isAuthed() &&
-        hasRole('qt') &&
-        resource.data.userKey == userKey &&
-        request.resource.data.userKey == resource.data.userKey &&
-        request.resource.data.userEmail == resource.data.userEmail &&
-        (request.auth.uid == userKey || isQtEntryOwnerEmail(resource.data.userEmail));
+    function isQuality() {
+      return primaryRole() == 'quality' || primaryRole() == 'qt';
     }
 
+    function isManagerOrAbove() {
+      return isAdmin() || isManager() || primaryRole() == 'ceo';
+    }
+
+    function isTeamLeaderOrAbove() {
+      return isManagerOrAbove() || isTeamLeader();
+    }
+
+    // Rapor yönetimi yapabilir (oluşturma, güncelleme, silme)
+    function canManageReports() {
+      return isAdmin() || isManager() || isTeamLeader();
+    }
+
+    // Veri girişi yapabilir (kalite ekibi dahil)
+    function canEnterData() {
+      return canManageReports() || isQuality();
+    }
+
+    // ─── Koleksiyon kuralları ────────────────────────────────────────────────
+
+    // Dönem üst dokümanı
     match /reportPeriods/{periodId} {
-      allow get, list: if true;
+      allow get, list: if isAuthed();
       allow create, update, delete: if canManageReports();
     }
 
+    // Agent metrikleri
     match /reportPeriods/{periodId}/agentMetrics/{recordId} {
-      allow get, list: if true;
+      allow get, list: if isAuthed();
       allow create, update, delete: if canManageReports();
     }
 
+    // Audit metrikleri
     match /reportPeriods/{periodId}/auditMetrics/{recordId} {
-      allow get, list: if true;
-      allow create, update, delete: if canManageReports();
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canEnterData();
     }
 
+    // Soru performansı
     match /reportPeriods/{periodId}/questionPerformance/{recordId} {
-      allow get, list: if true;
+      allow get, list: if isAuthed();
       allow create, update, delete: if canManageReports();
     }
 
+    // QT metrikleri
     match /reportPeriods/{periodId}/qtMetrics/{recordId} {
-      allow get, list: if true;
+      allow get, list: if isAuthed();
       allow create, update, delete: if canManageReports();
     }
 
+    // QT manuel girişleri
     match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
-      allow get, list: if true;
+      allow get, list: if isAuthed();
       allow create: if canManageReports() || canCreateOwnQtEntry(userKey);
       allow update: if canManageReports() || canUpdateOwnQtEntry(userKey);
       allow delete: if isAdmin();
     }
 
+    // Eşik konfigürasyonları
     match /thresholdConfigs/{metricId} {
-      allow get, list: if true;
+      allow get, list: if isAuthed();
       allow create, update, delete: if isAdmin();
     }
 
+    // Eski kullanıcı rolleri (geriye dönük uyumluluk — yeni kod users koleksiyonunu kullanır)
     match /userRoles/{emailKey} {
-      allow get: if isAdmin() || (isAuthed() && request.auth.token.email == emailKey);
+      allow get: if isAdmin() || (isAuthed() && userEmail() == emailKey);
       allow list: if isAdmin();
       allow create, update, delete: if isAdmin();
     }
 
+    // Yeni kullanıcı dokümanları
+    match /users/{emailKey} {
+      allow get: if isAdmin() || (isAuthed() && userEmail() == emailKey);
+      allow list: if isTeamLeaderOrAbove();
+      allow create, update: if canCreateOrUpdateUser();
+      allow delete: if isAdmin();
+    }
+
+    // Takımlar
+    match /teams/{teamId} {
+      allow get, list: if isAuthed();
+      allow create: if isManagerOrAbove();
+      allow update: if isManagerOrAbove() || isOwnTeamLeader(teamId);
+      allow delete: if isAdmin();
+    }
+
+    // İçe aktarma işleri
     match /importJobs/{jobId} {
       allow get, list: if canManageReports();
       allow create, update, delete: if canManageReports();
+    }
+
+    // ─── Yardımcı fonksiyonlar ───────────────────────────────────────────────
+
+    function canCreateOwnQtEntry(userKey) {
+      return isAuthed() &&
+        isQuality() &&
+        request.resource.data.userKey == userKey &&
+        (request.auth.uid == userKey || userEmail() == request.resource.data.userEmail);
+    }
+
+    function canUpdateOwnQtEntry(userKey) {
+      return isAuthed() &&
+        isQuality() &&
+        resource.data.userKey == userKey &&
+        request.resource.data.userKey == resource.data.userKey &&
+        request.resource.data.userEmail == resource.data.userEmail &&
+        (request.auth.uid == userKey || userEmail() == resource.data.userEmail);
+    }
+
+    // Kullanıcı oluşturma/güncelleme yetki kontrolü
+    function canCreateOrUpdateUser() {
+      return isAdmin() ||
+        isManager() ||
+        (isTeamLeader() && (
+          request.resource.data.role == 'representative' ||
+          request.resource.data.role == 'quality'
+        ));
+    }
+
+    // Takım liderinin kendi takımı olup olmadığını kontrol eder
+    function isOwnTeamLeader(teamId) {
+      return isTeamLeader() &&
+        exists(/databases/$(database)/documents/teams/$(teamId)) &&
+        get(/databases/$(database)/documents/teams/$(teamId)).data.leaderEmail == userEmail();
     }
   }
 }
