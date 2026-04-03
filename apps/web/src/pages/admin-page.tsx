@@ -45,14 +45,18 @@ import { getRepresentativeDisplayName } from "../lib/representative-photos";
 
 const roleSchema = z.object({
   email: z.string().email(),
-  role: z.enum(["admin", "team", "ceo", "qt"])
+  role: z.enum(["admin", "manager", "team_leader", "quality", "representative", "team", "ceo", "qt"])
 });
 
 const roleOptions = [
   { value: "admin", label: "Admin" },
-  { value: "team", label: "Ekip" },
-  { value: "ceo", label: "CEO" },
-  { value: "qt", label: "QT" }
+  { value: "manager", label: "Yönetici" },
+  { value: "team_leader", label: "Takım Lideri" },
+  { value: "quality", label: "Kalite" },
+  { value: "representative", label: "Temsilci" },
+  { value: "team", label: "Ekip (eski)" },
+  { value: "ceo", label: "CEO (eski)" },
+  { value: "qt", label: "QT (eski)" }
 ] as const;
 
 const thresholdKeys = [

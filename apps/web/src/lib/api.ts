@@ -7,7 +7,8 @@ import type {
   QtManualEntry,
   ReportPeriod,
   ThresholdConfig,
-  UserRoleAssignment
+  UserRoleAssignment,
+  UserRoleEntry
 } from "@kalitedb/shared";
 import {
   agentMetricSchema,
@@ -40,7 +41,8 @@ export type AuthenticatedUser = {
   uid: string;
   email: string;
   displayName: string;
-  role: "admin" | "team" | "ceo" | "qt";
+  role: Role;
+  roles?: UserRoleEntry[];
 };
 
 type ResetDatasetResponse = {
@@ -918,7 +920,7 @@ export const api = {
       return getRolesFromFirebase();
     });
   },
-  createRole(token: string | null, body: { uid?: string; email: string; role: "admin" | "team" | "ceo" | "qt" }) {
+  createRole(token: string | null, body: { uid?: string; email: string; role: Role }) {
     return request<UserRoleAssignment>("/api/users/roles", {
       token,
       method: "POST",

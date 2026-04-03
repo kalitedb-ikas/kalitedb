@@ -13,6 +13,8 @@ import { LoginPage } from "../pages/login-page";
 import { QtPage } from "../pages/qt-page";
 import { QuestionsPage } from "../pages/questions-page";
 import { RepresentativesPage } from "../pages/representatives-page";
+import { SalesAuditPage } from "../pages/sales-audit-page";
+import { SalesDashboardPage } from "../pages/sales-dashboard-page";
 
 function LoadingScreen() {
   return (
@@ -46,11 +48,19 @@ function AppRoutes() {
     <Routes>
       <Route element={<LoginPage />} path="/login" />
       <Route element={<AppShell currentUser={currentUser} />}>
-        <Route element={<DashboardPage />} path="/" />
-        <Route element={<AuditPage />} path="/audit" />
-        <Route element={<QuestionsPage />} path="/questions" />
-        <Route element={<CsatPage />} path="/csat" />
-        <Route element={<QtPage />} path="/qt" />
+        {/* CS rotaları */}
+        <Route element={<DashboardPage />} path="/cs" />
+        <Route element={<AuditPage />} path="/cs/audit" />
+        <Route element={<QuestionsPage />} path="/cs/questions" />
+        <Route element={<CsatPage />} path="/cs/csat" />
+        <Route element={<QtPage />} path="/cs/qt" />
+        <Route element={<RepresentativesPage />} path="/cs/representatives" />
+
+        {/* Satış rotaları */}
+        <Route element={<SalesDashboardPage />} path="/sales" />
+        <Route element={<SalesAuditPage />} path="/sales/audit" />
+
+        {/* Yönetim */}
         <Route
           element={
             auth.token && meQuery.isPending
@@ -58,13 +68,22 @@ function AppRoutes() {
               : canAccessAdmin(currentUser)
               ? <AdminPage currentUserRole={currentUser?.role} />
               : auth.token
-                ? <Navigate replace to="/" />
+                ? <Navigate replace to="/cs" />
                 : <Navigate replace to="/login" />
           }
           path="/admin"
         />
-        <Route element={<Navigate replace to="/" />} path="/presentation" />
-        <Route element={<RepresentativesPage />} path="/representatives" />
+
+        {/* Kök → CS'e yönlendir */}
+        <Route element={<Navigate replace to="/cs" />} path="/" />
+
+        {/* Geriye dönük uyumluluk: eski URL'ler CS'e yönlendirilir */}
+        <Route element={<Navigate replace to="/cs/audit" />} path="/audit" />
+        <Route element={<Navigate replace to="/cs/questions" />} path="/questions" />
+        <Route element={<Navigate replace to="/cs/csat" />} path="/csat" />
+        <Route element={<Navigate replace to="/cs/qt" />} path="/qt" />
+        <Route element={<Navigate replace to="/cs/representatives" />} path="/representatives" />
+        <Route element={<Navigate replace to="/cs" />} path="/presentation" />
       </Route>
     </Routes>
   );

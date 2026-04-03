@@ -13,12 +13,14 @@ import {
 import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { toPublicAssetPath } from "../lib/asset-path";
 import { api, type AuthenticatedUser } from "../lib/api";
 import { formatPeriodMonth } from "../lib/format";
+
+type Department = "cs" | "sales";
 
 type NavigationItem = {
   label: string;
@@ -27,14 +29,19 @@ type NavigationItem = {
   roles?: AuthenticatedUser["role"][];
 };
 
-const navigation: NavigationItem[] = [
-  { label: "Genel Bakış", to: "/", icon: Gauge },
-  { label: "Audit", to: "/audit", icon: ClipboardList },
-  { label: "Sorular", to: "/questions", icon: Sparkles },
-  { label: "CSAT", to: "/csat", icon: MessageCircle },
-  { label: "Temsilciler", to: "/representatives", icon: Users },
-  { label: "QT", to: "/qt", icon: BarChart3 },
+const csNavigation: NavigationItem[] = [
+  { label: "Genel Bakış", to: "/cs", icon: Gauge },
+  { label: "Audit", to: "/cs/audit", icon: ClipboardList },
+  { label: "Sorular", to: "/cs/questions", icon: Sparkles },
+  { label: "CSAT", to: "/cs/csat", icon: MessageCircle },
+  { label: "Temsilciler", to: "/cs/representatives", icon: Users },
+  { label: "QT", to: "/cs/qt", icon: BarChart3 },
   { label: "Yönetim", to: "/admin", icon: Settings, roles: ["admin", "qt"] }
+];
+
+const salesNavigation: NavigationItem[] = [
+  { label: "Genel Bakış", to: "/sales", icon: Gauge },
+  { label: "Audit", to: "/sales/audit", icon: ClipboardList }
 ];
 
 function roleLabel(role: AuthenticatedUser["role"] | undefined) {
@@ -45,27 +52,41 @@ function roleLabel(role: AuthenticatedUser["role"] | undefined) {
   return "KaliteDB";
 }
 
-function getCurrentNavigationItem(pathname: string, items: NavigationItem[]) {
-  if (pathname === "/") {
-    return items.find((item) => item.to === "/");
-  }
+function getActiveDepartment(pathname: string): Department {
+  return pathname.startsWith("/sales") ? "sales" : "cs";
+}
 
-  return items.find((item) => item.to !== "/" && pathname.startsWith(item.to)) ?? items[0];
+function getCurrentNavigationItem(pathname: string, items: NavigationItem[]) {
+  const rootPaths = ["/cs", "/sales"];
+  if (rootPaths.includes(pathname)) {
+    return items.find((item) => item.to === pathname);
+  }
+  return items.find((item) => !rootPaths.includes(item.to) && pathname.startsWith(item.to)) ?? items[0];
 }
 
 export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; children?: ReactNode | undefined }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const userInitial = (props.currentUser?.displayName ?? auth.user?.displayName ?? "K")[0]?.toUpperCase() ?? "K";
+
+  const activeDepartment = getActiveDepartment(location.pathname);
+
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
     queryFn: () => api.getPeriods(auth.token),
     staleTime: 5 * 60 * 1000
   });
+
+  // Aktif departmana göre dönemleri filtrele
+  const departmentPeriods = useMemo(
+    () => (periodsQuery.data ?? []).filter((p) => (p.department ?? "cs") === activeDepartment),
+    [periodsQuery.data, activeDepartment]
+  );
 
   useEffect(() => {
     const onScroll = () => setIsScrolled(window.scrollY > 8);
@@ -86,46 +107,33 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
   }, [isDrawerOpen]);
 
   useEffect(() => {
-    const periods = periodsQuery.data;
-
-    if (!periods?.length) {
-      return;
-    }
-
-    for (const period of periods.slice(0, 6)) {
+    if (!departmentPeriods.length) return;
+    for (const period of departmentPeriods.slice(0, 6)) {
       void queryClient.prefetchQuery({
         queryKey: ["dashboard", auth.token, period.id, undefined],
         queryFn: () => api.getDashboard(auth.token, period.id),
         staleTime: 5 * 60 * 1000
       });
     }
-  }, [auth.token, periodsQuery.data, queryClient]);
+  }, [auth.token, departmentPeriods, queryClient]);
 
-  const visibleNavigation = useMemo(() => {
+  const activeNavigation = useMemo(() => {
+    const items = activeDepartment === "sales" ? salesNavigation : csNavigation;
     const currentUser = props.currentUser;
-    if (!currentUser) {
-      return navigation.filter((item) => !item.roles);
-    }
+    if (!currentUser) return items.filter((item) => !item.roles);
+    return items.filter((item) => !item.roles || item.roles.includes(currentUser.role));
+  }, [activeDepartment, props.currentUser]);
 
-    return navigation.filter((item) => !item.roles || item.roles.includes(currentUser.role));
-  }, [props.currentUser]);
+  const currentNavigationItem = getCurrentNavigationItem(location.pathname, activeNavigation);
+  const activePeriodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(departmentPeriods)?.id ?? "";
+  const showPeriodFilter = departmentPeriods.length > 0;
 
-  const currentNavigationItem = getCurrentNavigationItem(location.pathname, visibleNavigation);
-  const activePeriodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id ?? "";
-  const showPeriodFilter = (periodsQuery.data?.length ?? 0) > 0;
   const preservedNavigationSearch = useMemo(() => {
     const next = new URLSearchParams();
     const periodId = searchParams.get("periodId");
     const compareToPeriodId = searchParams.get("compareToPeriodId");
-
-    if (periodId) {
-      next.set("periodId", periodId);
-    }
-
-    if (compareToPeriodId) {
-      next.set("compareToPeriodId", compareToPeriodId);
-    }
-
+    if (periodId) next.set("periodId", periodId);
+    if (compareToPeriodId) next.set("compareToPeriodId", compareToPeriodId);
     const queryString = next.toString();
     return queryString ? `?${queryString}` : "";
   }, [searchParams]);
@@ -137,9 +145,13 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
     } else {
       next.delete("periodId");
     }
-    startTransition(() => {
-      setSearchParams(next);
-    });
+    startTransition(() => setSearchParams(next));
+  };
+
+  const handleDepartmentSwitch = (dept: Department) => {
+    const target = dept === "sales" ? "/sales" : "/cs";
+    // Dönem filtresini sıfırla — farklı departmanın dönemleri farklı
+    navigate({ pathname: target });
   };
 
   return (
@@ -154,9 +166,10 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
           ].join(" ")}
         >
           <div className="flex items-center gap-3">
+            {/* Logo */}
             <Link
               className="flex min-w-0 items-center gap-3.5 rounded-full px-1 py-1"
-              to={{ pathname: "/", search: preservedNavigationSearch }}
+              to={{ pathname: activeDepartment === "sales" ? "/sales" : "/cs", search: preservedNavigationSearch }}
             >
               <div className="flex size-12 items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.1)] sm:size-14">
                 <img alt="ikas" className="h-full w-full object-cover" src={toPublicAssetPath("/ikas.jpg")} />
@@ -168,6 +181,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
               </div>
             </Link>
 
+            {/* Mobil: aktif sayfa başlığı */}
             <div className="min-w-0 flex-1 lg:hidden">
               <p className="truncate font-display text-sm font-semibold tracking-[-0.03em] text-slate-900">
                 {currentNavigationItem?.label ?? "KaliteDB"}
@@ -177,8 +191,38 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
               </p>
             </div>
 
+            {/* Masaüstü: departman sekmeleri + alt navigasyon */}
             <nav className="hidden flex-1 items-center justify-center gap-1.5 lg:flex">
-              {visibleNavigation.map((item) => {
+              {/* Departman sekmeleri */}
+              <div className="mr-1 flex items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100/80 p-1">
+                <button
+                  className={[
+                    "flex min-h-8 items-center rounded-full px-4 text-[13px] font-semibold transition",
+                    activeDepartment === "cs"
+                      ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)]"
+                      : "text-slate-500 hover:text-slate-800"
+                  ].join(" ")}
+                  onClick={() => handleDepartmentSwitch("cs")}
+                  type="button"
+                >
+                  CS
+                </button>
+                <button
+                  className={[
+                    "flex min-h-8 items-center rounded-full px-4 text-[13px] font-semibold transition",
+                    activeDepartment === "sales"
+                      ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)]"
+                      : "text-slate-500 hover:text-slate-800"
+                  ].join(" ")}
+                  onClick={() => handleDepartmentSwitch("sales")}
+                  type="button"
+                >
+                  Satış
+                </button>
+              </div>
+
+              {/* Alt navigasyon öğeleri */}
+              {activeNavigation.map((item) => {
                 const Icon = item.icon;
                 return (
                   <NavLink
@@ -191,6 +235,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                           : "border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900"
                       ].join(" ")
                     }
+                    end={item.to === "/cs" || item.to === "/sales"}
                     to={{ pathname: item.to, search: preservedNavigationSearch }}
                   >
                     <Icon size={14} strokeWidth={1.8} />
@@ -198,6 +243,8 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                   </NavLink>
                 );
               })}
+
+              {/* Dönem filtresi */}
               {showPeriodFilter ? (
                 <select
                   aria-label="Ay filtresi"
@@ -205,7 +252,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                   onChange={(event) => handlePeriodChange(event.target.value)}
                   value={activePeriodId}
                 >
-                  {periodsQuery.data?.map((period) => (
+                  {departmentPeriods.map((period) => (
                     <option key={period.id} value={period.id}>
                       {formatPeriodMonth(period.month)}
                     </option>
@@ -214,6 +261,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
               ) : null}
             </nav>
 
+            {/* Kullanıcı kontrolleri */}
             <div className="ml-auto flex items-center gap-2">
               {props.currentUser ? (
                 <>
@@ -273,6 +321,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
         </div>
       </header>
 
+      {/* Mobil çekmece menü */}
       {isDrawerOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
@@ -294,8 +343,36 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
               </button>
             </div>
 
-            <nav className="mt-4 flex flex-1 flex-col gap-2">
-              {visibleNavigation.map((item) => {
+            {/* Departman sekmeleri (mobil) */}
+            <div className="mt-4 flex gap-2">
+              <button
+                className={[
+                  "flex-1 rounded-2xl border py-2.5 text-sm font-semibold transition",
+                  activeDepartment === "cs"
+                    ? "border-slate-900 bg-slate-950 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                ].join(" ")}
+                onClick={() => { handleDepartmentSwitch("cs"); setIsDrawerOpen(false); }}
+                type="button"
+              >
+                CS
+              </button>
+              <button
+                className={[
+                  "flex-1 rounded-2xl border py-2.5 text-sm font-semibold transition",
+                  activeDepartment === "sales"
+                    ? "border-slate-900 bg-slate-950 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                ].join(" ")}
+                onClick={() => { handleDepartmentSwitch("sales"); setIsDrawerOpen(false); }}
+                type="button"
+              >
+                Satış
+              </button>
+            </div>
+
+            <nav className="mt-3 flex flex-1 flex-col gap-2">
+              {activeNavigation.map((item) => {
                 const Icon = item.icon;
                 return (
                   <NavLink
@@ -308,6 +385,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                           : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-950"
                       ].join(" ")
                     }
+                    end={item.to === "/cs" || item.to === "/sales"}
                     to={{ pathname: item.to, search: preservedNavigationSearch }}
                   >
                     <Icon size={16} strokeWidth={1.8} />
@@ -326,7 +404,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                   onChange={(event) => handlePeriodChange(event.target.value)}
                   value={activePeriodId}
                 >
-                  {periodsQuery.data?.map((period) => (
+                  {departmentPeriods.map((period) => (
                     <option key={period.id} value={period.id}>
                       {formatPeriodMonth(period.month)}
                     </option>
