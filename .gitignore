@@ -13,3 +13,4 @@ test-results
 apps/web/dist
 apps/api/.next
 gha-creds-*.json
+.claude/worktrees/
