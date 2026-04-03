@@ -745,7 +745,7 @@ export const api = {
   },
   createPeriod(
     token: string | null,
-    body: { month: string; title: string; compareToPeriodId?: string | undefined }
+    body: { month: string; title: string; department?: "cs" | "sales"; compareToPeriodId?: string | undefined }
   ) {
     return request<ReportPeriod>("/api/report-periods", { token, method: "POST", body });
   },

@@ -41,7 +41,8 @@ const csNavigation: NavigationItem[] = [
 
 const salesNavigation: NavigationItem[] = [
   { label: "Genel Bakış", to: "/sales", icon: Gauge },
-  { label: "Audit", to: "/sales/audit", icon: ClipboardList }
+  { label: "Audit", to: "/sales/audit", icon: ClipboardList },
+  { label: "Yönetim", to: "/sales/admin", icon: Settings, roles: ["admin", "manager", "team_leader"] }
 ];
 
 function roleLabel(role: AuthenticatedUser["role"] | undefined) {
