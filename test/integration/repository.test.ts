@@ -80,6 +80,8 @@ const qtManualEntry: QtManualEntry = {
   totalEvaluatedChatMailCount: 248,
   feedbackCount: 57,
   feedbackCoverage: 3.08,
+  trainingCount: null,
+  meetingCount: null,
   createdAt: new Date("2026-02-01T00:00:00.000Z").toISOString(),
   updatedAt: new Date("2026-02-01T00:00:00.000Z").toISOString()
 };

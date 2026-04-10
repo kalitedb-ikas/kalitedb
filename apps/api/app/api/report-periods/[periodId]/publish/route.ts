@@ -9,7 +9,7 @@ export async function POST(
   context: { params: Promise<{ periodId: string }> }
 ) {
   try {
-    await requireAuth(request as never, ["admin", "team"]);
+    await requireAuth(request as never, ["admin", "team", "manager", "team_leader"]);
     const { periodId } = await context.params;
     const repository = await getRepository();
     const period = await repository.publishPeriod(periodId);

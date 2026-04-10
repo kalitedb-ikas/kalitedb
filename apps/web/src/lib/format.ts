@@ -83,6 +83,42 @@ export function formatPeriodMonth(period: string | null | undefined, options?: {
   return label.charAt(0).toLocaleUpperCase("tr-TR") + label.slice(1);
 }
 
+/**
+ * Konuşma süresi hedef etiketini saniyeye çevirir.
+ *
+ * Desteklenen formatlar:
+ *  - "35'"           → 35 saat    → 126.000 sn
+ *  - "35"            → 35 saat    → 126.000 sn
+ *  - "35 saat"       → 35 saat    → 126.000 sn
+ *  - "35,5"          → 35,5 saat  → 127.800 sn
+ *  - "35:00:00"      → 35 sa 00 dk 00 sn
+ *  - "35:30"         → 35 saat 30 dk
+ *
+ * Semantik: kullanıcı "35'" yazdığında (aptostropha rağmen) aylık toplam
+ * konuşma süresi hedefi olarak **35 saat** olarak yorumlanır.
+ */
+export function parseTalkDurationLabelToSeconds(label: string | null | undefined): number {
+  if (!label) return 0;
+  const trimmed = label.trim();
+  if (!trimmed) return 0;
+
+  // HH:MM veya HH:MM:SS formatı
+  const hmsMatch = trimmed.match(/^(\d+):(\d+)(?::(\d+))?$/);
+  if (hmsMatch) {
+    const h = Number.parseInt(hmsMatch[1] ?? "0", 10);
+    const m = Number.parseInt(hmsMatch[2] ?? "0", 10);
+    const s = Number.parseInt(hmsMatch[3] ?? "0", 10);
+    return h * 3600 + m * 60 + s;
+  }
+
+  // İlk sayıyı çıkar, saat olarak yorumla ("35'", "35 saat", "35", "35,5")
+  const numMatch = trimmed.match(/(\d+(?:[.,]\d+)?)/);
+  if (!numMatch || !numMatch[1]) return 0;
+  const value = Number.parseFloat(numMatch[1].replace(",", "."));
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * 3600);
+}
+
 export function getPreviousPeriod(period: string | null | undefined) {
   if (!period) {
     return null;

@@ -35,7 +35,7 @@ export function MetricBarChart(props: {
     item.valueLabel ?? props.valueFormatter?.(value, item) ?? String(value);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
+    <div className="rounded-[10px] border border-slate-200 bg-white p-5 shadow-soft">
       {props.title ? <h3 className="text-base font-semibold text-slate-900">{props.title}</h3> : null}
       {props.description ? <p className="mt-1 text-sm text-slate-600">{props.description}</p> : null}
       <div className="mt-4 h-80">
@@ -53,7 +53,7 @@ export function MetricBarChart(props: {
 
                 const item = payload[0]?.payload as MetricBarChartDatum;
                 return (
-                  <div className="rounded-lg border border-slate-100 bg-white px-4 py-3 text-sm shadow-medium">
+                  <div className="rounded-[10px] border border-slate-100 bg-white px-4 py-3 text-sm shadow-medium">
                     <p className="font-semibold text-slate-900">{label}</p>
                     <p className="mt-1 text-slate-600">
                       {props.tooltipMetricLabel ?? "Değer"}: {item.tooltipValue ?? formatValue(item.value, item)}

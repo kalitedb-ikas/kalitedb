@@ -11,11 +11,17 @@ import { CsatPage } from "../pages/csat-page";
 import { DashboardPage } from "../pages/dashboard-page";
 import { LoginPage } from "../pages/login-page";
 import { QtPage } from "../pages/qt-page";
+import { QualityAdminPage } from "../pages/quality-admin-page";
 import { QuestionsPage } from "../pages/questions-page";
 import { RepresentativesPage } from "../pages/representatives-page";
 import { SalesAdminPage } from "../pages/sales-admin-page";
 import { SalesAuditPage } from "../pages/sales-audit-page";
+import { SalesCalendarPage } from "../pages/sales-calendar-page";
 import { SalesDashboardPage } from "../pages/sales-dashboard-page";
+import { SalesEvaluationQuestionsPage } from "../pages/sales-evaluation-questions-page";
+import { SalesKpiPage } from "../pages/sales-kpi-page";
+import { SalesMeetingsPage } from "../pages/sales-meetings-page";
+import { SalesRepresentativesPage } from "../pages/sales-representatives-page";
 
 function LoadingScreen() {
   return (
@@ -27,7 +33,7 @@ function LoadingScreen() {
 
 function canAccessAdmin(currentUser: AuthenticatedUser | undefined) {
   if (!currentUser) return false;
-  return ["admin", "manager", "team_leader", "team", "qt"].includes(currentUser.role);
+  return ["admin", "manager", "team_leader", "team", "qt", "quality"].includes(currentUser.role);
 }
 
 function AppRoutes() {
@@ -55,12 +61,32 @@ function AppRoutes() {
         <Route element={<AuditPage />} path="/cs/audit" />
         <Route element={<QuestionsPage />} path="/cs/questions" />
         <Route element={<CsatPage />} path="/cs/csat" />
-        <Route element={<QtPage />} path="/cs/qt" />
         <Route element={<RepresentativesPage />} path="/cs/representatives" />
+
+        {/* Kalite rotaları */}
+        <Route element={<Navigate replace to="/quality/qt" />} path="/quality" />
+        <Route element={<QtPage />} path="/quality/qt" />
+        <Route
+          element={
+            auth.token && meQuery.isPending
+              ? <LoadingScreen />
+              : canAccessAdmin(currentUser)
+              ? <QualityAdminPage currentUserRole={currentUser?.role} />
+              : auth.token
+                ? <Navigate replace to="/quality/qt" />
+                : <Navigate replace to="/login" />
+          }
+          path="/quality/admin"
+        />
 
         {/* Satış rotaları */}
         <Route element={<SalesDashboardPage />} path="/sales" />
+        <Route element={<SalesKpiPage />} path="/sales/kpi" />
         <Route element={<SalesAuditPage />} path="/sales/audit" />
+        <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
+        <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
+        <Route element={<SalesRepresentativesPage />} path="/sales/representatives" />
+        <Route element={<SalesCalendarPage currentUser={currentUser} />} path="/sales/calendar" />
         <Route
           element={
             auth.token && meQuery.isPending
@@ -95,7 +121,8 @@ function AppRoutes() {
         <Route element={<Navigate replace to="/cs/audit" />} path="/audit" />
         <Route element={<Navigate replace to="/cs/questions" />} path="/questions" />
         <Route element={<Navigate replace to="/cs/csat" />} path="/csat" />
-        <Route element={<Navigate replace to="/cs/qt" />} path="/qt" />
+        <Route element={<Navigate replace to="/quality/qt" />} path="/qt" />
+        <Route element={<Navigate replace to="/quality/qt" />} path="/cs/qt" />
         <Route element={<Navigate replace to="/cs/representatives" />} path="/representatives" />
         <Route element={<Navigate replace to="/cs" />} path="/presentation" />
       </Route>

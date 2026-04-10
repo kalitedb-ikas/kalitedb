@@ -8,6 +8,10 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
+import { PeriodSelect } from "../components/period-select";
+import { RepresentativeSelect } from "../components/representative-select";
+import { BadgePill, TimelineDisplay } from "../components/representative-detail-modal";
+import { useActiveRepresentativeKeys } from "../lib/use-active-representatives";
 
 function formatOrNa(value: number | null | undefined, formatter: (value: number) => string) {
   return value === null || value === undefined ? "N/A" : formatter(value);
@@ -59,31 +63,31 @@ function resolveSuccessState(value: number | null | undefined) {
   if (value === null || value === undefined) {
     return {
       label: "Beklemede",
-      accentClass: "text-slate-500",
-      pillClass: "border-slate-200 bg-slate-100 text-slate-600"
+      accentClass: "text-slate-500 dark:text-slate-400",
+      pillClass: "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-400"
     };
   }
 
   if (value >= 85) {
     return {
       label: "İyi",
-      accentClass: "text-emerald-700",
-      pillClass: "border-emerald-200 bg-emerald-50 text-emerald-700"
+      accentClass: "text-emerald-700 dark:text-emerald-400",
+      pillClass: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
     };
   }
 
   if (value >= 70) {
     return {
       label: "İzlenmeli",
-      accentClass: "text-sky-700",
-      pillClass: "border-sky-200 bg-sky-50 text-sky-700"
+      accentClass: "text-sky-700 dark:text-sky-400",
+      pillClass: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-700/40 dark:bg-sky-900/30 dark:text-sky-400"
     };
   }
 
   return {
     label: "Geliştirilmeli",
-    accentClass: "text-rose-700",
-    pillClass: "border-rose-200 bg-rose-50 text-rose-700"
+    accentClass: "text-rose-700 dark:text-rose-400",
+    pillClass: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400"
   };
 }
 
@@ -111,12 +115,26 @@ export function RepresentativesPage() {
     [snapshot]
   );
 
+  const { activeKeys } = useActiveRepresentativeKeys();
+
+  const repsQuery = useQuery({
+    queryKey: ["representatives", auth.token],
+    queryFn: () => api.getRepresentatives(auth.token),
+    staleTime: 5 * 60 * 1000
+  });
+
   const representatives = useMemo(() => {
     const options = new Map<string, string>();
+    // Önce kayıtlı temsilcilerden (dönemden bağımsız)
+    (repsQuery.data ?? [])
+      .filter((r) => (r.department ?? "cs") === "cs")
+      .forEach((r) => options.set(r.key, r.displayName));
+    // Sonra dönem verisinden (ek isimler olabilir)
     (snapshot?.datasets.agentMetrics ?? []).forEach((record) => options.set(record.agentKey, record.agentName));
     auditMetrics.forEach((record) => options.set(record.agentKey, record.agentName));
 
     return Array.from(options.entries())
+      .filter(([agentKey]) => !activeKeys || activeKeys.has(agentKey))
       .map(([agentKey, agentName]) => ({ agentKey, agentName }))
       .sort((left, right) => left.agentName.localeCompare(right.agentName, "tr"))
       .map((item, index) => ({
@@ -124,7 +142,7 @@ export function RepresentativesPage() {
         avatarSrc: buildRepresentativeAvatar(item.agentName, index, "square"),
         portraitSrc: buildRepresentativeAvatar(item.agentName, index, "landscape")
       }));
-  }, [auditMetrics, snapshot]);
+  }, [activeKeys, auditMetrics, repsQuery.data, snapshot]);
 
   const selectedAgentKey = searchParams.get("agentKey") ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
@@ -133,6 +151,9 @@ export function RepresentativesPage() {
   const selectedAudit = auditMetrics.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
 
   const selectedName = selectedRepresentative?.agentName ?? "N/A";
+  const selectedRepData = (repsQuery.data ?? []).find((r) => r.key === selectedRepresentative?.agentKey);
+  const selectedBadges = (selectedRepData as any)?.badges ?? [];
+  const selectedTimeline = (selectedRepData as any)?.timeline ?? [];
   const selectedSuccessIndex = computeSuccessIndex({
     callEvaluationAverage: selectedAgent?.callEvaluationAverage,
     auditScore: selectedAudit?.auditScore,
@@ -180,88 +201,76 @@ export function RepresentativesPage() {
       <SectionCard
         title="Temsilci bazlı rapor"
         actions={
-          <select
-            className="rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-700 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15"
-            onChange={(event) => handleRepresentativeChange(event.target.value)}
-            value={selectedRepresentative?.agentKey ?? ""}
-          >
-            {representatives.map((item) => (
-              <option key={item.agentKey} value={item.agentKey}>
-                {item.agentName}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <PeriodSelect />
+            <RepresentativeSelect
+              options={representatives.map((item) => ({ key: item.agentKey, label: item.agentName }))}
+              value={selectedRepresentative?.agentKey ?? ""}
+              onChange={handleRepresentativeChange}
+            />
+          </div>
         }
       >
         {selectedRepresentative ? (
           <div className="space-y-6">
-            <section className="surface-default rounded-[30px] border border-white/75 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
-              <div className="grid gap-6 xl:grid-cols-2 xl:items-stretch">
-                <div className="flex items-center justify-center rounded-[28px] border border-slate-200/80 bg-[linear-gradient(135deg,#f8fbff,#eaf4ff)] p-5">
-                  <div className="w-full max-w-[420px]">
-                    <div className="relative isolate aspect-[4/3] overflow-hidden rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                      <div aria-hidden="true" className="absolute inset-0">
-                        <img
-                          alt=""
-                          className="h-full w-full scale-110 object-cover opacity-25 blur-2xl"
-                          src={selectedRepresentative.portraitSrc}
-                        />
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.4),transparent_55%)]" />
-                      </div>
-                      <div className="relative flex h-full w-full items-center justify-center p-4 sm:p-5">
-                        <img
-                          alt={selectedName}
-                          className="h-full w-full rounded-[22px] object-contain"
-                          src={selectedRepresentative.portraitSrc}
-                        />
-                      </div>
-                    </div>
-                  </div>
+            <section className="surface-default rounded-[10px] border border-white/75 p-4 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:shadow-none">
+              <div className="flex gap-5">
+                <div className="w-40 shrink-0 overflow-hidden rounded-[10px] border border-slate-200 dark:border-slate-600/40">
+                  <img
+                    alt={selectedName}
+                    className="aspect-[3/4] w-full object-cover"
+                    src={selectedRepresentative.portraitSrc}
+                  />
                 </div>
 
-                <div className="rounded-[28px] border border-slate-200/80 bg-white/78 p-6">
-                  <div className="space-y-6">
+                <div className="min-w-0 flex-1">
+                  <div className="space-y-4">
                     <div>
-                      <h2 className="font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950">{selectedName}</h2>
+                      <h2 className="font-display text-2xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100">{selectedName}</h2>
                       {selectedRank === 1 ? (
-                        <p className={`mt-2 text-lg font-semibold ${selectedState.accentClass}`}>En yüksek performans</p>
+                        <p className={`mt-1 text-sm font-semibold ${selectedState.accentClass}`}>En yüksek performans</p>
                       ) : null}
+                      {selectedBadges.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {selectedBadges.map((b: string) => <BadgePill key={b} badgeKey={b} small />)}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)]">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">CSAT</p>
-                        <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+                    <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">CSAT</p>
+                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
                           {formatOrNa(selectedAgent?.callEvaluationAverage, (value) => formatNumber(value, 3))}
                         </p>
                       </div>
-                      <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)]">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Audit</p>
-                        <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Audit</p>
+                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
                           {formatOrNa(selectedAudit?.auditScore, formatAuditScore)}
                         </p>
                       </div>
-                      <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)]">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Görüşme</p>
-                        <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Görüşme</p>
+                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
                           {formatOrNa(selectedAgent?.totalConversationCount, (value) => formatNumber(value))}
                         </p>
                       </div>
-                      <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)]">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Lokal kapatma</p>
-                        <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Lokal kapatma</p>
+                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
                           {formatOrNa(selectedAgent?.localCloseRate, (value) => formatPercent(value))}
                         </p>
                       </div>
-                      <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)]">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Konuşma süresi</p>
-                        <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Konuşma süresi</p>
+                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
                           {formatOrNa(selectedAgent?.avgTalkDurationSeconds, (value) => formatSeconds(value))}
                         </p>
                       </div>
-                      <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)]">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Değerlendirme</p>
-                        <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Değerlendirme</p>
+                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
                           {formatOrNa(selectedAgent?.evaluationCount, (value) => formatNumber(value))}
                         </p>
                       </div>
@@ -322,27 +331,27 @@ export function RepresentativesPage() {
             <div className="grid gap-4 xl:grid-cols-2">
               <SectionCard title="Çağrı ve işlem detayları">
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                    <p className="text-sm text-slate-600">Toplam çağrı adedi</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Toplam çağrı adedi</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                       {formatOrNa(selectedAgent?.totalCallCount, (value) => formatNumber(value))}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                    <p className="text-sm text-slate-600">Toplam chat / e-posta adedi</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Toplam chat / e-posta adedi</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                       {formatOrNa(selectedAgent?.totalChatMailCount, (value) => formatNumber(value))}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                    <p className="text-sm text-slate-600">Toplam ticket kapatma adedi</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Toplam ticket kapatma adedi</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                       {formatOrNa(selectedAgent?.totalTicketClosedCount, (value) => formatNumber(value))}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                    <p className="text-sm text-slate-600">Kaçan çağrılar</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Kaçan çağrılar</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                       {formatOrNa(selectedAgent?.missedCalls, (value) => formatNumber(value))}
                     </p>
                   </div>
@@ -351,22 +360,28 @@ export function RepresentativesPage() {
 
               <SectionCard title="Değerlendirme detayları">
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                    <p className="text-sm text-slate-600">Değerlendirme adedi</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Değerlendirme adedi</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                       {formatOrNa(selectedAgent?.evaluationCount, (value) => formatNumber(value))}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                    <p className="text-sm text-slate-600">Temsilci</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{selectedName}</p>
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Temsilci</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{selectedName}</p>
                   </div>
                 </div>
               </SectionCard>
             </div>
+
+            {selectedTimeline.length > 0 && (
+              <SectionCard title="Kariyer Zaman Çizelgesi">
+                <TimelineDisplay events={selectedTimeline} />
+              </SectionCard>
+            )}
           </div>
         ) : (
-          <p className="text-sm text-slate-600">Seçilen dönemde gösterilecek temsilci verisi bulunamadı.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Seçilen dönemde gösterilecek temsilci verisi bulunamadı.</p>
         )}
       </SectionCard>
     </div>

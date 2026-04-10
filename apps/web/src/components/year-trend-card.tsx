@@ -73,17 +73,17 @@ export function TrendLineCard(props: {
   const hasValues = props.data.some((item) => item[props.metricKey] !== null);
 
   return (
-    <div className="rounded-[24px] border border-slate-200/80 bg-white px-4 py-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)] sm:px-5">
+    <div className="min-w-0 rounded-[10px] border border-slate-200/80 bg-white px-4 py-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)] dark:border-slate-600/40 dark:bg-slate-800 sm:px-5">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="font-display text-lg font-semibold tracking-[-0.03em] text-slate-950">{props.title}</h3>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
+        <h3 className="font-display text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">{props.title}</h3>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-400">
           Aylık görünüm
         </span>
       </div>
 
       {hasValues ? (
-        <div className="mt-4 h-72">
-          <ResponsiveContainer height="100%" width="100%">
+        <div className="mt-4 h-72 min-w-0">
+          <ResponsiveContainer height="100%" minWidth={0} width="100%">
             <LineChart data={props.data} margin={{ top: 8, right: 12, left: -16, bottom: 4 }}>
               <CartesianGrid stroke={chart.grid} strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: chart.axis }} tickLine={false} />
@@ -133,7 +133,7 @@ export function TrendLineCard(props: {
                         fontSize={11}
                         fontWeight={700}
                         paintOrder="stroke"
-                        stroke="#ffffff"
+                        stroke="var(--trend-label-stroke, #ffffff)"
                         strokeWidth={4}
                         textAnchor="middle"
                         x={dotProps.cx}
@@ -153,7 +153,7 @@ export function TrendLineCard(props: {
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="mt-4 flex h-72 items-center justify-center rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500">
+        <div className="mt-4 flex h-72 items-center justify-center rounded-[10px] border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700/30 dark:text-slate-400">
           {props.emptyMessage}
         </div>
       )}

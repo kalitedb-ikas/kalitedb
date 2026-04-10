@@ -1,12 +1,19 @@
 import type {
+  AuditMetric,
+  Representative,
   Role,
+  RoleplayMetric,
   ReportDatasets,
   DashboardSnapshot,
   DatasetType,
   KpiMetricKey,
   QtManualEntry,
   ReportPeriod,
+  SalesEvaluationQuestion,
+  SalesKpiData,
+  SalesMeeting,
   ThresholdConfig,
+  TrainingEvent,
   UserRoleAssignment,
   UserRoleEntry
 } from "@kalitedb/shared";
@@ -19,12 +26,20 @@ import {
   qtManualEntrySchema,
   qtMetricSchema,
   reportPeriodSchema,
+  representativeSchema,
+  roleplayMetricSchema,
   roleSchema,
+  salesEvaluationQuestionSchema,
+  salesKpiDataSchema,
+  salesMeetingSchema,
+  normalizeKey,
   selectDefaultReportPeriod,
   thresholdConfigSchema,
+  trainingEventSchema,
   userRoleAssignmentSchema
 } from "@kalitedb/shared";
-import { collection, doc, getDoc, getDocs, orderBy, query, setDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { collection, deleteDoc, doc, getDoc, getDocs, getDocsFromServer, orderBy, query, setDoc, where } from "firebase/firestore";
 
 import { toPublicAssetPath } from "./asset-path";
 import { firebaseAuth, firebaseDb } from "./firebase";
@@ -53,7 +68,7 @@ type ResetDatasetResponse = {
 
 type RequestOptions = {
   token: string | null;
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   formData?: FormData;
 };
@@ -107,20 +122,52 @@ function canUseFirebaseClientFallback() {
   return Boolean(firebaseDb && firebaseAuth?.currentUser);
 }
 
-function shouldPreferFirebaseReadMode() {
-  if (!canUseFirebaseReadMode() || typeof window === "undefined") {
-    return false;
-  }
+/**
+ * Firebase Auth oturum durumunu bekler. Dev token modunda bile Firebase
+ * IndexedDB'den önceki Google oturumunu geri yükleyebilir — bu yüzden
+ * auth state'in resolve olmasını bekliyoruz.
+ */
+function waitForFirebaseAuth(timeoutMs = 3000): Promise<boolean> {
+  if (!firebaseAuth || !firebaseDb) return Promise.resolve(false);
+  if (firebaseAuth.currentUser) return Promise.resolve(true);
 
-  return window.location.hostname.endsWith("github.io");
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      resolve(false);
+    }, timeoutMs);
+    const unsubscribe = onAuthStateChanged(firebaseAuth!, (user) => {
+      clearTimeout(timer);
+      unsubscribe();
+      resolve(Boolean(user));
+    });
+  });
+}
+
+/**
+ * Firebase yapılandırılmış ama oturum yoksa anlamlı hata fırlat.
+ * API sunucusu kapalıyken kullanıcıyı yönlendirmek için.
+ */
+function assertFirebaseAuthOrThrow(hasAuth: boolean): asserts hasAuth is true {
+  if (!hasAuth) {
+    throw new Error(
+      "Veritabanına erişim yok. Google ile oturum açın veya API sunucusunu başlatın."
+    );
+  }
+}
+
+function isFirebasePreferredHost() {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname;
+  return hostname.endsWith("github.io") || hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function shouldPreferFirebaseReadMode() {
+  return canUseFirebaseReadMode() && isFirebasePreferredHost();
 }
 
 function shouldPreferFirebaseClientMode() {
-  if (!canUseFirebaseClientFallback() || typeof window === "undefined") {
-    return false;
-  }
-
-  return window.location.hostname.endsWith("github.io");
+  return canUseFirebaseClientFallback() && isFirebasePreferredHost();
 }
 
 async function getFirebaseCurrentUser() {
@@ -162,7 +209,22 @@ async function resolveFirebaseRole(email: string): Promise<Role | null> {
 
 async function getMeFromFirebase(): Promise<AuthenticatedUser> {
   const currentUser = await getFirebaseCurrentUser();
-  const role = await resolveFirebaseRole(currentUser.email!);
+  let role = await resolveFirebaseRole(currentUser.email!);
+
+  // Dev modunda rol bulunamazsa otomatik admin kaydı oluştur (bootstrap)
+  if (!role && import.meta.env.VITE_DEV_AUTH_MODE === "true" && firebaseDb) {
+    const emailKey = normalizeRoleEmail(currentUser.email!);
+    try {
+      await setDoc(doc(firebaseDb, "userRoles", emailKey), {
+        email: currentUser.email!,
+        role: "admin"
+      });
+      role = "admin";
+      console.info(`[KaliteDB] Dev bootstrap: ${currentUser.email} → admin rolü oluşturuldu.`);
+    } catch {
+      // Firestore kuralları izin vermiyorsa sessizce geç
+    }
+  }
 
   if (!role) {
     throw new Error("Kullanıcı rol tanımı bulunamadı.");
@@ -230,6 +292,144 @@ async function getRolesFromFirebase(): Promise<UserRoleAssignment[]> {
     .filter((role): role is { success: true; data: UserRoleAssignment } => role.success)
     .map((role) => role.data)
     .sort((left, right) => left.email.localeCompare(right.email, "tr"));
+}
+
+async function getRepresentativesFromFirebase(): Promise<Representative[]> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  // Cache'den değil sunucudan oku - yeni eklenen temsilcilerin hemen görünmesi için
+  let snapshot;
+  try {
+    snapshot = await getDocsFromServer(query(collection(firebaseDb, "representatives"), orderBy("displayName", "asc")));
+  } catch {
+    // Sunucu erişilemezse cache'den oku
+    snapshot = await getDocs(query(collection(firebaseDb, "representatives"), orderBy("displayName", "asc")));
+  }
+
+  const results: Representative[] = [];
+  for (const repDoc of snapshot.docs) {
+    const raw = { key: repDoc.id, ...repDoc.data() };
+    const parsed = representativeSchema.safeParse(raw);
+    if (parsed.success) {
+      results.push(parsed.data);
+    } else {
+      console.warn("[KaliteDB] Temsilci parse hatası:", repDoc.id, parsed.error.issues);
+    }
+  }
+  const salesCount = results.filter((r) => r.department === "sales").length;
+  const csCount = results.filter((r) => r.department === "cs").length;
+  console.info(`[KaliteDB] Temsilciler yüklendi: ${results.length} toplam (CS: ${csCount}, Satış: ${salesCount})`);
+  return results;
+}
+
+async function populateRepresentativesFromFirebase(): Promise<{ created: number; existing: number }> {
+  if (!firebaseDb) throw new Error("Firebase veritabanı hazır değil.");
+
+  // Mevcut temsilcileri al
+  const existingSnap = await getDocs(collection(firebaseDb, "representatives"));
+  const existingKeys = new Set(existingSnap.docs.map((d) => d.id));
+
+  // Tüm dönemlerden agent isimlerini topla
+  const periodsSnap = await getDocs(collection(firebaseDb, "reportPeriods"));
+  const agentMap = new Map<string, { name: string; department: "cs" | "sales" }>();
+
+  for (const periodDoc of periodsSnap.docs) {
+    const periodData = periodDoc.data();
+    const dept = (periodData.department ?? "cs") as "cs" | "sales";
+
+    // agentMetrics
+    const amSnap = await getDocs(collection(firebaseDb, "reportPeriods", periodDoc.id, "agentMetrics"));
+    for (const amDoc of amSnap.docs) {
+      const data = amDoc.data();
+      if (data.agentName) agentMap.set(normalizeKey(data.agentName), { name: data.agentName, department: dept });
+    }
+
+    // auditMetrics
+    const auSnap = await getDocs(collection(firebaseDb, "reportPeriods", periodDoc.id, "auditMetrics"));
+    for (const auDoc of auSnap.docs) {
+      const data = auDoc.data();
+      if (data.agentName) agentMap.set(normalizeKey(data.agentName), { name: data.agentName, department: dept });
+    }
+
+    // salesKpiData (satış temsilcileri)
+    if (dept === "sales") {
+      try {
+        const kpiSnap = await getDoc(doc(firebaseDb, "reportPeriods", periodDoc.id, "salesKpiData", "main"));
+        if (kpiSnap.exists()) {
+          const kpiData = kpiSnap.data();
+          for (const agent of kpiData.agents ?? []) {
+            if (agent.agentName) {
+              const key = agent.agentKey || normalizeKey(agent.agentName);
+              agentMap.set(key, { name: agent.agentName, department: "sales" });
+            }
+          }
+        }
+      } catch { /* salesKpiData okunamazsa devam et */ }
+    }
+  }
+
+  let created = 0;
+  const now = new Date().toISOString();
+  for (const [key, info] of agentMap) {
+    if (!existingKeys.has(key)) {
+      await setDoc(doc(firebaseDb, "representatives", key), {
+        key,
+        displayName: info.name,
+        department: info.department,
+        status: "active",
+        badges: [],
+        timeline: [],
+        createdAt: now,
+        updatedAt: now
+      });
+      created++;
+    }
+  }
+
+  return { created, existing: existingKeys.size };
+}
+
+/**
+ * Firebase ve API kullanılamadığında, public-fallback'teki dönem verilerinden
+ * temsilci listesi türetir.
+ */
+async function deriveRepresentativesFromFallback(): Promise<Representative[]> {
+  const fallback = await loadPublicFallback();
+  if (!fallback) return [];
+
+  const agentMap = new Map<string, { name: string; department: "cs" | "sales" }>();
+  const now = new Date().toISOString();
+
+  for (const [periodId, dashboard] of Object.entries(fallback.dashboards)) {
+    const period = fallback.periods.find((p) => p.id === periodId);
+    const dept = period?.department ?? "cs";
+
+    for (const record of dashboard.datasets.agentMetrics ?? []) {
+      if (record.agentKey && record.agentName) {
+        agentMap.set(record.agentKey, { name: record.agentName, department: dept });
+      }
+    }
+    for (const record of dashboard.datasets.auditMetrics ?? []) {
+      if (record.agentKey && record.agentName) {
+        agentMap.set(record.agentKey, { name: record.agentName, department: dept });
+      }
+    }
+  }
+
+  return Array.from(agentMap.entries())
+    .map(([key, info]) => ({
+      key,
+      displayName: info.name,
+      department: info.department,
+      status: "active" as const,
+      badges: [],
+      timeline: [],
+      createdAt: now,
+      updatedAt: now
+    }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
 }
 
 async function getReportPeriodFromFirebase(periodId: string, knownPeriods?: ReportPeriod[]) {
@@ -402,6 +602,8 @@ function buildDefaultQtManualEntry(
     totalEvaluatedChatMailCount: null,
     feedbackCount: null,
     feedbackCoverage: null,
+    trainingCount: null,
+    meetingCount: null,
     createdAt: now,
     updatedAt: now
   };
@@ -431,6 +633,94 @@ async function resolveQtManualTarget(target?: QtManualEntryTarget) {
     userEmail: normalizeRoleEmail(target.targetUserEmail),
     userName: target.targetUserName?.trim() || normalizeRoleEmail(target.targetUserEmail)
   };
+}
+
+async function getRoleplayMetricsFromFirebase(periodId: string): Promise<RoleplayMetric[]> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const snapshot = await getDocs(collection(firebaseDb, "reportPeriods", periodId, "roleplayMetrics"));
+
+  return snapshot.docs
+    .map((entryDoc) => roleplayMetricSchema.safeParse(entryDoc.data()))
+    .filter((entry): entry is { success: true; data: RoleplayMetric } => entry.success)
+    .map((entry) => entry.data)
+    .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
+}
+
+async function saveRoleplayMetricsToFirebase(
+  periodId: string,
+  entries: { agentKey: string; agentName: string; rolePlayCount: number; revOpsCount: number | null; note?: string }[]
+): Promise<void> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const now = new Date().toISOString();
+
+  // Mevcut kayıtları sil
+  const existingSnapshot = await getDocs(collection(firebaseDb, "reportPeriods", periodId, "roleplayMetrics"));
+  const deletePromises = existingSnapshot.docs.map((d) => deleteDoc(d.ref));
+  await Promise.all(deletePromises);
+
+  // Yeni kayıtları yaz
+  const writePromises = entries.map((entry) => {
+    const data: Record<string, unknown> = {
+      agentKey: entry.agentKey,
+      agentName: entry.agentName,
+      rolePlayCount: entry.rolePlayCount,
+      revOpsCount: entry.revOpsCount,
+      updatedAt: now
+    };
+    if (entry.note) {
+      data.note = entry.note;
+    }
+    return setDoc(doc(firebaseDb!, "reportPeriods", periodId, "roleplayMetrics", entry.agentKey), data);
+  });
+  await Promise.all(writePromises);
+}
+
+async function getEvaluationQuestionsFromFirebase(periodId: string): Promise<SalesEvaluationQuestion[]> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const snapshot = await getDocs(collection(firebaseDb, "reportPeriods", periodId, "evaluationQuestions"));
+
+  return snapshot.docs
+    .map((entryDoc) => salesEvaluationQuestionSchema.safeParse({ id: entryDoc.id, ...entryDoc.data() }))
+    .filter((entry): entry is { success: true; data: SalesEvaluationQuestion } => entry.success)
+    .map((entry) => entry.data);
+}
+
+async function saveEvaluationQuestionsToFirebase(
+  periodId: string,
+  entries: { id?: string; questionText: string; answer: string; score: number }[]
+): Promise<void> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const now = new Date().toISOString();
+
+  // Mevcut kayıtları sil
+  const existingSnapshot = await getDocs(collection(firebaseDb, "reportPeriods", periodId, "evaluationQuestions"));
+  const deletePromises = existingSnapshot.docs.map((d) => deleteDoc(d.ref));
+  await Promise.all(deletePromises);
+
+  // Yeni kayıtları yaz
+  const writePromises = entries.map((entry) => {
+    const id = entry.id || crypto.randomUUID();
+    return setDoc(doc(firebaseDb!, "reportPeriods", periodId, "evaluationQuestions", id), {
+      id,
+      questionText: entry.questionText,
+      answer: entry.answer,
+      score: entry.score,
+      updatedAt: now
+    });
+  });
+  await Promise.all(writePromises);
 }
 
 async function getQtManualEntriesFromFirebase(periodId: string): Promise<QtManualEntry[]> {
@@ -488,6 +778,8 @@ async function updateQtManualEntryFromFirebase(
     totalEvaluatedChatMailCount: number | null;
     feedbackCount: number | null;
     feedbackCoverage: number | null;
+    trainingCount: number | null;
+    meetingCount: number | null;
   },
   target?: QtManualEntryTarget
 ): Promise<QtManualEntry> {
@@ -507,6 +799,224 @@ async function updateQtManualEntryFromFirebase(
 
   await setDoc(doc(firebaseDb, "reportPeriods", periodId, "qtManualEntries", currentEntry.userKey), nextEntry);
   return nextEntry;
+}
+
+async function getTrainingEventsFromFirebase(month: string): Promise<TrainingEvent[]> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const startDate = `${month}-01`;
+  const [yearStr, monthStr] = month.split("-");
+  const lastDay = new Date(Number(yearStr), Number(monthStr), 0).getDate();
+  const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+  const snapshot = await getDocs(
+    query(
+      collection(firebaseDb, "trainingEvents"),
+      where("date", ">=", startDate),
+      where("date", "<=", endDate),
+      orderBy("date", "asc")
+    )
+  );
+
+  return snapshot.docs
+    .map((eventDoc) => trainingEventSchema.safeParse({ id: eventDoc.id, ...eventDoc.data() }))
+    .filter((event): event is { success: true; data: TrainingEvent } => event.success)
+    .map((event) => event.data);
+}
+
+async function saveTrainingEventToFirebase(
+  event: Omit<TrainingEvent, "id" | "createdAt" | "updatedAt"> & { id?: string }
+): Promise<TrainingEvent> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const now = new Date().toISOString();
+  const eventId = event.id || doc(collection(firebaseDb, "trainingEvents")).id;
+  const data: TrainingEvent = {
+    id: eventId,
+    title: event.title,
+    date: event.date,
+    color: event.color ?? "#3b82f6",
+    participants: event.participants ?? [],
+    trainer: event.trainer,
+    department: event.department ?? "sales",
+    createdAt: now,
+    updatedAt: now
+  };
+
+  await setDoc(doc(firebaseDb, "trainingEvents", eventId), data);
+  return data;
+}
+
+async function updateTrainingEventInFirebase(
+  eventId: string,
+  patch: Partial<Omit<TrainingEvent, "id" | "createdAt">>
+): Promise<TrainingEvent> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const eventRef = doc(firebaseDb, "trainingEvents", eventId);
+  const existing = await getDoc(eventRef);
+  if (!existing.exists()) {
+    throw new Error("Etkinlik bulunamadı.");
+  }
+
+  const parsed = trainingEventSchema.parse({ id: existing.id, ...existing.data() });
+  const updated: TrainingEvent = {
+    ...parsed,
+    ...patch,
+    id: eventId,
+    updatedAt: new Date().toISOString()
+  };
+
+  await setDoc(eventRef, updated);
+  return updated;
+}
+
+async function deleteTrainingEventFromFirebase(eventId: string): Promise<void> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  await deleteDoc(doc(firebaseDb, "trainingEvents", eventId));
+}
+
+async function createReportPeriodInFirebase(input: {
+  month: string;
+  title: string;
+  department?: "cs" | "sales";
+  compareToPeriodId?: string;
+}): Promise<ReportPeriod> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const department = input.department ?? "cs";
+
+  // Aynı ay+departman için mükerrer dönem kontrolü
+  const snapshot = await getDocs(
+    query(collection(firebaseDb, "reportPeriods"), where("month", "==", input.month))
+  );
+  const existingDoc = snapshot.docs.find(
+    (d) => ((d.data() as Record<string, unknown>).department ?? "cs") === department
+  );
+  if (existingDoc) {
+    return reportPeriodSchema.parse({ id: existingDoc.id, ...existingDoc.data() });
+  }
+
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const data: Record<string, unknown> = {
+    month: input.month,
+    title: input.title,
+    status: "draft",
+    department,
+    createdAt: now,
+    updatedAt: now
+  };
+  if (input.compareToPeriodId) {
+    data.compareToPeriodId = input.compareToPeriodId;
+  }
+
+  await setDoc(doc(firebaseDb, "reportPeriods", id), data);
+  return reportPeriodSchema.parse({ id, ...data });
+}
+
+async function getSalesMeetingsFromFirebase(periodId: string): Promise<SalesMeeting[]> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const snapshot = await getDocs(collection(firebaseDb, "reportPeriods", periodId, "salesMeetings"));
+
+  return snapshot.docs
+    .map((entryDoc) => salesMeetingSchema.safeParse({ id: entryDoc.id, ...entryDoc.data() }))
+    .filter((entry): entry is { success: true; data: SalesMeeting } => entry.success)
+    .map((entry) => entry.data)
+    .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+}
+
+async function saveSalesMeetingsToFirebase(
+  periodId: string,
+  meetings: Omit<SalesMeeting, "id" | "createdAt" | "updatedAt">[]
+): Promise<void> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const now = new Date().toISOString();
+
+  // Mevcut kayıtları sil
+  const existingSnapshot = await getDocs(collection(firebaseDb, "reportPeriods", periodId, "salesMeetings"));
+  const deletePromises = existingSnapshot.docs.map((d) => deleteDoc(d.ref));
+  await Promise.all(deletePromises);
+
+  // Yeni kayıtları yaz
+  const writePromises = meetings.map((meeting) => {
+    const id = crypto.randomUUID();
+    const data: SalesMeeting = {
+      id,
+      periodId,
+      date: meeting.date ?? "",
+      qualityMember: meeting.qualityMember,
+      salesRepresentative: meeting.salesRepresentative,
+      customerName: meeting.customerName,
+      status: meeting.status ?? "devam_ediyor",
+      licenseDetail: meeting.licenseDetail ?? "",
+      licenseAmount: meeting.licenseAmount ?? null,
+      createdAt: now,
+      updatedAt: now
+    };
+    return setDoc(doc(firebaseDb!, "reportPeriods", periodId, "salesMeetings", id), data);
+  });
+  await Promise.all(writePromises);
+}
+
+async function getSalesKpiDataFromFirebase(periodId: string): Promise<SalesKpiData | null> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  const snapshot = await getDoc(doc(firebaseDb, "reportPeriods", periodId, "salesKpiData", "main"));
+  if (!snapshot.exists()) return null;
+
+  const parsed = salesKpiDataSchema.safeParse(snapshot.data());
+  return parsed.success ? parsed.data : null;
+}
+
+async function saveSalesKpiDataToFirebase(periodId: string, data: SalesKpiData): Promise<void> {
+  if (!firebaseDb) {
+    throw new Error("Firebase veritabanı hazır değil.");
+  }
+
+  await setDoc(doc(firebaseDb!, "reportPeriods", periodId, "salesKpiData", "main"), data);
+
+  // Satış temsilcilerini otomatik kaydet
+  try {
+    for (const agent of data.agents) {
+      const key = agent.agentKey || normalizeKey(agent.agentName);
+      if (!key) continue;
+      const repDoc = doc(firebaseDb!, "representatives", key);
+      const snap = await getDoc(repDoc);
+      if (!snap.exists()) {
+        const now = new Date().toISOString();
+        await setDoc(repDoc, {
+          key,
+          displayName: agent.agentName,
+          department: "sales",
+          status: "active",
+          badges: [],
+          timeline: [],
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+    }
+  } catch { /* Temsilci kaydı başarısız olursa KPI kaydetmeyi engelleme */ }
 }
 
 function appendDatasetTypes(params: URLSearchParams, datasetTypes?: DatasetType[]) {
@@ -714,6 +1224,19 @@ async function requestWithPublicFallback<T>(
 
 export const api = {
   async getMe(token: string | null) {
+    // Dev token'lar API sunucusuna ihtiyaç duymadan çalışır
+    if (token?.startsWith("dev-")) {
+      const role = roleSchema.safeParse(token.slice(4));
+      if (role.success) {
+        return {
+          uid: "dev-user",
+          email: "dev@kalitedb.local",
+          displayName: "Geliştirici",
+          role: role.data
+        } satisfies AuthenticatedUser;
+      }
+    }
+
     if (shouldPreferFirebaseClientMode()) {
       return getMeFromFirebase();
     }
@@ -721,10 +1244,8 @@ export const api = {
     try {
       return await request<AuthenticatedUser>("/api/me", { token });
     } catch (error) {
-      if (!canUseFirebaseClientFallback()) {
-        throw error;
-      }
-
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) throw error;
       return getMeFromFirebase();
     }
   },
@@ -733,7 +1254,12 @@ export const api = {
       try {
         return await getPeriodsFromFirebase();
       } catch {
-        // Static fallback keeps guest pages usable if public Firestore read is unavailable.
+        // Auth henüz hazır olmayabilir — bekle ve tekrar dene
+        const hasAuth = await waitForFirebaseAuth();
+        if (hasAuth) {
+          return getPeriodsFromFirebase();
+        }
+        // Auth yoksa public fallback'e düş (misafir kullanıcılar için)
       }
     }
 
@@ -741,20 +1267,46 @@ export const api = {
       return getPeriodsFromFirebase();
     }
 
-    return requestWithPublicFallback<ReportPeriod[]>("/api/report-periods", { token }, (fallback) => fallback.periods);
+    try {
+      return await requestWithPublicFallback<ReportPeriod[]>("/api/report-periods", { token }, (fallback) => fallback.periods);
+    } catch (error) {
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) {
+        console.warn("[KaliteDB] Dönemler yüklenemedi: API kapalı ve Firebase oturumu yok. Google ile giriş yapın veya API sunucusunu başlatın.");
+        return [];
+      }
+      return getPeriodsFromFirebase();
+    }
   },
-  createPeriod(
+  async createPeriod(
     token: string | null,
     body: { month: string; title: string; department?: "cs" | "sales"; compareToPeriodId?: string | undefined }
   ) {
-    return request<ReportPeriod>("/api/report-periods", { token, method: "POST", body });
+    const hasFirebaseAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFirebaseAuth) {
+      return createReportPeriodInFirebase({
+        month: body.month,
+        title: body.title,
+        ...(body.department ? { department: body.department } : {}),
+        ...(body.compareToPeriodId ? { compareToPeriodId: body.compareToPeriodId } : {})
+      });
+    }
+    try {
+      return await request<ReportPeriod>("/api/report-periods", { token, method: "POST", body });
+    } catch (error) {
+      assertFirebaseAuthOrThrow(false);
+      throw error;
+    }
   },
   async getPeriodDetails(token: string | null, periodId: string, options?: PeriodDetailsOptions) {
     if (shouldPreferFirebaseReadMode()) {
       try {
         return await getPeriodDetailsFromFirebase(periodId, options);
       } catch {
-        // Backend remains the fallback for admin-heavy screens.
+        const hasAuth = await waitForFirebaseAuth();
+        if (hasAuth) {
+          return getPeriodDetailsFromFirebase(periodId, options);
+        }
       }
     }
 
@@ -765,22 +1317,44 @@ export const api = {
     }
 
     const queryString = params.toString();
-    return request<{
-      period: ReportPeriod;
-      datasets: DashboardSnapshot["datasets"];
-      importJobs: Array<{
-        id: string;
-        datasetType: DatasetType;
-        uploadedAt: string;
-        uploadedBy: string;
-        rowCount: number;
-        errorCount: number;
-        status: string;
-      }>;
-    }>(`/api/report-periods/${periodId}${queryString ? `?${queryString}` : ""}`, { token });
+    try {
+      return await request<{
+        period: ReportPeriod;
+        datasets: DashboardSnapshot["datasets"];
+        importJobs: Array<{
+          id: string;
+          datasetType: DatasetType;
+          uploadedAt: string;
+          uploadedBy: string;
+          rowCount: number;
+          errorCount: number;
+          status: string;
+        }>;
+      }>(`/api/report-periods/${periodId}${queryString ? `?${queryString}` : ""}`, { token });
+    } catch (error) {
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) throw error;
+      return getPeriodDetailsFromFirebase(periodId, options);
+    }
   },
   updatePeriod(token: string | null, periodId: string, body: Record<string, unknown>) {
     return request(`/api/report-periods/${periodId}`, { token, method: "PATCH", body });
+  },
+  async deleteDatasetRecord(token: string | null, periodId: string, datasetType: string, recordId: string): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const collectionName = datasetType === "agent-metrics" ? "agentMetrics"
+        : datasetType === "audit-metrics" ? "auditMetrics"
+        : datasetType === "question-performance" ? "questionPerformance"
+        : "qtMetrics";
+      await deleteDoc(doc(firebaseDb, "reportPeriods", periodId, collectionName, recordId));
+      return;
+    }
+    await request(`/api/report-periods/${periodId}`, {
+      token,
+      method: "PATCH",
+      body: { action: "delete-record", datasetType, recordId }
+    });
   },
   resetDataset(token: string | null, periodId: string, datasetType: DatasetType) {
     return request<ResetDatasetResponse>(`/api/report-periods/${periodId}`, {
@@ -830,7 +1404,10 @@ export const api = {
       try {
         return await getDashboardFromFirebase(periodId, compareToPeriodId, options);
       } catch {
-        // Static dashboard snapshot stays as the last-resort guest fallback.
+        const hasAuth = await waitForFirebaseAuth();
+        if (hasAuth) {
+          return getDashboardFromFirebase(periodId, compareToPeriodId, options);
+        }
       }
     }
 
@@ -844,45 +1421,54 @@ export const api = {
     appendDatasetTypes(params, options?.datasetTypes);
 
     const queryString = params.toString();
-    return requestWithPublicFallback<DashboardSnapshot>(
-      `/api/dashboard${queryString ? `?${queryString}` : ""}`,
-      { token },
-      (fallback) => {
-        const resolvedPeriodId = periodId ?? selectDefaultReportPeriod(fallback.periods)?.id;
-        if (!resolvedPeriodId) {
-          return undefined;
-        }
+    try {
+      return await requestWithPublicFallback<DashboardSnapshot>(
+        `/api/dashboard${queryString ? `?${queryString}` : ""}`,
+        { token },
+        (fallback) => {
+          const resolvedPeriodId = periodId ?? selectDefaultReportPeriod(fallback.periods)?.id;
+          if (!resolvedPeriodId) {
+            return undefined;
+          }
 
-        const currentSnapshot = fallback.dashboards[resolvedPeriodId];
-        if (!currentSnapshot) {
-          return undefined;
-        }
+          const currentSnapshot = fallback.dashboards[resolvedPeriodId];
+          if (!currentSnapshot) {
+            return undefined;
+          }
 
-        if (!compareToPeriodId) {
-          return currentSnapshot;
-        }
+          if (!compareToPeriodId) {
+            return currentSnapshot;
+          }
 
-        const compareSnapshot = fallback.dashboards[compareToPeriodId];
-        if (!compareSnapshot) {
-          return currentSnapshot;
-        }
+          const compareSnapshot = fallback.dashboards[compareToPeriodId];
+          if (!compareSnapshot) {
+            return currentSnapshot;
+          }
 
-        return buildDashboardSnapshot({
-          period: currentSnapshot.period,
-          compareToPeriod: compareSnapshot.period,
-          datasets: currentSnapshot.datasets,
-          compareDatasets: compareSnapshot.datasets,
-          thresholds: currentSnapshot.thresholds
-        });
-      }
-    );
+          return buildDashboardSnapshot({
+            period: currentSnapshot.period,
+            compareToPeriod: compareSnapshot.period,
+            datasets: currentSnapshot.datasets,
+            compareDatasets: compareSnapshot.datasets,
+            thresholds: currentSnapshot.thresholds
+          });
+        }
+      );
+    } catch (error) {
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) throw error;
+      return getDashboardFromFirebase(periodId, compareToPeriodId, options);
+    }
   },
   async getThresholds(token: string | null) {
     if (shouldPreferFirebaseReadMode()) {
       try {
         return await getThresholdsFromFirebase();
       } catch {
-        // Fall through to API fallback.
+        const hasAuth = await waitForFirebaseAuth();
+        if (hasAuth) {
+          return getThresholdsFromFirebase();
+        }
       }
     }
 
@@ -893,10 +1479,8 @@ export const api = {
     try {
       return await request<Record<KpiMetricKey, ThresholdConfig>>("/api/settings/thresholds", { token });
     } catch (error) {
-      if (!canUseFirebaseClientFallback()) {
-        throw error;
-      }
-
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) throw error;
       return getThresholdsFromFirebase();
     }
   },
@@ -907,16 +1491,95 @@ export const api = {
       body
     });
   },
+  async getAuditMetricsForPeriods(token: string | null, periodIds: string[]): Promise<Record<string, AuditMetric[]>> {
+    // Firebase doğrudan okuma (en hızlı yol)
+    if (canUseFirebaseReadMode() && (firebaseAuth?.currentUser || (await waitForFirebaseAuth()))) {
+      try {
+        const entries = await Promise.all(
+          periodIds.map(async (periodId) => {
+            const datasets = await getPeriodDatasetsFromFirebase(periodId, ["audit-metrics"]);
+            return [periodId, datasets.auditMetrics] as const;
+          })
+        );
+        return Object.fromEntries(entries);
+      } catch {
+        // Firebase başarısız olursa API'ye düş
+      }
+    }
+
+    // API fallback: her dönem için getDashboard çağır, audit metriklerini çıkar
+    const entries = await Promise.all(
+      periodIds.map(async (periodId) => {
+        try {
+          const snapshot = await api.getDashboard(token, periodId, undefined, { datasetTypes: ["audit-metrics"] });
+          return [periodId, snapshot.datasets.auditMetrics] as const;
+        } catch {
+          return [periodId, [] as AuditMetric[]] as const;
+        }
+      })
+    );
+    return Object.fromEntries(entries);
+  },
+  async getRoleplayMetrics(token: string | null, periodId: string): Promise<RoleplayMetric[]> {
+    if (canUseFirebaseReadMode() && (firebaseAuth?.currentUser || (await waitForFirebaseAuth()))) {
+      try {
+        return await getRoleplayMetricsFromFirebase(periodId);
+      } catch {
+        // Firebase başarısız olursa API'ye düş
+      }
+    }
+    return request<RoleplayMetric[]>(`/api/report-periods/${periodId}/roleplay-metrics`, { token });
+  },
+  async saveRoleplayMetrics(
+    token: string | null,
+    periodId: string,
+    entries: { agentKey: string; agentName: string; rolePlayCount: number; revOpsCount: number | null; note?: string }[]
+  ): Promise<void> {
+    const hasFbAuth = firebaseAuth?.currentUser || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      return saveRoleplayMetricsToFirebase(periodId, entries);
+    }
+    try {
+      await request(`/api/report-periods/${periodId}/roleplay-metrics`, { token, method: "PUT", body: entries });
+    } catch (error) {
+      assertFirebaseAuthOrThrow(false);
+      throw error;
+    }
+  },
+  async getEvaluationQuestions(token: string | null, periodId: string): Promise<SalesEvaluationQuestion[]> {
+    if (canUseFirebaseReadMode() && (firebaseAuth?.currentUser || (await waitForFirebaseAuth()))) {
+      try {
+        return await getEvaluationQuestionsFromFirebase(periodId);
+      } catch {
+        // Firebase başarısız olursa API'ye düş
+      }
+    }
+    return request<SalesEvaluationQuestion[]>(`/api/report-periods/${periodId}/evaluation-questions`, { token });
+  },
+  async saveEvaluationQuestions(
+    token: string | null,
+    periodId: string,
+    entries: { id?: string; questionText: string; answer: string; score: number }[]
+  ): Promise<void> {
+    const hasFbAuth = firebaseAuth?.currentUser || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      return saveEvaluationQuestionsToFirebase(periodId, entries);
+    }
+    try {
+      await request(`/api/report-periods/${periodId}/evaluation-questions`, { token, method: "PUT", body: entries });
+    } catch (error) {
+      assertFirebaseAuthOrThrow(false);
+      throw error;
+    }
+  },
   getRoles(token: string | null) {
     if (shouldPreferFirebaseClientMode()) {
       return getRolesFromFirebase();
     }
 
-    return request<UserRoleAssignment[]>("/api/users/roles", { token }).catch((error) => {
-      if (!canUseFirebaseClientFallback()) {
-        throw error;
-      }
-
+    return request<UserRoleAssignment[]>("/api/users/roles", { token }).catch(async (error) => {
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) throw error;
       return getRolesFromFirebase();
     });
   },
@@ -932,7 +1595,10 @@ export const api = {
       try {
         return await getQtManualEntriesFromFirebase(periodId);
       } catch {
-        // Keep backend as fallback for environments without public Firestore reads.
+        const hasAuth = await waitForFirebaseAuth();
+        if (hasAuth) {
+          return getQtManualEntriesFromFirebase(periodId);
+        }
       }
     }
 
@@ -943,10 +1609,8 @@ export const api = {
     try {
       return await request<QtManualEntry[]>(`/api/report-periods/${periodId}/qt-manual-entry?scope=all`, { token });
     } catch (error) {
-      if (!canUseFirebaseClientFallback()) {
-        throw error;
-      }
-
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) throw error;
       return getQtManualEntriesFromFirebase(periodId);
     }
   },
@@ -970,10 +1634,8 @@ export const api = {
         { token }
       );
     } catch (error) {
-      if (!canUseFirebaseClientFallback()) {
-        throw error;
-      }
-
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) throw error;
       return getQtManualEntryFromFirebase(periodId, target);
     }
   },
@@ -986,6 +1648,8 @@ export const api = {
       totalEvaluatedChatMailCount: number | null;
       feedbackCount: number | null;
       feedbackCoverage: number | null;
+      trainingCount: number | null;
+      meetingCount: number | null;
     },
     target?: QtManualEntryTarget
   ) {
@@ -1004,11 +1668,420 @@ export const api = {
         }
       });
     } catch (error) {
-      if (!canUseFirebaseClientFallback()) {
-        throw error;
-      }
-
+      const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+      if (!hasAuth) throw error;
       return updateQtManualEntryFromFirebase(periodId, body, target);
     }
+  },
+  async getTrainingEvents(token: string | null, month: string): Promise<TrainingEvent[]> {
+    if (canUseFirebaseReadMode() && (firebaseAuth?.currentUser || (await waitForFirebaseAuth()))) {
+      try {
+        return await getTrainingEventsFromFirebase(month);
+      } catch {
+        // Firebase başarısız olursa API'ye düş
+      }
+    }
+    return request<TrainingEvent[]>(`/api/training-events?month=${encodeURIComponent(month)}`, { token });
+  },
+  async createTrainingEvent(
+    token: string | null,
+    event: Omit<TrainingEvent, "id" | "createdAt" | "updatedAt">
+  ): Promise<TrainingEvent> {
+    const hasFbAuth = firebaseAuth?.currentUser || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      return saveTrainingEventToFirebase(event);
+    }
+    try {
+      return await request<TrainingEvent>("/api/training-events", { token, method: "POST", body: event });
+    } catch (error) {
+      assertFirebaseAuthOrThrow(false);
+      throw error;
+    }
+  },
+  async updateTrainingEvent(
+    token: string | null,
+    eventId: string,
+    patch: Partial<Omit<TrainingEvent, "id" | "createdAt">>
+  ): Promise<TrainingEvent> {
+    const hasFbAuth = firebaseAuth?.currentUser || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      return updateTrainingEventInFirebase(eventId, patch);
+    }
+    try {
+      return await request<TrainingEvent>(`/api/training-events/${eventId}`, { token, method: "PATCH", body: patch });
+    } catch (error) {
+      assertFirebaseAuthOrThrow(false);
+      throw error;
+    }
+  },
+  async deleteTrainingEvent(token: string | null, eventId: string): Promise<void> {
+    const hasFbAuth = firebaseAuth?.currentUser || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      return deleteTrainingEventFromFirebase(eventId);
+    }
+    try {
+      await request<{ deleted: boolean }>(`/api/training-events/${eventId}`, { token, method: "DELETE" });
+    } catch (error) {
+      assertFirebaseAuthOrThrow(false);
+      throw error;
+    }
+  },
+  async getSalesMeetings(token: string | null, periodId: string): Promise<SalesMeeting[]> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      try {
+        return await getSalesMeetingsFromFirebase(periodId);
+      } catch {
+        // Firebase başarısız olursa API'ye düş
+      }
+    }
+    return request<SalesMeeting[]>(`/api/report-periods/${periodId}/sales-meetings`, { token });
+  },
+  async saveSalesMeetings(
+    token: string | null,
+    periodId: string,
+    meetings: Omit<SalesMeeting, "id" | "createdAt" | "updatedAt">[]
+  ): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      return saveSalesMeetingsToFirebase(periodId, meetings);
+    }
+    try {
+      await request(`/api/report-periods/${periodId}/sales-meetings`, { token, method: "PUT", body: meetings });
+    } catch (error) {
+      assertFirebaseAuthOrThrow(false);
+      throw error;
+    }
+  },
+  async getSalesKpiData(token: string | null, periodId: string): Promise<SalesKpiData | null> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      try {
+        return await getSalesKpiDataFromFirebase(periodId);
+      } catch {
+        // Firebase başarısız olursa API'ye düş
+      }
+    }
+    return request<SalesKpiData | null>(`/api/report-periods/${periodId}/sales-kpi`, { token });
+  },
+  async saveSalesKpiData(token: string | null, periodId: string, data: SalesKpiData): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth) {
+      return saveSalesKpiDataToFirebase(periodId, data);
+    }
+    try {
+      await request(`/api/report-periods/${periodId}/sales-kpi`, { token, method: "PUT", body: data });
+    } catch (error) {
+      assertFirebaseAuthOrThrow(false);
+      throw error;
+    }
+  },
+  // ── Roleplay individual CRUD ──
+  async updateRoleplayMetric(
+    token: string | null,
+    periodId: string,
+    agentKey: string,
+    updates: Record<string, unknown>
+  ): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const docRef = doc(firebaseDb, "reportPeriods", periodId, "roleplayMetrics", agentKey);
+      await setDoc(docRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/roleplay-metrics`, { token, method: "PATCH", body: { agentKey, ...updates } });
+  },
+  async deleteRoleplayMetric(token: string | null, periodId: string, agentKey: string): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      await deleteDoc(doc(firebaseDb, "reportPeriods", periodId, "roleplayMetrics", agentKey));
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/roleplay-metrics`, { token, method: "DELETE", body: { agentKey } });
+  },
+
+  // ── Evaluation questions individual CRUD ──
+  async updateEvaluationQuestion(
+    token: string | null,
+    periodId: string,
+    id: string,
+    updates: Record<string, unknown>
+  ): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const docRef = doc(firebaseDb, "reportPeriods", periodId, "evaluationQuestions", id);
+      await setDoc(docRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/evaluation-questions`, { token, method: "PATCH", body: { id, ...updates } });
+  },
+  async deleteEvaluationQuestion(token: string | null, periodId: string, id: string): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      await deleteDoc(doc(firebaseDb, "reportPeriods", periodId, "evaluationQuestions", id));
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/evaluation-questions`, { token, method: "DELETE", body: { id } });
+  },
+
+  // ── Sales meetings individual CRUD ──
+  async createSalesMeeting(
+    token: string | null,
+    periodId: string,
+    meeting: Omit<SalesMeeting, "id" | "periodId" | "createdAt" | "updatedAt">
+  ): Promise<{ id: string }> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const safeData = Object.fromEntries(
+        Object.entries({ id, periodId, ...meeting, createdAt: now, updatedAt: now })
+          .filter(([, v]) => v !== undefined)
+      );
+      await setDoc(doc(firebaseDb, "reportPeriods", periodId, "salesMeetings", id), safeData);
+      return { id };
+    }
+    return request<{ id: string }>(`/api/report-periods/${periodId}/sales-meetings`, { token, method: "POST", body: meeting });
+  },
+  async updateSalesMeeting(
+    token: string | null,
+    periodId: string,
+    meetingId: string,
+    updates: Record<string, unknown>
+  ): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const docRef = doc(firebaseDb, "reportPeriods", periodId, "salesMeetings", meetingId);
+      await setDoc(docRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/sales-meetings`, { token, method: "PATCH", body: { id: meetingId, ...updates } });
+  },
+  async deleteSalesMeeting(token: string | null, periodId: string, meetingId: string): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      await deleteDoc(doc(firebaseDb, "reportPeriods", periodId, "salesMeetings", meetingId));
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/sales-meetings`, { token, method: "DELETE", body: { id: meetingId } });
+  },
+
+  // ── KPI individual CRUD ──
+  async addKpiAgent(
+    token: string | null,
+    periodId: string,
+    agent: { agentName: string; perfScore: number | null; salesAmount: number; licenseCount: number; avgLicensePrice: number; talkDurationSeconds: number; callAttempts: number; conversionRate: number }
+  ): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const kpiDoc = doc(firebaseDb, "reportPeriods", periodId, "salesKpiData", "main");
+      const snap = await getDoc(kpiDoc);
+      if (!snap.exists()) throw new Error("KPI verisi bulunamadı");
+      const current = snap.data() as { targets: unknown; agents: unknown[]; updatedAt: string };
+      current.agents.push({ ...agent, agentKey: agent.agentName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_çğıöşü]/g, "") });
+      current.updatedAt = new Date().toISOString();
+      await setDoc(kpiDoc, current);
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/sales-kpi`, { token, method: "PATCH", body: { action: "add-agent", agent } });
+  },
+  async updateKpiAgent(
+    token: string | null,
+    periodId: string,
+    agentKey: string,
+    updates: Record<string, unknown>
+  ): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const kpiDoc = doc(firebaseDb, "reportPeriods", periodId, "salesKpiData", "main");
+      const snap = await getDoc(kpiDoc);
+      if (!snap.exists()) throw new Error("KPI verisi bulunamadı");
+      const current = snap.data() as { targets: unknown; agents: Array<Record<string, unknown>>; updatedAt: string };
+      const idx = current.agents.findIndex((a) => a.agentKey === agentKey);
+      if (idx === -1) throw new Error("Temsilci bulunamadı");
+      current.agents[idx] = { ...current.agents[idx], ...updates };
+      current.updatedAt = new Date().toISOString();
+      await setDoc(kpiDoc, current);
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/sales-kpi`, { token, method: "PATCH", body: { action: "update-agent", agentKey, updates } });
+  },
+  async deleteKpiAgent(token: string | null, periodId: string, agentKey: string): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const kpiDoc = doc(firebaseDb, "reportPeriods", periodId, "salesKpiData", "main");
+      const snap = await getDoc(kpiDoc);
+      if (!snap.exists()) throw new Error("KPI verisi bulunamadı");
+      const current = snap.data() as { targets: unknown; agents: Array<Record<string, unknown>>; updatedAt: string };
+      current.agents = current.agents.filter((a) => a.agentKey !== agentKey);
+      current.updatedAt = new Date().toISOString();
+      await setDoc(kpiDoc, current);
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/sales-kpi`, { token, method: "PATCH", body: { action: "delete-agent", agentKey } });
+  },
+  async resetKpiAgents(token: string | null, periodId: string): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const kpiDoc = doc(firebaseDb, "reportPeriods", periodId, "salesKpiData", "main");
+      const snap = await getDoc(kpiDoc);
+      if (!snap.exists()) throw new Error("KPI verisi bulunamadı");
+      const current = snap.data() as { targets: unknown; agents: Array<Record<string, unknown>>; updatedAt: string };
+      current.agents = [];
+      current.updatedAt = new Date().toISOString();
+      await setDoc(kpiDoc, current);
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/sales-kpi`, { token, method: "PATCH", body: { action: "reset-agents" } });
+  },
+  async updateKpiTargets(
+    token: string | null,
+    periodId: string,
+    targets: Record<string, unknown>
+  ): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const kpiDoc = doc(firebaseDb, "reportPeriods", periodId, "salesKpiData", "main");
+      const snap = await getDoc(kpiDoc);
+      if (!snap.exists()) throw new Error("KPI verisi bulunamadı");
+      const current = snap.data() as { targets: Record<string, unknown>; agents: unknown[]; updatedAt: string };
+      current.targets = { ...current.targets, ...targets };
+      current.updatedAt = new Date().toISOString();
+      await setDoc(kpiDoc, current);
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/sales-kpi`, { token, method: "PATCH", body: { action: "update-targets", targets } });
+  },
+  async updateLicenseSummary(
+    token: string | null,
+    periodId: string,
+    licenseSummary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number }
+  ): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const kpiDoc = doc(firebaseDb, "reportPeriods", periodId, "salesKpiData", "main");
+      const snap = await getDoc(kpiDoc);
+      if (!snap.exists()) throw new Error("KPI verisi bulunamadı");
+      const current = snap.data() as Record<string, unknown>;
+      current.licenseSummary = licenseSummary;
+      current.updatedAt = new Date().toISOString();
+      await setDoc(kpiDoc, current);
+      return;
+    }
+    await request(`/api/report-periods/${periodId}/sales-kpi`, { token, method: "PATCH", body: { action: "update-license-summary", licenseSummary } });
+  },
+
+  async getRepresentatives(token: string | null): Promise<Representative[]> {
+    // 1) Firebase'den oku
+    if (shouldPreferFirebaseReadMode()) {
+      try {
+        const result = await getRepresentativesFromFirebase();
+        if (result.length > 0) return result;
+      } catch { /* Firebase başarısız — diğer yolları dene */ }
+
+      try {
+        const hasAuth = await waitForFirebaseAuth();
+        if (hasAuth) {
+          const result = await getRepresentativesFromFirebase();
+          if (result.length > 0) return result;
+        }
+      } catch { /* Auth sonrası da başarısız */ }
+    }
+
+    // 2) API'den oku
+    try {
+      const result = await request<Representative[]>("/api/representatives", { token });
+      if (result.length > 0) return result;
+    } catch { /* API da başarısız */ }
+
+    // 3) Son çare: dönem verilerinden türet
+    return deriveRepresentativesFromFallback();
+  },
+  async updateRepresentativeStatus(
+    token: string | null,
+    key: string,
+    body: { status?: string; department?: string; statusNote?: string }
+  ): Promise<Representative> {
+    return request<Representative>(`/api/representatives/${encodeURIComponent(key)}`, {
+      token,
+      method: "PATCH",
+      body
+    });
+  },
+  async updateRepresentative(
+    token: string | null,
+    key: string,
+    body: { displayName?: string; status?: string; department?: string; statusNote?: string; badges?: string[]; timeline?: Array<{ id: string; title: string; startDate: string; endDate?: string; department?: string }> }
+  ): Promise<Representative> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const repDoc = doc(firebaseDb, "representatives", key);
+      const snap = await getDoc(repDoc);
+      if (!snap.exists()) throw new Error("Temsilci bulunamadı");
+      const current = snap.data() as Record<string, unknown>;
+      const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+      if (body.displayName != null) updates.displayName = body.displayName;
+      if (body.status != null) updates.status = body.status;
+      if (body.department != null) updates.department = body.department;
+      if (body.statusNote != null) updates.statusNote = body.statusNote;
+      if (body.badges != null) updates.badges = body.badges;
+      if (body.timeline != null) updates.timeline = body.timeline;
+      await setDoc(repDoc, { ...current, ...updates });
+      return { ...current, ...updates } as unknown as Representative;
+    }
+    return request<Representative>(`/api/representatives/${encodeURIComponent(key)}`, {
+      token,
+      method: "PATCH",
+      body
+    });
+  },
+  async createRepresentative(
+    token: string | null,
+    body: { displayName: string; department: "cs" | "sales" }
+  ): Promise<Representative> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const key = normalizeKey(body.displayName);
+      const now = new Date().toISOString();
+      const rep: Record<string, unknown> = {
+        key,
+        displayName: body.displayName,
+        department: body.department,
+        status: "active",
+        badges: [],
+        timeline: [],
+        createdAt: now,
+        updatedAt: now
+      };
+      await setDoc(doc(firebaseDb, "representatives", key), rep);
+      return rep as unknown as Representative;
+    }
+    return request<Representative>("/api/representatives", {
+      token,
+      method: "POST",
+      body
+    });
+  },
+  async deleteRepresentative(token: string | null, key: string): Promise<void> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      await deleteDoc(doc(firebaseDb, "representatives", key));
+      return;
+    }
+    await request(`/api/representatives/${encodeURIComponent(key)}`, {
+      token,
+      method: "DELETE"
+    });
+  },
+  async populateRepresentatives(token: string | null): Promise<{ created: number; existing: number }> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      return populateRepresentativesFromFirebase();
+    }
+    return request<{ created: number; existing: number }>("/api/representatives/populate", {
+      token,
+      method: "POST",
+      body: {}
+    });
   }
 };

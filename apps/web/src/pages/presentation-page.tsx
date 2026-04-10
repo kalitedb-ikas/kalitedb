@@ -18,6 +18,7 @@ import {
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
+import { FancySelect } from "../components/fancy-select";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { brand, chartDark, chartSeriesPalette, chartTooltipDark } from "../theme/colors";
 
@@ -114,7 +115,7 @@ export function PresentationPage() {
           >
             <div className="flex h-full flex-col justify-between gap-6">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard compact emphasis="primary" label="Audit" tone="green" value={formatAuditScore(snapshot.summary.auditAverage)} />
+                <StatCard compact label="Audit" tone="green" value={formatAuditScore(snapshot.summary.auditAverage)} />
                 <StatCard compact label="CSAT" tone="green" value={formatNumber(snapshot.summary.csatAverage, 3)} />
                 <StatCard compact label={previousAuditAccuracyLabel} tone="yellow" value={formatPercent(snapshot.summary.previousAuditAccuracyAverage)} />
                 <StatCard compact label="Toplam görüşme" tone="neutral" value={formatNumber(snapshot.summary.totalConversationCount)} />
@@ -233,7 +234,7 @@ export function PresentationPage() {
                   </div>
                   <div className="mt-2 grid gap-2">
                     {presentationData.channelMix.map((item) => (
-                      <div key={item.name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                      <div key={item.name} className="flex items-center justify-between rounded-[10px] border border-white/10 bg-white/[0.04] px-4 py-3">
                         <div className="flex items-center gap-3">
                           <span className="h-3 w-3 rounded-full" style={{ background: item.fill }} />
                           <span className="text-sm text-white/88">{item.name}</span>
@@ -333,18 +334,15 @@ export function PresentationPage() {
     <div className="space-y-6">
       <PageHeader
         actions={
-          <select
-            aria-label="Ay seçimi"
-            className="h-11 min-w-[220px] rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] focus:border-primary/40 focus:outline-none"
-            onChange={(event) => updateSearchParam("periodId", event.target.value)}
+          <FancySelect
+            ariaLabel="Ay seçimi"
+            className="min-w-[220px]"
+            panelWidthClass="w-60"
+            options={(periodsQuery.data ?? []).map((period) => ({ value: period.id, label: period.title }))}
             value={periodId ?? ""}
-          >
-            {(periodsQuery.data ?? []).map((period) => (
-              <option key={period.id} value={period.id}>
-                {period.title}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => updateSearchParam("periodId", v)}
+            placeholder="Dönem seçin"
+          />
         }
         eyebrow="Özet modu"
         metaChips={
@@ -360,31 +358,29 @@ export function PresentationPage() {
       <SurfaceCard variant="subtle">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <select
-              className="h-11 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 focus:border-primary/40 focus:outline-none"
-              onChange={(event) => updateSearchParam("compareToPeriodId", event.target.value)}
+            <FancySelect
+              ariaLabel="Karşılaştırma dönemi"
+              panelWidthClass="w-60"
+              clearable
+              clearLabel="Karşılaştırma yok"
+              options={(periodsQuery.data ?? []).map((period) => ({ value: period.id, label: period.title }))}
               value={compareToPeriodId ?? ""}
-            >
-              <option value="">Karşılaştırma yok</option>
-              {(periodsQuery.data ?? []).map((period) => (
-                <option key={period.id} value={period.id}>
-                  {period.title}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => updateSearchParam("compareToPeriodId", v)}
+              placeholder="Karşılaştırma yok"
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <MetaChip>Slide {slides.length === 0 ? 0 : boundedSlide + 1} / {slides.length}</MetaChip>
             <button
-              className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+              className="inline-flex min-h-10 items-center rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-400 transition hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-950 dark:hover:text-slate-200"
               onClick={() => setActiveSlide((current) => Math.max(0, current - 1))}
               type="button"
             >
               Önceki
             </button>
             <button
-              className="inline-flex min-h-10 items-center rounded-full bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex min-h-10 items-center rounded-full bg-slate-950 dark:bg-slate-100 px-4 text-sm font-semibold text-white dark:text-slate-900 transition hover:bg-slate-800 dark:hover:bg-slate-300"
               onClick={() => setActiveSlide((current) => Math.min(slides.length - 1, current + 1))}
               type="button"
             >
@@ -403,7 +399,7 @@ export function PresentationPage() {
 
 function ChartShell(props: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-[28px] border border-white/12 bg-white/[0.04] p-5">
+    <div className="rounded-[10px] border border-white/12 bg-white/[0.04] p-5">
       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/60">{props.title}</p>
       <div className="mt-4">{props.children}</div>
     </div>
@@ -412,7 +408,7 @@ function ChartShell(props: { title: string; children: ReactNode }) {
 
 function DarkInsight(props: { eyebrow: string; title: string; description: string }) {
   return (
-    <div className="rounded-[28px] border border-white/12 bg-white/[0.05] p-6">
+    <div className="rounded-[10px] border border-white/12 bg-white/[0.05] p-6">
       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/58">{props.eyebrow}</p>
       <h3 className="mt-4 font-display text-3xl font-semibold tracking-[-0.04em] text-white">{props.title}</h3>
       <p className="mt-4 text-base leading-8 text-white/76">{props.description}</p>
@@ -422,7 +418,7 @@ function DarkInsight(props: { eyebrow: string; title: string; description: strin
 
 function SlideMiniCard(props: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-[24px] border border-white/12 bg-white/[0.05] p-5">
+    <div className="rounded-[10px] border border-white/12 bg-white/[0.05] p-5">
       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/56">{props.label}</p>
       <p className="mt-4 text-xl font-semibold tracking-[-0.03em] text-white">{props.value}</p>
       <p className="mt-2 text-sm leading-6 text-white/68">{props.detail}</p>

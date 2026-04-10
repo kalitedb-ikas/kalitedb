@@ -7,25 +7,25 @@ type ChampionTheme = "orange" | "violet" | "emerald";
 type SurfaceVariant = "default" | "elevated" | "subtle" | "dark" | "hero";
 
 const toneMap: Record<Tone, string> = {
-  green: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  yellow: "border-amber-200 bg-amber-50 text-amber-700",
-  red: "border-rose-200 bg-rose-50 text-rose-700",
-  neutral: "border-slate-200 bg-slate-50 text-slate-600"
+  green: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400",
+  yellow: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/30 dark:text-amber-400",
+  red: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400",
+  neutral: "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-400"
 };
 
 const toneBadgeMap: Record<Tone, string> = {
-  green: "border border-emerald-200 bg-emerald-50 text-emerald-700",
-  yellow: "border border-amber-200 bg-amber-50 text-amber-700",
-  red: "border border-rose-200 bg-rose-50 text-rose-700",
-  neutral: "border border-slate-200 bg-slate-50 text-slate-600"
+  green: "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400",
+  yellow: "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/30 dark:text-amber-400",
+  red: "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400",
+  neutral: "border border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-400"
 };
 
 const surfaceVariantMap: Record<SurfaceVariant, string> = {
-  default: "surface-default text-slate-950",
-  elevated: "surface-elevated text-slate-950",
-  subtle: "surface-subtle text-slate-950",
+  default: "surface-default text-slate-950 dark:text-slate-100",
+  elevated: "surface-elevated text-slate-950 dark:text-slate-100",
+  subtle: "surface-subtle text-slate-950 dark:text-slate-100",
   dark: "surface-dark text-white",
-  hero: "surface-hero text-slate-950"
+  hero: "surface-hero text-slate-950 dark:text-slate-100"
 };
 
 const championThemes: Record<
@@ -98,17 +98,17 @@ function getInitials(name: string) {
 }
 
 function headerDividerClass(variant: SurfaceVariant) {
-  return variant === "dark" ? "border-white/12" : "border-slate-200/80";
+  return variant === "dark" ? "border-white/12" : "border-slate-200/80 dark:border-slate-600/40";
 }
 
 function bodyTextClass(variant: SurfaceVariant) {
-  return variant === "dark" ? "text-white/74" : "text-slate-600";
+  return variant === "dark" ? "text-white/74" : "text-slate-600 dark:text-slate-400";
 }
 
 function metaChip(variant: SurfaceVariant) {
   return cn(
     "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
-    variant === "dark" ? "border-white/14 bg-white/8 text-white/74" : "border-slate-200 bg-white/84 text-slate-600"
+    variant === "dark" ? "border-white/14 bg-white/8 text-white/74" : "border-slate-200 bg-white/84 text-slate-600 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-400"
   );
 }
 
@@ -126,10 +126,10 @@ export function PageHeader(props: {
         {props.eyebrow ? (
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">{props.eyebrow}</p>
         ) : null}
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
+        <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100 sm:text-4xl">
           {props.title}
         </h1>
-        {props.subtitle ? <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">{props.subtitle}</p> : null}
+        {props.subtitle ? <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-400 sm:text-base">{props.subtitle}</p> : null}
         {props.metaChips ? <div className="mt-4 flex flex-wrap gap-2">{props.metaChips}</div> : null}
       </div>
       {props.actions ? <div className="flex flex-wrap items-center gap-3 lg:justify-end">{props.actions}</div> : null}
@@ -146,6 +146,7 @@ export function SurfaceCard(props: {
   className?: string | undefined;
   bodyClassName?: string | undefined;
   headerClassName?: string | undefined;
+  titleClassName?: string | undefined;
 }) {
   const variant = props.variant ?? "default";
 
@@ -160,7 +161,7 @@ export function SurfaceCard(props: {
           )}
         >
           <div>
-            {props.title ? <h2 className={cn("font-display text-lg font-semibold tracking-[-0.03em]", variant === "dark" ? "text-white" : "text-slate-950")}>{props.title}</h2> : null}
+            {props.title ? <h2 className={cn("font-display text-lg font-semibold tracking-[-0.03em]", props.titleClassName ?? (variant === "dark" ? "text-white" : "text-slate-950 dark:text-slate-100"))}>{props.title}</h2> : null}
             {props.description ? <p className={cn("mt-1 text-sm leading-6", bodyTextClass(variant))}>{props.description}</p> : null}
           </div>
           {props.actions ? <div className="flex flex-wrap items-center gap-2">{props.actions}</div> : null}
@@ -240,21 +241,21 @@ export function StatCard(props: {
       className={cn(
         emphasis === "primary" ? "surface-hero border-sky-100/80 shadow-[0_24px_70px_rgba(125,211,252,0.12)]" : "surface-default",
         "group overflow-hidden transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_70px_rgba(15,23,42,0.12)]",
-        compact ? "rounded-[24px] p-4" : "rounded-[26px] p-5"
+        compact ? "rounded-[10px] p-4" : "rounded-[10px] p-5"
       )}
     >
       <div className="flex items-start justify-between gap-3">
         {props.icon ? (
           <div
             className={cn(
-              "inline-flex shrink-0 items-center justify-center rounded-2xl border p-2.5",
+              "inline-flex shrink-0 items-center justify-center rounded-[10px] border p-2.5",
               toneBadgeMap[tone]
             )}
           >
             {props.icon}
           </div>
         ) : (
-          <span className="inline-flex h-2.5 w-14 rounded-full bg-slate-200" />
+          <span className="inline-flex h-2.5 w-14 rounded-full bg-slate-200 dark:bg-slate-600" />
         )}
         {topLabel ? (
           <span className={cn("rounded-full px-3 py-1 text-[11px] font-semibold", toneBadgeMap[topTone])}>
@@ -262,11 +263,11 @@ export function StatCard(props: {
           </span>
         ) : null}
       </div>
-      <p className={cn("mt-4 text-sm font-medium text-slate-600", compact ? "line-clamp-1" : "")}>{props.label}</p>
-      <p className={cn("mt-2 font-display font-semibold tracking-[-0.04em] text-slate-950", compact ? "text-2xl" : "text-3xl")}>
+      <p className={cn("mt-4 text-sm font-medium text-slate-600 dark:text-slate-400", compact ? "line-clamp-1" : "")}>{props.label}</p>
+      <p className={cn("mt-2 font-display font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100", compact ? "text-2xl" : "text-3xl")}>
         {props.value}
       </p>
-      {props.hint ? <p className={cn("mt-2 text-sm leading-6 text-slate-600", compact ? "line-clamp-2" : "")}>{props.hint}</p> : null}
+      {props.hint ? <p className={cn("mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400", compact ? "line-clamp-2" : "")}>{props.hint}</p> : null}
     </div>
   );
 }
@@ -280,10 +281,10 @@ export function HeroStat(props: {
   meta?: string | undefined;
 }) {
   return (
-    <div className={cn("rounded-[24px] border border-white/14 bg-white/8 p-4 text-white", props.className)}>
+    <div className={cn("rounded-[10px] border border-white/14 bg-white/8 p-4 text-white", props.className)}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs uppercase tracking-[0.24em] text-white/74">{props.label}</p>
-        {props.icon ? <div className="rounded-2xl border border-white/14 bg-white/8 p-2 text-white">{props.icon}</div> : null}
+        {props.icon ? <div className="rounded-[10px] border border-white/14 bg-white/8 p-2 text-white">{props.icon}</div> : null}
       </div>
       <p className="mt-4 font-display text-3xl font-semibold tracking-[-0.04em] text-white">{props.value}</p>
       {props.detail ? <p className="mt-2 text-sm leading-6 text-white/78">{props.detail}</p> : null}
@@ -318,7 +319,7 @@ export function HeatChip(props: {
 
 export function Leaderboard(props: {
   title: string;
-  items: Array<{ id: string; label: string; value: string; delta?: string; subtitle?: string }>;
+  items: Array<{ id: string; label: string; value: string; delta?: string; subtitle?: string; imageSrc?: string | undefined }>;
   className?: string | undefined;
 }) {
   return (
@@ -327,24 +328,27 @@ export function Leaderboard(props: {
         {props.items.map((item, index) => (
           <li
             key={item.id}
-            className="flex items-center justify-between gap-3 rounded-[22px] border border-slate-200/90 bg-white/92 px-4 py-3 shadow-[0_10px_25px_rgba(15,23,42,0.04)]"
+            className="flex items-center justify-between gap-3 rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white/92 dark:bg-slate-800/60 px-4 py-3 shadow-[0_10px_25px_rgba(15,23,42,0.04)]"
           >
             <div className="flex items-center gap-3">
               <span
                 className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-2xl border text-xs font-semibold",
-                  index === 0 ? "border-orange-200 bg-orange-50 text-orange-700" : "border-slate-200 bg-slate-50 text-slate-600"
+                  "inline-flex h-9 w-9 items-center justify-center rounded-[10px] border text-xs font-semibold",
+                  index === 0 ? "border-orange-200 bg-orange-50 text-orange-700" : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-400"
                 )}
               >
                 {index + 1}
               </span>
+              {item.imageSrc ? (
+                <img src={item.imageSrc} alt={item.label} className="h-9 w-9 rounded-full object-cover" />
+              ) : null}
               <div>
-                <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                {item.subtitle ? <p className="text-xs text-slate-500">{item.subtitle}</p> : null}
-                {item.delta ? <p className="text-xs text-slate-500">{item.delta}</p> : null}
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-200">{item.label}</p>
+                {item.subtitle ? <p className="text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</p> : null}
+                {item.delta ? <p className="text-xs text-slate-500 dark:text-slate-400">{item.delta}</p> : null}
               </div>
             </div>
-            <span className="text-sm font-semibold text-slate-900 tabular-nums">{item.value}</span>
+            <span className="text-sm font-semibold text-slate-900 dark:text-slate-200 tabular-nums">{item.value}</span>
           </li>
         ))}
       </ul>
@@ -360,12 +364,12 @@ export function FilterBar(props: {
   inlineSummary?: ReactNode | undefined;
 }) {
   return (
-    <div className={cn("surface-subtle rounded-[26px] border border-slate-200/80 p-4 sm:p-5", props.className)}>
+    <div className={cn("surface-subtle rounded-[10px] border border-slate-200/80 dark:border-slate-600/40 p-4 sm:p-5", props.className)}>
       {props.title || props.supportingText || props.inlineSummary ? (
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            {props.title ? <h2 className="font-display text-base font-semibold tracking-[-0.03em] text-slate-950">{props.title}</h2> : null}
-            {props.supportingText ? <p className="mt-1 text-sm leading-6 text-slate-600">{props.supportingText}</p> : null}
+            {props.title ? <h2 className="font-display text-base font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">{props.title}</h2> : null}
+            {props.supportingText ? <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">{props.supportingText}</p> : null}
           </div>
           {props.inlineSummary ? <div className="flex flex-wrap gap-2">{props.inlineSummary}</div> : null}
         </div>
@@ -393,7 +397,7 @@ export function MetricCarouselCard(props: {
   return (
     <div
       className={cn(
-        "surface-elevated relative min-w-[280px] snap-start overflow-hidden rounded-[28px] p-5 text-slate-950 transition duration-300 hover:-translate-y-1",
+        "surface-elevated relative min-w-[280px] snap-start overflow-hidden rounded-[10px] p-5 text-slate-950 dark:text-slate-100 transition duration-300 hover:-translate-y-1",
         props.className
       )}
     >
@@ -402,23 +406,23 @@ export function MetricCarouselCard(props: {
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{props.eyebrow}</span>
           {props.imageSrc ? (
-            <div className={cn("h-14 w-11 overflow-hidden rounded-[18px] border bg-white/92 shadow-[0_10px_24px_rgba(15,23,42,0.06)]", theme.ring)}>
+            <div className={cn("h-14 w-11 overflow-hidden rounded-[10px] border bg-white/92 shadow-[0_10px_24px_rgba(15,23,42,0.06)]", theme.ring)}>
               <img alt={props.imageAlt ?? props.eyebrow} className="h-full w-full object-cover" src={props.imageSrc} />
             </div>
           ) : props.icon ? (
-            <div className={cn("rounded-2xl border bg-white/92 p-2.5 text-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.06)]", theme.ring)}>
+            <div className={cn("rounded-[10px] border bg-white/92 p-2.5 text-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.06)]", theme.ring)}>
               {props.icon}
             </div>
           ) : null}
         </div>
-        <p className="mt-4 text-sm font-medium text-slate-600">{props.title}</p>
+        <p className="mt-4 text-sm font-medium text-slate-600 dark:text-slate-400">{props.title}</p>
         {props.badge ? (
           <span className={cn("mt-3 inline-flex rounded-full px-3 py-1 text-[11px] font-semibold", toneBadgeMap[props.badgeTone ?? "neutral"])}>
             {props.badge}
           </span>
         ) : null}
-        <p className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950">{props.value}</p>
-        {props.detail ? <p className="mt-2 text-sm leading-6 text-slate-600">{props.detail}</p> : null}
+        <p className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100">{props.value}</p>
+        {props.detail ? <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">{props.detail}</p> : null}
       </div>
     </div>
   );
@@ -451,17 +455,17 @@ export function InsightTile(props: {
   description?: string | undefined;
 }) {
   return (
-    <div className="surface-subtle rounded-[24px] border border-slate-200/80 p-4">
+    <div className="surface-subtle rounded-[10px] border border-slate-200/80 dark:border-slate-600/40 p-4">
       <div className="flex items-start gap-3">
-        <div className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/92 p-2 text-slate-700">
+        <div className="inline-flex items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white/92 dark:bg-slate-800/60 p-2 text-slate-700 dark:text-slate-300">
           {props.icon}
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{props.title}</p>
-          <p className="mt-1 text-sm font-semibold text-slate-950">{props.value}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{props.title}</p>
+          <p className="mt-1 text-sm font-semibold text-slate-950 dark:text-slate-100">{props.value}</p>
         </div>
       </div>
-      {props.description ? <p className="mt-3 text-sm leading-6 text-slate-600">{props.description}</p> : null}
+      {props.description ? <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-400">{props.description}</p> : null}
     </div>
   );
 }
@@ -476,18 +480,18 @@ export function QuestionSpotlight(props: {
   trailing?: ReactNode | undefined;
 }) {
   return (
-    <div className={cn("surface-default relative overflow-hidden rounded-[26px] p-5", props.accent)}>
-      <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-white/0 to-white/0" />
+    <div className={cn("surface-default relative overflow-hidden rounded-[10px] p-5", props.accent)}>
+      <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-white/0 to-white/0 dark:from-white/5" />
       <div className="relative">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{props.label}</p>
-        <p className="mt-3 text-base font-semibold leading-7 text-slate-950">{props.title}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{props.label}</p>
+        <p className="mt-3 text-base font-semibold leading-7 text-slate-950 dark:text-slate-100">{props.title}</p>
         <div className="mt-4 flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{props.topic}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{props.topic}</p>
             <p className={cn("mt-2 text-lg font-semibold", props.tone)}>{props.score}</p>
           </div>
           {props.trailing ? (
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/92 text-slate-600">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] border border-slate-200/80 bg-white/92 text-slate-600 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-400">
               {props.trailing}
             </div>
           ) : null}
@@ -523,7 +527,7 @@ export function ChampionSpotlightCard(props: {
   const hasExpandedPortraitLayout = !showPodium && visiblePeople.length <= 2;
 
   return (
-    <section className={cn("surface-hero relative overflow-hidden rounded-[32px] p-6 sm:p-7", props.className)}>
+    <section className={cn("surface-hero relative overflow-hidden rounded-[10px] p-6 sm:p-7", props.className)}>
       <div className={cn("absolute -right-8 top-0 h-40 w-40 blur-3xl", theme.glow)} />
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.4),rgba(255,255,255,0)_35%,rgba(15,23,42,0.02)_70%)]" />
       <div aria-hidden className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
@@ -544,7 +548,7 @@ export function ChampionSpotlightCard(props: {
           className="champion-stage-fixture absolute left-4 top-3 h-14 w-14"
         >
           <div className="absolute left-1/2 top-0 h-3 w-10 -translate-x-1/2 rounded-full bg-slate-950/14" />
-          <div className="absolute left-1/2 top-2.5 h-5 w-9 -translate-x-1/2 rounded-[12px] border border-white/75 bg-white/78 shadow-[0_12px_26px_rgba(15,23,42,0.12)]" />
+          <div className="absolute left-1/2 top-2.5 h-5 w-9 -translate-x-1/2 rounded-[10px] border border-white/75 bg-white/78 shadow-[0_12px_26px_rgba(15,23,42,0.12)]" />
           <div
             className="champion-stage-source absolute left-1/2 top-6.5 h-7 w-7 -translate-x-1/2 rounded-full border border-white/85 shadow-[0_0_22px_rgba(255,255,255,0.96),0_0_60px_rgba(96,165,250,0.66)]"
             style={{ background: theme.stageSource }}
@@ -553,11 +557,11 @@ export function ChampionSpotlightCard(props: {
       </div>
       <div className="relative grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
         <div className="relative z-20">
-          {props.kicker ? <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">{props.kicker}</p> : null}
-          <h3 className="mt-3 font-display text-2xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-3xl">{props.title}</h3>
-          {props.metricLabel ? <p className="mt-5 text-sm font-medium text-slate-600">{props.metricLabel}</p> : null}
+          {props.kicker ? <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-300">{props.kicker}</p> : null}
+          <h3 className="mt-3 font-display text-2xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100 sm:text-3xl">{props.title}</h3>
+          {props.metricLabel ? <p className="mt-5 text-sm font-medium text-slate-600 dark:text-slate-400">{props.metricLabel}</p> : null}
           <div className="mt-2 flex flex-wrap items-end gap-3">
-            <p className="font-display text-5xl font-semibold tracking-[-0.05em] text-slate-950">{props.score}</p>
+            <p className="font-display text-5xl font-semibold tracking-[-0.05em] text-slate-950 dark:text-slate-100">{props.score}</p>
             {props.delta ? <span className={cn("rounded-full px-3 py-1 text-xs font-semibold", theme.tag)}>{props.delta}</span> : null}
           </div>
           {people.length > 1 ? (
@@ -566,7 +570,7 @@ export function ChampionSpotlightCard(props: {
                 <span
                   key={person.name}
                   className={cn(
-                    "rounded-full border bg-white/88 px-3 py-1.5 text-sm font-semibold text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.06)]",
+                    "rounded-full border bg-white/88 dark:bg-slate-800/70 px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100 shadow-[0_8px_24px_rgba(15,23,42,0.06)]",
                     theme.ring
                   )}
                 >
@@ -577,15 +581,15 @@ export function ChampionSpotlightCard(props: {
           ) : (
             <p className={cn("mt-4 font-display text-2xl font-semibold tracking-[-0.04em]", theme.accent)}>{props.name}</p>
           )}
-          {props.achievement ? <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">{props.achievement}</p> : null}
-          {props.footnote ? <p className="mt-5 text-xs uppercase tracking-[0.22em] text-slate-400">{props.footnote}</p> : null}
+          {props.achievement ? <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-400">{props.achievement}</p> : null}
+          {props.footnote ? <p className="mt-5 text-xs uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">{props.footnote}</p> : null}
         </div>
 
         <div
           className={cn(
             "relative z-0",
             showPodium
-              ? "surface-default h-[260px] overflow-hidden rounded-[28px] border border-white/80 bg-white/75"
+              ? "surface-default h-[260px] overflow-hidden rounded-[10px] border border-white/80 bg-white/75"
               : "h-[300px] overflow-visible"
           )}
         >
@@ -604,7 +608,7 @@ export function ChampionSpotlightCard(props: {
                 "absolute overflow-hidden border border-slate-200 bg-white/85 shadow-[0_18px_50px_rgba(15,23,42,0.08)]",
                 showPodium
                   ? "left-1/2 top-8 h-36 w-36 -translate-x-1/2 rounded-full"
-                  : "left-[37%] top-[55%] h-[318px] w-[236px] -translate-x-1/2 -translate-y-1/2 rounded-[40px]"
+                  : "left-[37%] top-[55%] h-[318px] w-[236px] -translate-x-1/2 -translate-y-1/2 rounded-[10px]"
               )}
             >
               {(() => {
@@ -624,7 +628,7 @@ export function ChampionSpotlightCard(props: {
               {visiblePeople.map((person) => (
                 <div
                   key={person.name}
-                  className="relative h-[210px] w-[150px] overflow-hidden rounded-[34px] border border-slate-200 bg-white/88 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
+                  className="relative h-[210px] w-[150px] overflow-hidden rounded-[10px] border border-slate-200 bg-white/88 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
                 >
                   <ChampionAvatar
                     imageAlt={person.imageAlt ?? person.name}
@@ -649,7 +653,7 @@ export function ChampionSpotlightCard(props: {
                   key={person.name}
                   className={cn(
                     "relative overflow-hidden border border-slate-200 bg-white/88 shadow-[0_18px_50px_rgba(15,23,42,0.08)]",
-                    showPodium ? "h-24 rounded-[24px]" : "h-[148px] w-[108px] rounded-[28px]"
+                    showPodium ? "h-24 rounded-[10px]" : "h-[148px] w-[108px] rounded-[10px]"
                   )}
                 >
                   <ChampionAvatar
@@ -664,16 +668,16 @@ export function ChampionSpotlightCard(props: {
           )}
           {showPodium ? (
             <div className="absolute inset-x-8 bottom-8">
-              <div className="rounded-[24px] border border-slate-200 bg-white/92 p-4 shadow-[0_14px_35px_rgba(15,23,42,0.06)]">
+              <div className="rounded-[10px] border border-slate-200 bg-white/92 p-4 shadow-[0_14px_35px_rgba(15,23,42,0.06)]">
                 <div className="flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
                   <span />
                   <span>Lider</span>
                   <span>Etki</span>
                 </div>
                 <div className="mt-4 flex items-end justify-center gap-3">
-                  <div className="w-12 rounded-t-[18px] bg-slate-100" style={{ height: "56px" }} />
-                  <div className={cn("w-16 rounded-t-[20px] bg-gradient-to-b shadow-[0_12px_25px_rgba(15,23,42,0.08)]", theme.bar)} style={{ height: "88px" }} />
-                  <div className="w-12 rounded-t-[18px] bg-slate-100" style={{ height: "44px" }} />
+                  <div className="w-12 rounded-t-[10px] bg-slate-100" style={{ height: "56px" }} />
+                  <div className={cn("w-16 rounded-t-[10px] bg-gradient-to-b shadow-[0_12px_25px_rgba(15,23,42,0.08)]", theme.bar)} style={{ height: "88px" }} />
+                  <div className="w-12 rounded-t-[10px] bg-slate-100" style={{ height: "44px" }} />
                 </div>
               </div>
             </div>
@@ -714,7 +718,7 @@ export function PresentationSlide(props: {
   className?: string | undefined;
 }) {
   return (
-    <section className={cn("surface-dark h-full rounded-[36px] p-6 sm:p-8 lg:p-10", props.className)}>
+    <section className={cn("surface-dark h-full rounded-[10px] p-6 sm:p-8 lg:p-10", props.className)}>
       <div className="flex h-full flex-col">
         {props.eyebrow ? <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">{props.eyebrow}</p> : null}
         <h2 className="mt-3 max-w-4xl font-display text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl lg:text-[2.8rem]">

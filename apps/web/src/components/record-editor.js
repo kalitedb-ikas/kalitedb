@@ -33,7 +33,7 @@ export function RecordEditor(props) {
                     return accumulator;
                 }, {});
                 void props.onSave(updates);
-            }, children: [Object.entries(draft).map(([key, value]) => (_jsxs("label", { className: "flex flex-col gap-2 text-sm font-medium text-slate-700", children: [key, _jsx("input", { className: "rounded-2xl border border-slate-200 px-3 py-2", onChange: (event) => {
+            }, children: [Object.entries(draft).map(([key, value]) => (_jsxs("label", { className: "flex flex-col gap-2 text-sm font-medium text-slate-700", children: [key, _jsx("input", { className: "rounded-[10px] border border-slate-200 px-3 py-2", onChange: (event) => {
                                 setDraft((current) => ({
                                     ...current,
                                     [key]: event.target.value

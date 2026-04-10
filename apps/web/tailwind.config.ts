@@ -3,6 +3,7 @@ import type { Config } from "tailwindcss";
 import { brand, semantic } from "./src/theme/colors";
 
 const config: Config = {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{ts,tsx}", "../../packages/ui/src/**/*.{ts,tsx}"],
   theme: {
     extend: {
@@ -45,8 +46,8 @@ const config: Config = {
         display: ["Manrope", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"]
       },
       borderRadius: {
-        "2xl": "16px",
-        "3xl": "20px"
+        "2xl": "10px",
+        "3xl": "10px"
       }
     }
   },
