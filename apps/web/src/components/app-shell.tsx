@@ -1,26 +1,30 @@
 import {
+  AlertCircle,
   BarChart3,
+  CalendarDays,
   ClipboardList,
+  FileQuestion,
   Gauge,
+  Handshake,
   LogOut,
   Menu,
   MessageCircle,
   Settings,
   Sparkles,
+  Target,
   Users,
   X
 } from "lucide-react";
-import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { toPublicAssetPath } from "../lib/asset-path";
 import { api, type AuthenticatedUser } from "../lib/api";
-import { formatPeriodMonth } from "../lib/format";
+import { SkyToggle } from "./sky-toggle";
 
-type Department = "cs" | "sales";
+type Department = "cs" | "sales" | "quality";
 
 type NavigationItem = {
   label: string;
@@ -35,14 +39,23 @@ const csNavigation: NavigationItem[] = [
   { label: "Sorular", to: "/cs/questions", icon: Sparkles },
   { label: "CSAT", to: "/cs/csat", icon: MessageCircle },
   { label: "Temsilciler", to: "/cs/representatives", icon: Users },
-  { label: "QT", to: "/cs/qt", icon: BarChart3 },
-  { label: "Yönetim", to: "/admin", icon: Settings, roles: ["admin", "qt"] }
+  { label: "Yönetim", to: "/admin", icon: Settings, roles: ["admin", "manager", "team_leader"] }
 ];
 
 const salesNavigation: NavigationItem[] = [
   { label: "Genel Bakış", to: "/sales", icon: Gauge },
-  { label: "Audit", to: "/sales/audit", icon: ClipboardList },
+  { label: "KPI", to: "/sales/kpi", icon: Target },
+  { label: "Performans Değerlendirme", to: "/sales/audit", icon: ClipboardList },
+  { label: "Değerlendirme Soruları", to: "/sales/evaluation-questions", icon: FileQuestion },
+  { label: "Satış Toplantıları", to: "/sales/meetings", icon: Handshake },
+  { label: "Temsilciler", to: "/sales/representatives", icon: Users },
+  { label: "Eğitim Takvimi", to: "/sales/calendar", icon: CalendarDays },
   { label: "Yönetim", to: "/sales/admin", icon: Settings, roles: ["admin", "manager", "team_leader"] }
+];
+
+const qualityNavigation: NavigationItem[] = [
+  { label: "QT", to: "/quality/qt", icon: BarChart3 },
+  { label: "Yönetim", to: "/quality/admin", icon: Settings, roles: ["admin", "manager", "qt", "quality"] }
 ];
 
 function roleLabel(role: AuthenticatedUser["role"] | undefined) {
@@ -54,11 +67,13 @@ function roleLabel(role: AuthenticatedUser["role"] | undefined) {
 }
 
 function getActiveDepartment(pathname: string): Department {
-  return pathname.startsWith("/sales") ? "sales" : "cs";
+  if (pathname.startsWith("/quality")) return "quality";
+  if (pathname.startsWith("/sales")) return "sales";
+  return "cs";
 }
 
 function getCurrentNavigationItem(pathname: string, items: NavigationItem[]) {
-  const rootPaths = ["/cs", "/sales"];
+  const rootPaths = ["/cs", "/sales", "/quality"];
   if (rootPaths.includes(pathname)) {
     return items.find((item) => item.to === pathname);
   }
@@ -84,9 +99,13 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
   });
 
   // Aktif departmana göre dönemleri filtrele
+  // Quality sekmesi şimdilik CS dönemlerini kullanır (CS QT verisi orada)
+  const effectivePeriodDepartment: Department =
+    activeDepartment === "quality" ? "cs" : activeDepartment;
+
   const departmentPeriods = useMemo(
-    () => (periodsQuery.data ?? []).filter((p) => (p.department ?? "cs") === activeDepartment),
-    [periodsQuery.data, activeDepartment]
+    () => (periodsQuery.data ?? []).filter((p) => (p.department ?? "cs") === effectivePeriodDepartment),
+    [periodsQuery.data, effectivePeriodDepartment]
   );
 
   useEffect(() => {
@@ -119,15 +138,25 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
   }, [auth.token, departmentPeriods, queryClient]);
 
   const activeNavigation = useMemo(() => {
-    const items = activeDepartment === "sales" ? salesNavigation : csNavigation;
+    const items =
+      activeDepartment === "sales"
+        ? salesNavigation
+        : activeDepartment === "quality"
+          ? qualityNavigation
+          : csNavigation;
     const currentUser = props.currentUser;
     if (!currentUser) return items.filter((item) => !item.roles);
     return items.filter((item) => !item.roles || item.roles.includes(currentUser.role));
   }, [activeDepartment, props.currentUser]);
 
+  // Kalite sekmesi yalnızca yöneticilere açık (admin, manager, team_leader, quality, qt, ceo)
+  const canSeeQualityTab = useMemo(() => {
+    const role = props.currentUser?.role;
+    if (!role) return false;
+    return ["admin", "manager", "team_leader", "quality", "qt", "ceo"].includes(role);
+  }, [props.currentUser]);
+
   const currentNavigationItem = getCurrentNavigationItem(location.pathname, activeNavigation);
-  const activePeriodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(departmentPeriods)?.id ?? "";
-  const showPeriodFilter = departmentPeriods.length > 0;
 
   const preservedNavigationSearch = useMemo(() => {
     const next = new URLSearchParams();
@@ -139,20 +168,24 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
     return queryString ? `?${queryString}` : "";
   }, [searchParams]);
 
-  const handlePeriodChange = (value: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (value) {
-      next.set("periodId", value);
-    } else {
-      next.delete("periodId");
-    }
-    startTransition(() => setSearchParams(next));
-  };
-
   const handleDepartmentSwitch = (dept: Department) => {
-    const target = dept === "sales" ? "/sales" : "/cs";
-    // Dönem filtresini sıfırla — farklı departmanın dönemleri farklı
-    navigate({ pathname: target });
+    const target =
+      dept === "sales"
+        ? "/sales"
+        : dept === "quality"
+          ? "/quality/qt"
+          : "/cs";
+    const prev = getActiveDepartment(location.pathname);
+    // CS ↔ Kalite geçişlerinde period id korunur (Kalite sekmesi CS dönemlerini kullanır).
+    // Sales ile yapılan geçişlerde period id sıfırlanır (farklı department dönemleri).
+    const shouldResetPeriod =
+      (prev === "sales" && dept !== "sales") ||
+      (prev !== "sales" && dept === "sales");
+    if (shouldResetPeriod) {
+      navigate({ pathname: target });
+    } else {
+      navigate({ pathname: target, search: preservedNavigationSearch });
+    }
   };
 
   return (
@@ -160,69 +193,91 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
       <header className="sticky top-3 z-40 px-3 pt-3 sm:top-4 sm:px-5 lg:px-8">
         <div
           className={[
-            "mx-auto max-w-[1680px] rounded-[26px] border px-3 py-3 transition-all duration-200 sm:px-4",
+            "mx-auto max-w-[1680px] rounded-[10px] border px-3 py-3 transition-all duration-200 sm:px-4",
             isScrolled
-              ? "surface-subtle border-slate-200/85 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
-              : "surface-subtle border-slate-200/70"
+              ? "surface-subtle border-slate-200/85 dark:border-slate-600/40 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
+              : "surface-subtle border-slate-200/70 dark:border-slate-600/30"
           ].join(" ")}
         >
           <div className="flex items-center gap-3">
-            {/* Logo */}
-            <Link
-              className="flex min-w-0 items-center gap-3.5 rounded-full px-1 py-1"
-              to={{ pathname: activeDepartment === "sales" ? "/sales" : "/cs", search: preservedNavigationSearch }}
-            >
-              <div className="flex size-12 items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.1)] sm:size-14">
-                <img alt="ikas" className="h-full w-full object-cover" src={toPublicAssetPath("/ikas.jpg")} />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate font-display text-base font-semibold tracking-[-0.03em] text-slate-950 sm:text-lg">
-                  Kalite Dashboard
-                </p>
-              </div>
-            </Link>
+            {/* Logo + Departman sekmeleri (sabit sol grup) */}
+            <div className="flex items-center gap-3">
+              <Link
+                className="flex min-w-0 items-center gap-3.5 rounded-full px-1 py-1"
+                to={{
+                  pathname:
+                    activeDepartment === "sales"
+                      ? "/sales"
+                      : activeDepartment === "quality"
+                        ? "/quality/qt"
+                        : "/cs",
+                  search: preservedNavigationSearch
+                }}
+              >
+                <div className="flex size-12 items-center justify-center overflow-hidden rounded-[10px] border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.1)] dark:border-slate-600 dark:bg-slate-800 sm:size-14">
+                  <img alt="ikas" className="h-full w-full object-cover" src={toPublicAssetPath("/ikas.jpg")} />
+                </div>
+                <div className="hidden min-w-0 sm:block">
+                  <p className="truncate font-display text-base font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100 sm:text-lg">
+                    Kalite Dashboard
+                  </p>
+                  {/* Departman sekmeleri — başlığın altında */}
+                  <div className="mt-1 hidden items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100/80 p-0.5 dark:border-slate-600 dark:bg-slate-800/80 xl:inline-flex">
+                    <button
+                      className={[
+                        "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
+                        activeDepartment === "cs"
+                          ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
+                          : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                      ].join(" ")}
+                      onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("cs"); }}
+                      type="button"
+                    >
+                      CS
+                    </button>
+                    <button
+                      className={[
+                        "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
+                        activeDepartment === "sales"
+                          ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
+                          : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                      ].join(" ")}
+                      onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("sales"); }}
+                      type="button"
+                    >
+                      Satış
+                    </button>
+                    {canSeeQualityTab ? (
+                      <button
+                        className={[
+                          "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
+                          activeDepartment === "quality"
+                            ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
+                            : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                        ].join(" ")}
+                        onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("quality"); }}
+                        type="button"
+                      >
+                        Kalite
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </Link>
+            </div>
 
             {/* Mobil: aktif sayfa başlığı */}
-            <div className="min-w-0 flex-1 lg:hidden">
-              <p className="truncate font-display text-sm font-semibold tracking-[-0.03em] text-slate-900">
+            <div className="min-w-0 flex-1 xl:hidden">
+              <p className="truncate font-display text-sm font-semibold tracking-[-0.03em] text-slate-900 dark:text-slate-100">
                 {currentNavigationItem?.label ?? "KaliteDB"}
               </p>
-              <p className="truncate text-xs text-slate-500">
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                 {props.currentUser ? roleLabel(props.currentUser.role) : "Misafir görünümü"}
               </p>
             </div>
 
-            {/* Masaüstü: departman sekmeleri + alt navigasyon */}
-            <nav className="hidden flex-1 items-center justify-center gap-1.5 lg:flex">
-              {/* Departman sekmeleri */}
-              <div className="mr-1 flex items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100/80 p-1">
-                <button
-                  className={[
-                    "flex min-h-8 items-center rounded-full px-4 text-[13px] font-semibold transition",
-                    activeDepartment === "cs"
-                      ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)]"
-                      : "text-slate-500 hover:text-slate-800"
-                  ].join(" ")}
-                  onClick={() => handleDepartmentSwitch("cs")}
-                  type="button"
-                >
-                  CS
-                </button>
-                <button
-                  className={[
-                    "flex min-h-8 items-center rounded-full px-4 text-[13px] font-semibold transition",
-                    activeDepartment === "sales"
-                      ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)]"
-                      : "text-slate-500 hover:text-slate-800"
-                  ].join(" ")}
-                  onClick={() => handleDepartmentSwitch("sales")}
-                  type="button"
-                >
-                  Satış
-                </button>
-              </div>
-
-              {/* Alt navigasyon öğeleri */}
+            {/* Masaüstü: navigasyon linkleri (ortada) */}
+            <nav className="hidden flex-1 items-center justify-center gap-1 xl:flex">
               {activeNavigation.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -230,10 +285,10 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                     key={item.to}
                     className={({ isActive }) =>
                       [
-                        "flex min-h-10 items-center gap-2 rounded-full border px-4 py-2 text-[13px] font-medium transition",
+                        "flex min-h-10 items-center gap-1.5 rounded-full border px-3 py-2 text-[13px] font-medium transition",
                         isActive
-                          ? "border-slate-900 bg-slate-950 text-white shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
-                          : "border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900"
+                          ? "border-slate-900 bg-slate-950 text-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
+                          : "border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                       ].join(" ")
                     }
                     end={item.to === "/cs" || item.to === "/sales"}
@@ -245,41 +300,28 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                 );
               })}
 
-              {/* Dönem filtresi */}
-              {showPeriodFilter ? (
-                <select
-                  aria-label="Ay filtresi"
-                  className="ml-2 h-10 min-w-[180px] rounded-full border border-slate-200 bg-white px-4 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition focus:border-primary/40 focus:outline-none"
-                  onChange={(event) => handlePeriodChange(event.target.value)}
-                  value={activePeriodId}
-                >
-                  {departmentPeriods.map((period) => (
-                    <option key={period.id} value={period.id}>
-                      {formatPeriodMonth(period.month)}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
+              {/* Dönem filtresi sayfa başlıklarına taşındı (PeriodPills) */}
             </nav>
 
             {/* Kullanıcı kontrolleri */}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-1.5">
+              <SkyToggle />
               {props.currentUser ? (
                 <>
-                  <div className="hidden items-center lg:flex">
-                    <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+                  <div className="hidden items-center xl:flex">
+                    <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.06)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
                       {userInitial}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 lg:hidden">
-                    <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-900">
+                  <div className="flex items-center gap-2 xl:hidden">
+                    <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
                       {userInitial}
                     </div>
                     <button
                       aria-expanded={isDrawerOpen}
                       aria-label="Sayfaları aç"
-                      className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-slate-100"
                       onClick={() => setIsDrawerOpen(true)}
                       type="button"
                     >
@@ -289,7 +331,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                   </div>
 
                   <button
-                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-slate-100"
                     onClick={() => void auth.logout()}
                     type="button"
                   >
@@ -302,7 +344,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                   <button
                     aria-expanded={isDrawerOpen}
                     aria-label="Sayfaları aç"
-                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 lg:hidden"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 xl:hidden"
                     onClick={() => setIsDrawerOpen(true)}
                     type="button"
                   >
@@ -310,7 +352,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                     <span>Sayfalar</span>
                   </button>
                   <Link
-                    className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                    className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-slate-100"
                     to="/login"
                   >
                     Giriş
@@ -324,19 +366,19 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
 
       {/* Mobil çekmece menü */}
       {isDrawerOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 xl:hidden">
           <button
             aria-label="Menüyü kapat"
             className="absolute inset-0 bg-slate-950/28 backdrop-blur-sm"
             onClick={() => setIsDrawerOpen(false)}
             type="button"
           />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[320px] flex-col border-l border-slate-200 bg-white px-4 py-4 shadow-[0_26px_80px_rgba(15,23,42,0.16)]">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-              <p className="font-display text-lg font-semibold tracking-[-0.03em] text-slate-950">Sayfalar</p>
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-[320px] flex-col border-l border-slate-200 bg-white px-4 py-4 shadow-[0_26px_80px_rgba(15,23,42,0.16)] dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4 dark:border-slate-700">
+              <p className="font-display text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">Sayfalar</p>
               <button
                 aria-label="Menüyü kapat"
-                className="inline-flex size-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:text-slate-950"
+                className="inline-flex size-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:text-slate-950 dark:border-slate-600 dark:text-slate-400 dark:hover:text-slate-200"
                 onClick={() => setIsDrawerOpen(false)}
                 type="button"
               >
@@ -348,10 +390,10 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
             <div className="mt-4 flex gap-2">
               <button
                 className={[
-                  "flex-1 rounded-2xl border py-2.5 text-sm font-semibold transition",
+                  "flex-1 rounded-[10px] border py-2.5 text-sm font-semibold transition",
                   activeDepartment === "cs"
-                    ? "border-slate-900 bg-slate-950 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    ? "border-slate-900 bg-slate-950 text-white dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500"
                 ].join(" ")}
                 onClick={() => { handleDepartmentSwitch("cs"); setIsDrawerOpen(false); }}
                 type="button"
@@ -360,16 +402,30 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
               </button>
               <button
                 className={[
-                  "flex-1 rounded-2xl border py-2.5 text-sm font-semibold transition",
+                  "flex-1 rounded-[10px] border py-2.5 text-sm font-semibold transition",
                   activeDepartment === "sales"
-                    ? "border-slate-900 bg-slate-950 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    ? "border-slate-900 bg-slate-950 text-white dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500"
                 ].join(" ")}
                 onClick={() => { handleDepartmentSwitch("sales"); setIsDrawerOpen(false); }}
                 type="button"
               >
                 Satış
               </button>
+              {canSeeQualityTab ? (
+                <button
+                  className={[
+                    "flex-1 rounded-[10px] border py-2.5 text-sm font-semibold transition",
+                    activeDepartment === "quality"
+                      ? "border-slate-900 bg-slate-950 text-white dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500"
+                  ].join(" ")}
+                  onClick={() => { handleDepartmentSwitch("quality"); setIsDrawerOpen(false); }}
+                  type="button"
+                >
+                  Kalite
+                </button>
+              ) : null}
             </div>
 
             <nav className="mt-3 flex flex-1 flex-col gap-2">
@@ -380,10 +436,10 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                     key={item.to}
                     className={({ isActive }) =>
                       [
-                        "flex min-h-11 items-center gap-3 rounded-2xl border px-4 text-sm font-medium transition",
+                        "flex min-h-11 items-center gap-3 rounded-[10px] border px-4 text-sm font-medium transition",
                         isActive
-                          ? "border-slate-900 bg-slate-950 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-950"
+                          ? "border-slate-900 bg-slate-950 text-white dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-950 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
                       ].join(" ")
                     }
                     end={item.to === "/cs" || item.to === "/sales"}
@@ -396,38 +452,35 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
               })}
             </nav>
 
-            {showPeriodFilter ? (
-              <div className="border-t border-slate-200 pt-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Ay filtresi</p>
-                <select
-                  aria-label="Ay filtresi"
-                  className="mt-3 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] focus:border-primary/40 focus:outline-none"
-                  onChange={(event) => handlePeriodChange(event.target.value)}
-                  value={activePeriodId}
-                >
-                  {departmentPeriods.map((period) => (
-                    <option key={period.id} value={period.id}>
-                      {formatPeriodMonth(period.month)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-
-            <div className="border-t border-slate-200 pt-4">
+            <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
               <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Oturum</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-200">
                 {props.currentUser ? roleLabel(props.currentUser.role) : "Misafir görünümü"}
               </p>
               {!props.currentUser ? (
                 <Link
-                  className="mt-3 inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                  className="mt-3 inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-slate-100"
                   to="/login"
                 >
                   Giriş yap
                 </Link>
               ) : null}
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {auth.authMode === "dev" && !auth.user ? (
+        <div className="mx-auto mt-4 max-w-[1680px] px-3 sm:px-5 lg:px-8">
+          <div className="flex items-center gap-3 rounded-[10px] border border-sky-200 bg-sky-50/90 px-4 py-3 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <p>
+              Firestore erişimi için{" "}
+              <Link className="font-semibold underline underline-offset-2" to="/login">
+                Google ile bağlanın
+              </Link>
+              . Dev token rol sağlar, ancak veritabanı okuma/yazma için Google oturumu gereklidir.
+            </p>
           </div>
         </div>
       ) : null}

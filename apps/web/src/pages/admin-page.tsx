@@ -6,25 +6,26 @@ import {
   type AuditMetric,
   type DatasetType,
   type KpiMetricKey,
-  type QtManualEntry,
   type QuestionPerformance,
+  type Representative,
   type UserRoleAssignment
 } from "@kalitedb/shared";
-import { StatCard, SurfaceCard } from "@kalitedb/ui";
+import { SurfaceCard } from "@kalitedb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarRange,
   ClipboardCheck,
   FileDown,
   FileSpreadsheet,
-  Headphones,
   LogOut,
+  Plus,
   RefreshCw,
   Save,
   SearchCheck,
   Settings2,
   Trash2,
   Upload,
+  UserCheck,
   UserPlus,
   Users
 } from "lucide-react";
@@ -33,7 +34,9 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { DataTable } from "../components/data-table";
+import { FancySelect } from "../components/fancy-select";
 import { RecordEditor } from "../components/record-editor";
+import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
 import { useAuth } from "../lib/auth";
 import { api, type AuthenticatedUser } from "../lib/api";
 import {
@@ -41,7 +44,6 @@ import {
   formatNumber,
   formatPercent
 } from "../lib/format";
-import { getRepresentativeDisplayName } from "../lib/representative-photos";
 
 const roleSchema = z.object({
   email: z.string().email(),
@@ -67,18 +69,18 @@ const thresholdKeys = [
   "feedbackCoverage"
 ] satisfies KpiMetricKey[];
 
-const datasetLabels: Record<DatasetType, string> = {
+type VisibleDatasetType = Exclude<DatasetType, "qt-metrics">;
+
+const datasetLabels: Record<VisibleDatasetType, string> = {
   "agent-metrics": "Temsilci performansı",
   "audit-metrics": "Audit metrikleri",
-  "question-performance": "Soru performansı",
-  "qt-metrics": "QT"
+  "question-performance": "Soru performansı"
 };
 
-const datasetDescriptions: Record<DatasetType, string> = {
+const datasetDescriptions: Record<VisibleDatasetType, string> = {
   "agent-metrics": "Temsilci bazlı operasyon ve memnuniyet verilerini CSV ile içe aktarın, satır bazında düzenleyin ve CSAT özet kartları için manuel toplam girin.",
   "audit-metrics": "Audit skorları ve önceki doğruluk verilerini tek akışta yönetin.",
-  "question-performance": "Soru doğru-yanlış verilerini ve doğruluk oranlarını içe aktarın.",
-  "qt-metrics": "QT kullanıcıları verilerini Yönetim içindeki QT alanından manuel girer. Bu alanda seçili döneme ait girişleri takip edebilirsiniz."
+  "question-performance": "Soru doğru-yanlış verilerini ve doğruluk oranlarını içe aktarın."
 };
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
@@ -87,7 +89,7 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
   return { value, label: label.charAt(0).toUpperCase() + label.slice(1) };
 });
 
-type AdminSection = "periods" | DatasetType | "thresholds" | "roles";
+type AdminSection = "periods" | VisibleDatasetType | "thresholds" | "roles" | "representatives";
 type DatasetRow = AgentMetric | AuditMetric | QuestionPerformance;
 
 type ImportPreviewResult = {
@@ -95,14 +97,6 @@ type ImportPreviewResult = {
   rowCount: number;
   previewRows: unknown[];
   committed: boolean;
-};
-
-const EMPTY_QT_MANUAL_INPUTS = {
-  totalListeningHours: "",
-  totalEvaluatedCallCount: "",
-  totalEvaluatedChatMailCount: "",
-  feedbackCount: "",
-  feedbackCoverage: ""
 };
 
 const adminSections: Array<{
@@ -136,12 +130,6 @@ const adminSections: Array<{
     icon: SearchCheck
   },
   {
-    id: "qt-metrics",
-    label: "QT",
-    description: "Manuel giriş ve görünüm",
-    icon: Headphones
-  },
-  {
     id: "thresholds",
     label: "Eşikler",
     description: "Renk ve hedef sınırlarını düzenle",
@@ -152,11 +140,17 @@ const adminSections: Array<{
     label: "Roller",
     description: "Kullanıcı yetkilerini yönet",
     icon: UserPlus
+  },
+  {
+    id: "representatives",
+    label: "Temsilciler",
+    description: "Temsilci durumlarını yönet",
+    icon: UserCheck
   }
 ];
 
-function isDatasetSection(section: AdminSection): section is DatasetType {
-  return section === "agent-metrics" || section === "audit-metrics" || section === "question-performance" || section === "qt-metrics";
+function isDatasetSection(section: AdminSection): section is VisibleDatasetType {
+  return section === "agent-metrics" || section === "audit-metrics" || section === "question-performance";
 }
 
 function downloadCsvTemplate(datasetType: DatasetType) {
@@ -170,45 +164,26 @@ function downloadCsvTemplate(datasetType: DatasetType) {
   URL.revokeObjectURL(url);
 }
 
-function normalizeEmailValue(email: string) {
-  return email.trim().toLocaleLowerCase("tr-TR");
-}
-
-function mapQtManualEntryToInputs(entry: QtManualEntry) {
-  return {
-    totalListeningHours: entry.totalListeningHours == null ? "" : String(entry.totalListeningHours),
-    totalEvaluatedCallCount: entry.totalEvaluatedCallCount == null ? "" : String(entry.totalEvaluatedCallCount),
-    totalEvaluatedChatMailCount: entry.totalEvaluatedChatMailCount == null ? "" : String(entry.totalEvaluatedChatMailCount),
-    feedbackCount: entry.feedbackCount == null ? "" : String(entry.feedbackCount),
-    feedbackCoverage: entry.feedbackCoverage == null ? "" : String(entry.feedbackCoverage)
-  };
-}
-
 export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] | undefined }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const now = new Date();
   const isAdminUser = props.currentUserRole === "admin";
-  const [selectedSection, setSelectedSection] = useState<AdminSection>(
-    props.currentUserRole === "qt" ? "qt-metrics" : "periods"
-  );
+  const [selectedSection, setSelectedSection] = useState<AdminSection>("periods");
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
   const [selectedMonthValue, setSelectedMonthValue] = useState(String(now.getMonth() + 1).padStart(2, "0"));
   const [selectedRecordId, setSelectedRecordId] = useState<string>("");
-  const [selectedFiles, setSelectedFiles] = useState<Partial<Record<DatasetType, File>>>({});
-  const [lastImportDatasetType, setLastImportDatasetType] = useState<DatasetType | null>(null);
-  const [selectedQtTargetEmail, setSelectedQtTargetEmail] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<Partial<Record<VisibleDatasetType, File>>>({});
+  const [lastImportDatasetType, setLastImportDatasetType] = useState<VisibleDatasetType | null>(null);
   const [manualCsatInputs, setManualCsatInputs] = useState({
     totalCallCount: "",
     totalChatMailCount: "",
     totalTicketClosedCount: ""
   });
   const [editingRoleEmail, setEditingRoleEmail] = useState<string | null>(null);
-  const [qtManualInputs, setQtManualInputs] = useState(EMPTY_QT_MANUAL_INPUTS);
-  const [isQtManualDirty, setIsQtManualDirty] = useState(false);
-  const [lastQtManualHydratedKey, setLastQtManualHydratedKey] = useState("");
-  const qtSectionSelected = selectedSection === "qt-metrics";
+  const [repDepartmentFilter, setRepDepartmentFilter] = useState<"all" | "cs" | "sales">("all");
+  const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -227,8 +202,13 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     queryFn: () => api.getRoles(auth.token)
   });
 
+  const representativesQuery = useQuery({
+    queryKey: ["representatives", auth.token],
+    queryFn: () => api.getRepresentatives(auth.token)
+  });
+
   const periodDetailsQuery = useQuery({
-    enabled: Boolean(selectedPeriodId) && !qtSectionSelected,
+    enabled: Boolean(selectedPeriodId),
     queryKey: ["period-details", auth.token, selectedPeriodId],
     queryFn: () => api.getPeriodDetails(auth.token, selectedPeriodId)
   });
@@ -269,7 +249,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const importMutation = useMutation({
-    mutationFn: async (input: { datasetType: DatasetType; commit: boolean }) => {
+    mutationFn: async (input: { datasetType: VisibleDatasetType; commit: boolean }) => {
       const file = selectedFiles[input.datasetType];
       if (!file || !selectedPeriodId) {
         throw new Error("Dönem ve dosya seçin.");
@@ -285,7 +265,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const resetDatasetMutation = useMutation({
-    mutationFn: async (datasetType: DatasetType) => {
+    mutationFn: async (datasetType: VisibleDatasetType) => {
       if (!selectedPeriodId) {
         throw new Error("Önce dönem seçin.");
       }
@@ -309,6 +289,48 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       roleForm.reset();
     }
   });
+
+  const updateRepresentativeStatusMutation = useMutation({
+    mutationFn: (input: { key: string; status: string }) =>
+      api.updateRepresentativeStatus(auth.token, input.key, { status: input.status }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["representatives"] });
+    }
+  });
+
+  const updateRepresentativeMutation = useMutation({
+    mutationFn: (input: { key: string; displayName?: string; badges?: string[]; timeline?: Array<Record<string, unknown>> }) => {
+      const body: Record<string, unknown> = {};
+      if (input.displayName != null) body.displayName = input.displayName;
+      if (input.badges != null) body.badges = input.badges;
+      if (input.timeline != null) body.timeline = input.timeline;
+      return api.updateRepresentative(auth.token, input.key, body as any);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["representatives"] });
+      setSelectedRepKey(null);
+    }
+  });
+
+  const createRepresentativeMutation = useMutation({
+    mutationFn: (input: { displayName: string; department: "cs" | "sales" }) =>
+      api.createRepresentative(auth.token, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["representatives"] });
+      setShowCreateRepModal(false);
+    }
+  });
+
+  const deleteRepresentativeMutation = useMutation({
+    mutationFn: (key: string) => api.deleteRepresentative(auth.token, key),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["representatives"] });
+    }
+  });
+
+  const [selectedRepKey, setSelectedRepKey] = useState<string | null>(null);
+  const [showCreateRepModal, setShowCreateRepModal] = useState(false);
+  const selectedRep = (representativesQuery.data ?? []).find((r) => r.key === selectedRepKey) ?? null;
 
   const thresholdMutation = useMutation({
     mutationFn: () => {
@@ -354,8 +376,6 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const activeDatasetType = isDatasetSection(selectedSection) ? selectedSection : null;
-  const isQtSection = activeDatasetType === "qt-metrics";
-  const canEditQtManualEntry = props.currentUserRole === "qt" || isAdminUser;
   const activePeriodMonth = `${selectedYear}-${selectedMonthValue}`;
   const selectedPeriod = useMemo(() => {
     const periods = periodsQuery.data ?? [];
@@ -381,16 +401,10 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   ]);
 
   useEffect(() => {
-    if (props.currentUserRole === "qt" && selectedSection !== "qt-metrics") {
-      setSelectedSection("qt-metrics");
-    }
-  }, [props.currentUserRole, selectedSection]);
-
-  useEffect(() => {
     if (!isAdminUser && (selectedSection === "thresholds" || selectedSection === "roles")) {
-      setSelectedSection(props.currentUserRole === "qt" ? "qt-metrics" : "periods");
+      setSelectedSection("periods");
     }
-  }, [isAdminUser, props.currentUserRole, selectedSection]);
+  }, [isAdminUser, selectedSection]);
 
   const datasetRows = useMemo<DatasetRow[]>(() => {
     if (!periodDetailsQuery.data || !activeDatasetType) {
@@ -415,150 +429,15 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const selectedRecord = datasetRows.find((record) => record.id === selectedRecordId) ?? null;
   const importResult =
     activeDatasetType && lastImportDatasetType === activeDatasetType ? (importMutation.data as ImportPreviewResult | undefined) : undefined;
-  const qtManualEntriesQuery = useQuery({
-    enabled: Boolean(selectedPeriodId && isQtSection),
-    queryKey: ["qt-manual-entries", auth.token, selectedPeriodId],
-    queryFn: () => api.getQtManualEntries(auth.token, selectedPeriodId)
-  });
-  const qtTargetOptions = useMemo(() => {
-    const options = new Map<string, { email: string; name: string; label: string }>();
-
-    for (const assignment of rolesQuery.data ?? []) {
-      if (assignment.role !== "qt") {
-        continue;
-      }
-
-      const normalizedEmail = normalizeEmailValue(assignment.email);
-      const displayName = getRepresentativeDisplayName(assignment.email);
-      options.set(normalizedEmail, {
-        email: normalizedEmail,
-        name: displayName,
-        label: displayName === normalizedEmail ? normalizedEmail : `${displayName} (${normalizedEmail})`
-      });
-    }
-
-    for (const entry of qtManualEntriesQuery.data ?? []) {
-      const normalizedEmail = normalizeEmailValue(entry.userEmail);
-      const displayName = getRepresentativeDisplayName(entry.userName || entry.userEmail);
-      options.set(normalizedEmail, {
-        email: normalizedEmail,
-        name: displayName,
-        label: displayName === normalizedEmail ? normalizedEmail : `${displayName} (${normalizedEmail})`
-      });
-    }
-
-    return Array.from(options.values()).sort((left, right) => left.label.localeCompare(right.label, "tr"));
-  }, [qtManualEntriesQuery.data, rolesQuery.data]);
-  const selectedQtTarget = useMemo(() => {
-    if (!canEditQtManualEntry) {
-      return undefined;
-    }
-
-    if (!isAdminUser) {
-      const currentUserEmail = auth.user?.email ? normalizeEmailValue(auth.user.email) : undefined;
-      const currentUserName = auth.user?.displayName?.trim() || auth.user?.email || undefined;
-
-      return currentUserEmail
-        ? {
-            targetUserEmail: currentUserEmail,
-            targetUserName: currentUserName ?? currentUserEmail
-          }
-        : undefined;
-    }
-
-    const matchedTarget =
-      qtTargetOptions.find((option) => option.email === selectedQtTargetEmail) ?? qtTargetOptions[0];
-
-    return matchedTarget
-      ? {
-          targetUserEmail: matchedTarget.email,
-          targetUserName: matchedTarget.name
-        }
-      : undefined;
-  }, [auth.user?.displayName, auth.user?.email, canEditQtManualEntry, isAdminUser, qtTargetOptions, selectedQtTargetEmail]);
-  const qtManualEntryQuery = useQuery({
-    enabled: Boolean(selectedPeriodId && canEditQtManualEntry && isQtSection && (!isAdminUser || selectedQtTarget?.targetUserEmail)),
-    queryKey: ["qt-manual-entry", auth.token, selectedPeriodId, selectedQtTarget?.targetUserEmail],
-    queryFn: () => api.getQtManualEntry(auth.token, selectedPeriodId, selectedQtTarget),
-    staleTime: 60 * 1000,
-    refetchOnWindowFocus: false
-  });
-  const qtManualEntryMutation = useMutation({
-    mutationFn: async (values: typeof qtManualInputs) => {
-      if (!selectedPeriodId) {
-        throw new Error("Önce dönem seçin.");
-      }
-
-      return api.updateQtManualEntry(auth.token, selectedPeriodId, {
-        totalListeningHours: parseNullableDecimalInput(values.totalListeningHours),
-        totalEvaluatedCallCount: parseNullableIntegerInput(values.totalEvaluatedCallCount),
-        totalEvaluatedChatMailCount: parseNullableIntegerInput(values.totalEvaluatedChatMailCount),
-        feedbackCount: parseNullableIntegerInput(values.feedbackCount),
-        feedbackCoverage: parseNullableDecimalInput(values.feedbackCoverage)
-      }, selectedQtTarget);
-    },
-    onSuccess: async () => {
-      setIsQtManualDirty(false);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["qt-manual-entry", auth.token, selectedPeriodId] }),
-        queryClient.invalidateQueries({ queryKey: ["qt-manual-entries", auth.token, selectedPeriodId] })
-      ]);
-    }
-  });
-  useEffect(() => {
-    if (!canEditQtManualEntry || !isQtSection) {
-      return;
-    }
-
-    setQtManualInputs(EMPTY_QT_MANUAL_INPUTS);
-    setIsQtManualDirty(false);
-    setLastQtManualHydratedKey("");
-  }, [canEditQtManualEntry, isQtSection, selectedPeriodId, selectedQtTarget?.targetUserEmail]);
-  useEffect(() => {
-    const entry = qtManualEntryQuery.data;
-    if (!entry) {
-      return;
-    }
-
-    const entryKey = `${entry.periodId}:${normalizeEmailValue(entry.userEmail)}`;
-    if (isQtManualDirty && lastQtManualHydratedKey === entryKey) {
-      return;
-    }
-
-    setQtManualInputs(mapQtManualEntryToInputs(entry));
-    setIsQtManualDirty(false);
-    setLastQtManualHydratedKey(entryKey);
-  }, [isQtManualDirty, lastQtManualHydratedKey, qtManualEntryQuery.data]);
-  useEffect(() => {
-    if (!isAdminUser || !isQtSection) {
-      return;
-    }
-
-    if (qtTargetOptions.length === 0) {
-      if (selectedQtTargetEmail !== "") {
-        setSelectedQtTargetEmail("");
-      }
-      return;
-    }
-
-    if (!qtTargetOptions.some((option) => option.email === selectedQtTargetEmail)) {
-      setSelectedQtTargetEmail(qtTargetOptions[0]!.email);
-    }
-  }, [isAdminUser, isQtSection, qtTargetOptions, selectedQtTargetEmail]);
 
   const visibleAdminSections = useMemo(
     () =>
-      props.currentUserRole === "qt"
-        ? adminSections.filter((section) => section.id === "qt-metrics")
-        : adminSections.filter((section) => isAdminUser || (section.id !== "thresholds" && section.id !== "roles")),
-    [isAdminUser, props.currentUserRole]
+      adminSections.filter((section) => isAdminUser || (section.id !== "thresholds" && section.id !== "roles")),
+    [isAdminUser]
   );
   const visibleDatasetSections = useMemo(
-    () =>
-      props.currentUserRole === "qt"
-        ? (["qt-metrics"] as DatasetType[])
-        : (Object.keys(datasetLabels) as DatasetType[]),
-    [props.currentUserRole]
+    () => Object.keys(datasetLabels) as VisibleDatasetType[],
+    []
   );
   const selectedSectionMeta = visibleAdminSections.find((section) => section.id === selectedSection) ?? visibleAdminSections[0]!;
   const availableYears = useMemo(
@@ -568,6 +447,88 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       ),
     [periodsQuery.data]
   );
+  const filteredRepresentatives = useMemo(() => {
+    let reps = representativesQuery.data ?? [];
+    if (repDepartmentFilter !== "all") reps = reps.filter((r) => r.department === repDepartmentFilter);
+    if (repStatusFilter !== "all") reps = reps.filter((r) => r.status === repStatusFilter);
+    return reps;
+  }, [representativesQuery.data, repDepartmentFilter, repStatusFilter]);
+
+  const representativeColumns = useMemo<ColumnDef<Representative>[]>(
+    () => [
+      {
+        header: "İsim",
+        accessorKey: "displayName",
+        cell: ({ row }) => (
+          <button className="text-left font-medium text-slate-900 hover:text-[#2f6b7a] hover:underline dark:text-slate-200 dark:hover:text-sky-400" onClick={() => setSelectedRepKey(row.original.key)} type="button">
+            {row.original.displayName}
+          </button>
+        )
+      },
+      {
+        header: "Etiketler",
+        id: "badges",
+        cell: ({ row }) => {
+          const badges = (row.original as any).badges ?? [];
+          if (badges.length === 0) return <span className="text-xs text-slate-400">—</span>;
+          return <div className="flex flex-wrap gap-1">{badges.slice(0, 3).map((b: string) => <BadgePill key={b} badgeKey={b} small />)}{badges.length > 3 ? <span className="text-[10px] text-slate-400">+{badges.length - 3}</span> : null}</div>;
+        }
+      },
+      {
+        header: "Departman",
+        accessorKey: "department",
+        cell: ({ row }) => (row.original.department === "cs" ? "CS" : "Satış")
+      },
+      {
+        header: "Durum",
+        accessorKey: "status",
+        cell: ({ row }) => {
+          const status = row.original.status;
+          const styles =
+            status === "active"
+              ? "border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+              : status === "departed"
+                ? "border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400"
+                : "border-amber-200 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400";
+          const label = status === "active" ? "Aktif" : status === "departed" ? "Ayrıldı" : "Departman Değişti";
+          return (
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${styles}`}>
+              {label}
+            </span>
+          );
+        }
+      },
+      {
+        header: "İşlem",
+        id: "action",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <select
+              className="rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-2 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+              value={row.original.status}
+              onChange={(e) =>
+                updateRepresentativeStatusMutation.mutate({ key: row.original.key, status: e.target.value })
+              }
+            >
+              <option value="active">Aktif</option>
+              <option value="departed">Ayrıldı</option>
+              <option value="department_changed">Departman Değişti</option>
+            </select>
+            <button
+              className="rounded-full p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
+              onClick={() => { if (confirm(`"${row.original.displayName}" temsilcisi silinecek. Emin misiniz?`)) deleteRepresentativeMutation.mutate(row.original.key); }}
+              type="button"
+              title="Sil"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )
+      }
+    ],
+    [updateRepresentativeStatusMutation, deleteRepresentativeMutation]
+  );
+
   const roleColumns = useMemo<ColumnDef<UserRoleAssignment>[]>(
     () => [
       { header: "E-posta", accessorKey: "email" },
@@ -584,7 +545,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         id: "action",
         cell: ({ row }) => (
           <button
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"
+            className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
             onClick={() => {
               setEditingRoleEmail(row.original.email);
               roleForm.reset({
@@ -607,16 +568,6 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       ? "Yayında"
       : "Taslak";
   const currentStatusTone = selectedPeriod?.status === "published" ? "success" : "neutral";
-  const sectionBadgeLabel =
-    selectedSection === "periods"
-      ? "Genel"
-      : activeDatasetType
-        ? isQtSection
-          ? "Manuel"
-          : "CSV"
-        : selectedSection === "thresholds"
-          ? "Ayarlar"
-          : "Yetki";
   const datasetCount =
     (periodDetailsQuery.data?.datasets.agentMetrics.length ?? 0) +
     (periodDetailsQuery.data?.datasets.auditMetrics.length ?? 0) +
@@ -642,8 +593,6 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["periods", auth.token] }),
       queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] }),
-      queryClient.invalidateQueries({ queryKey: ["qt-manual-entry", auth.token, selectedPeriodId] }),
-      queryClient.invalidateQueries({ queryKey: ["qt-manual-entries", auth.token, selectedPeriodId] }),
       queryClient.invalidateQueries({ queryKey: ["thresholds", auth.token] }),
       queryClient.invalidateQueries({ queryKey: ["roles", auth.token] })
     ]);
@@ -663,7 +612,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       return;
     }
 
-    if (props.currentUserRole === "qt" || createPeriodMutation.isPending) {
+    if (createPeriodMutation.isPending) {
       return;
     }
 
@@ -680,7 +629,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       title: formatAutoPeriodTitle(activePeriodMonth),
       ...(compareToPeriodId ? { compareToPeriodId } : {})
     });
-  }, [activePeriodMonth, createPeriodMutation, periodsQuery.data, props.currentUserRole, selectedPeriodId]);
+  }, [activePeriodMonth, createPeriodMutation, periodsQuery.data, selectedPeriodId]);
 
   const datasetColumns = useMemo<ColumnDef<DatasetRow>[]>(() => {
     if (!activeDatasetType) {
@@ -713,7 +662,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           id: "action",
           cell: ({ row }) => (
             <button
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"
+              className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
               onClick={() => setSelectedRecordId(row.original.id)}
               type="button"
             >
@@ -745,7 +694,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           id: "action",
           cell: ({ row }) => (
             <button
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"
+              className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
               onClick={() => setSelectedRecordId(row.original.id)}
               type="button"
             >
@@ -791,7 +740,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           id: "action",
           cell: ({ row }) => (
             <button
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"
+              className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
               onClick={() => setSelectedRecordId(row.original.id)}
               type="button"
             >
@@ -804,101 +753,44 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
     return [];
   }, [activeDatasetType]);
-  const qtManualColumns = useMemo<ColumnDef<QtManualEntry>[]>(() => {
-    const columns: ColumnDef<QtManualEntry>[] = [
-      {
-        header: "QT",
-        accessorFn: (row) => getRepresentativeDisplayName(row.userName || row.userEmail)
-      },
-      {
-        header: "Toplam dinleme",
-        accessorFn: (row) => row.totalListeningHours,
-        cell: ({ row }) =>
-          row.original.totalListeningHours == null ? "-" : `${formatNumber(row.original.totalListeningHours, 2)} saat`
-      },
-      {
-        header: "Değerlendirilen çağrı",
-        accessorFn: (row) => row.totalEvaluatedCallCount,
-        cell: ({ row }) => formatNumber(row.original.totalEvaluatedCallCount)
-      },
-      {
-        header: "Chat / e-posta",
-        accessorFn: (row) => row.totalEvaluatedChatMailCount,
-        cell: ({ row }) => formatNumber(row.original.totalEvaluatedChatMailCount)
-      },
-      {
-        header: "Geri bildirim",
-        accessorFn: (row) => row.feedbackCount,
-        cell: ({ row }) => formatNumber(row.original.feedbackCount)
-      },
-      {
-        header: "Saat başına geri bildirim",
-        accessorFn: (row) => row.feedbackCoverage,
-        cell: ({ row }) => formatNumber(row.original.feedbackCoverage, 2)
-      }
-    ];
-
-    if (isAdminUser) {
-      columns.push({
-        header: "İşlem",
-        id: "action",
-        cell: ({ row }) => (
-          <button
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"
-            onClick={() => setSelectedQtTargetEmail(normalizeEmailValue(row.original.userEmail))}
-            type="button"
-          >
-            Düzenle
-          </button>
-        )
-      });
-    }
-
-    return columns;
-  }, [isAdminUser]);
-  const qtManualFormDisabled = qtManualEntryQuery.isPending || qtManualEntryMutation.isPending;
 
   return (
-    <div className="rounded-[38px] border border-sky-100/90 bg-[#edf6fb] p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)]">
+    <div className="rounded-[10px] border border-sky-100/90 dark:border-slate-700/50 bg-[#edf6fb] dark:bg-slate-900/80 p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)]">
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="overflow-hidden rounded-[30px] border border-slate-200/90 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-          <div className="border-b border-slate-200/80 px-6 py-6">
-            <p className="text-sm text-slate-500">{auth.user?.email ?? "Yerel yönetim erişimi"}</p>
+        <aside className="overflow-hidden rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white dark:bg-slate-800 shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
+            <p className="text-sm text-slate-500 dark:text-slate-400">{auth.user?.email ?? "Yerel yönetim erişimi"}</p>
           </div>
 
-          <div className="border-b border-slate-200/80 px-6 py-6">
+          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
             <SidebarSectionTitle>Dönem</SidebarSectionTitle>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
               <InputField label="Yıl">
-                <select
-                  className="h-12 w-full rounded-[20px] border border-slate-200 bg-white px-4 text-base font-medium text-slate-700 transition focus:border-sky-300 focus:outline-none"
-                  onChange={(event) => setSelectedYear(event.target.value)}
+                <FancySelect
+                  size="lg"
+                  className="w-full"
+                  panelWidthClass="w-40"
+                  options={availableYears.map((year) => ({ value: year, label: year }))}
                   value={selectedYear}
-                >
-                  {availableYears.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedYear}
+                  placeholder="Yıl"
+                />
               </InputField>
               <InputField label="Ay">
-                <select
-                  className="h-12 w-full rounded-[20px] border border-slate-200 bg-white px-4 text-base font-medium text-slate-700 transition focus:border-sky-300 focus:outline-none"
-                  onChange={(event) => setSelectedMonthValue(event.target.value)}
+                <FancySelect
+                  size="lg"
+                  className="w-full"
+                  panelWidthClass="w-44"
+                  options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
                   value={selectedMonthValue}
-                >
-                  {MONTH_OPTIONS.map((month) => (
-                    <option key={month.value} value={month.value}>
-                      {month.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedMonthValue}
+                  placeholder="Ay"
+                />
               </InputField>
             </div>
           </div>
 
-          <div className="border-b border-slate-200/80 px-6 py-6">
+          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
             <SidebarSectionTitle>Bölümler</SidebarSectionTitle>
             <div className="mt-5 space-y-2">
               {visibleAdminSections.map((section) => (
@@ -912,7 +804,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
             </div>
           </div>
 
-          <div className="border-b border-slate-200/80 px-6 py-6">
+          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
             <SidebarSectionTitle>Aksiyonlar</SidebarSectionTitle>
             <div className="mt-5 space-y-2">
               {selectedSection === "periods" ? (
@@ -938,7 +830,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
             </div>
           </div>
 
-          <div className="border-b border-slate-200/80 px-6 py-6">
+          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
             <SidebarSectionTitle>Veri Alanları</SidebarSectionTitle>
             <div className="mt-5 space-y-3">
               {visibleDatasetSections.map((datasetType) => (
@@ -946,7 +838,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                   active={activeDatasetType === datasetType}
                   key={datasetType}
                   label={datasetLabels[datasetType]}
-                  onDownload={datasetType === "qt-metrics" ? undefined : () => downloadCsvTemplate(datasetType)}
+                  onDownload={() => downloadCsvTemplate(datasetType)}
                   onOpen={() => setSelectedSection(datasetType)}
                 />
               ))}
@@ -955,7 +847,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
           <div className="px-6 py-6">
             <button
-              className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+              className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 transition hover:text-slate-900 dark:hover:text-slate-200"
               onClick={() => void auth.logout()}
               type="button"
             >
@@ -966,131 +858,76 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         </aside>
 
         <main className="min-w-0 space-y-4">
-          <section className="rounded-[28px] border border-slate-200/90 bg-white px-8 py-8 shadow-[0_12px_34px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-wrap gap-2">
+          <section className="rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white dark:bg-slate-800 px-8 py-6 shadow-[0_12px_34px_rgba(15,23,42,0.04)]">
+            <div className="flex flex-wrap items-center gap-2">
               <HeaderPill>{selectedSectionMeta.label}</HeaderPill>
               <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
+              <HeaderPill tone="success">{activeDatasetType ? "CSV Sync" : "Hazır"}</HeaderPill>
+              <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
             </div>
-            <h1 className="mt-4 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
+            <h1 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100 sm:text-4xl">
               Veri Yönetim Paneli
             </h1>
           </section>
 
-          <section className="rounded-[24px] border border-slate-200/90 bg-white px-6 py-4 shadow-[0_10px_26px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-              <HeaderPill tone="success">{activeDatasetType ? (isQtSection ? "Manuel giriş" : "CSV Sync") : "Hazır"}</HeaderPill>
-              <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
-              <span>Dönem: {activePeriodMonth}</span>
-            </div>
-          </section>
-
-          <section className="rounded-[26px] border border-slate-200/90 bg-white px-6 py-5 shadow-[0_10px_26px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-wrap items-center gap-3">
-              <HeaderPill>{sectionBadgeLabel}</HeaderPill>
-              <h2 className="font-display text-2xl font-semibold tracking-[-0.03em] text-slate-950">{selectedSectionMeta.label}</h2>
-            </div>
-            <p className="mt-3 text-base leading-7 text-slate-600">{selectedSectionMeta.description}</p>
-          </section>
-
           <div className="space-y-6">
             {selectedSection === "periods" ? (
-              <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-                <SurfaceCard
-                  description="Ay seçtiğiniz anda dönem yoksa sistem bu ay için taslak kaydı otomatik açar."
-                  title="Dönem Özeti"
-                  variant="default"
-                >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <StatCard compact label="Seçili ay" value={formatPeriodChip(activePeriodMonth)} />
-                    <StatCard compact label="Durum" value={currentStatusLabel} />
-                    <StatCard compact label="Dönem başlığı" value={selectedPeriod?.title ?? formatAutoPeriodTitle(activePeriodMonth)} />
-                    <StatCard compact label="Karşılaştırma dönemi" value={selectedPeriod?.compareToPeriodId ? "Bağlı" : "Yok"} />
-                  </div>
-                </SurfaceCard>
-
-                <SurfaceCard
-                  description="Seçili döneme ait mevcut veri akışını özetler."
-                  title="Dönem Metrikleri"
-                  variant="default"
-                >
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <StatCard compact label="Dataset sayısı" value={formatNumber(datasetCount)} />
-                    <StatCard compact label="Import kaydı" value={formatNumber(periodDetailsQuery.data?.importJobs.length ?? 0)} />
-                    <StatCard compact label="Hazırlık durumu" value={createPeriodMutation.isPending ? "Oluşturuluyor" : "Hazır"} />
-                  </div>
-                </SurfaceCard>
-
-                <SurfaceCard
-                  className="xl:col-span-2"
-                  description="Seçili dönem için en son alınan import kayıtları."
-                  title="Son Importlar"
-                  variant="default"
-                >
-                  {(periodDetailsQuery.data?.importJobs ?? []).length > 0 ? (
-                    <div className="space-y-2">
-                      {periodDetailsQuery.data?.importJobs.slice(0, 6).map((job) => (
-                        <div
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                          key={job.id}
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{datasetLabels[job.datasetType]}</p>
-                            <p className="text-xs text-slate-500">
-                              {job.uploadedBy} • {job.uploadedAt.slice(0, 10)}
-                            </p>
-                          </div>
-                          <div className="text-right text-xs text-slate-500">
-                            <p>{formatNumber(job.rowCount)} satır</p>
-                            <p>{formatNumber(job.errorCount)} hata</p>
-                          </div>
+              <SurfaceCard
+                description="Seçili dönem için en son alınan import kayıtları."
+                title="Son Importlar"
+                variant="default"
+              >
+                {(periodDetailsQuery.data?.importJobs ?? []).length > 0 ? (
+                  <div className="space-y-2">
+                    {periodDetailsQuery.data?.importJobs.slice(0, 6).map((job) => (
+                      <div
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-3"
+                        key={job.id}
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {job.datasetType === "qt-metrics" ? "QT" : datasetLabels[job.datasetType]}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {job.uploadedBy} • {job.uploadedAt.slice(0, 10)}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyBlock message="Seçili dönem için import kaydı bulunmuyor." />
-                  )}
-                </SurfaceCard>
-              </div>
+                        <div className="text-right text-xs text-slate-500 dark:text-slate-400">
+                          <p>{formatNumber(job.rowCount)} satır</p>
+                          <p>{formatNumber(job.errorCount)} hata</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyBlock message="Seçili dönem için import kaydı bulunmuyor." />
+                )}
+              </SurfaceCard>
             ) : null}
 
             {activeDatasetType ? (
               <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <StatCard compact label="Seçili dönem" value={selectedPeriod?.title ?? formatAutoPeriodTitle(activePeriodMonth)} />
-                  <StatCard
-                    compact
-                    label={isQtSection ? "QT girişi" : "Kayıt sayısı"}
-                    value={formatNumber(isQtSection ? (qtManualEntriesQuery.data?.length ?? 0) : datasetRows.length)}
-                  />
-                  <StatCard
-                    compact
-                    label={isQtSection ? "Giriş yöntemi" : "Seçili dosya"}
-                    value={isQtSection ? "Manuel" : (selectedFiles[activeDatasetType]?.name ?? "Dosya seçilmedi")}
-                  />
+
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50/70 dark:bg-rose-900/30 px-5 py-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-rose-900 dark:text-rose-400">Seçili ay verisini sıfırla</p>
+                    <p className="text-sm text-rose-700 dark:text-rose-400">
+                      {datasetLabels[activeDatasetType]} için {formatPeriodChip(activePeriodMonth)} dönemindeki mevcut kayıtları temizler.
+                    </p>
+                  </div>
+                  <button
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-rose-300 dark:border-rose-700/40 bg-white dark:bg-rose-900/30 px-4 text-sm font-semibold text-rose-700 dark:text-rose-400 transition hover:border-rose-400 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={!selectedPeriodId || resetDatasetMutation.isPending}
+                    onClick={handleResetDataset}
+                    type="button"
+                  >
+                    <Trash2 size={15} />
+                    {resetDatasetMutation.isPending ? "Sıfırlanıyor..." : "Bu ayın verisini sıfırla"}
+                  </button>
                 </div>
 
-                {!isQtSection ? (
-                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-rose-200 bg-rose-50/70 px-5 py-4">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-rose-900">Seçili ay verisini sıfırla</p>
-                      <p className="text-sm text-rose-700">
-                        {datasetLabels[activeDatasetType]} için {formatPeriodChip(activePeriodMonth)} dönemindeki mevcut kayıtları temizler.
-                      </p>
-                    </div>
-                    <button
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-rose-300 bg-white px-4 text-sm font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={!selectedPeriodId || resetDatasetMutation.isPending}
-                      onClick={handleResetDataset}
-                      type="button"
-                    >
-                      <Trash2 size={15} />
-                      {resetDatasetMutation.isPending ? "Sıfırlanıyor..." : "Bu ayın verisini sıfırla"}
-                    </button>
-                  </div>
-                ) : null}
-
-                {!isQtSection && resetDatasetMutation.isError ? (
-                  <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {resetDatasetMutation.isError ? (
+                  <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
                     {resetDatasetMutation.error instanceof Error
                       ? resetDatasetMutation.error.message
                       : "Veri sıfırlanırken bir hata oluştu."}
@@ -1106,7 +943,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     <div className="grid gap-4 md:grid-cols-3">
                       <InputField label="Toplam çağrı">
                         <input
-                          className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                          className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
                           inputMode="numeric"
                           onChange={(event) =>
                             setManualCsatInputs((current) => ({
@@ -1121,7 +958,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       </InputField>
                       <InputField label="Chat / e-posta">
                         <input
-                          className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                          className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
                           inputMode="numeric"
                           onChange={(event) =>
                             setManualCsatInputs((current) => ({
@@ -1136,7 +973,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       </InputField>
                       <InputField label="Ticket adedi">
                         <input
-                          className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                          className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
                           inputMode="numeric"
                           onChange={(event) =>
                             setManualCsatInputs((current) => ({
@@ -1152,11 +989,11 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm text-slate-500">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         Alanı boş bırakıp kaydetmek manuel değeri kaldırır.
                       </p>
                       <button
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-700 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700/50"
                         disabled={!selectedPeriodId || manualCsatMutation.isPending}
                         onClick={() => manualCsatMutation.mutate(manualCsatInputs)}
                         type="button"
@@ -1167,7 +1004,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     </div>
 
                     {manualCsatMutation.isError ? (
-                      <div className="mt-4 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      <div className="mt-4 rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
                         {manualCsatMutation.error instanceof Error
                           ? manualCsatMutation.error.message
                           : "Manuel değerler kaydedilirken bir hata oluştu."}
@@ -1176,310 +1013,115 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                   </SurfaceCard>
                 ) : null}
 
-                {isQtSection ? (
-                  <div className="grid gap-6 xl:grid-cols-[0.84fr_1.16fr]">
-                    <SurfaceCard
-                      description={datasetDescriptions[activeDatasetType]}
-                      title={canEditQtManualEntry ? "QT manuel girişi" : "QT veri akışı"}
-                      variant="default"
-                    >
-                      {canEditQtManualEntry ? (
-                        <>
-                          {isAdminUser ? (
-                            <div className="mb-4 space-y-3">
-                              <InputField label="QT kullanıcısı">
-                                <select
-                                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
-                                  disabled={qtTargetOptions.length === 0 || qtManualEntryQuery.isPending}
-                                  onChange={(event) => setSelectedQtTargetEmail(event.target.value)}
-                                  value={selectedQtTargetEmail}
-                                >
-                                  {qtTargetOptions.length === 0 ? (
-                                    <option value="">QT kullanıcısı bulunamadı</option>
-                                  ) : (
-                                    qtTargetOptions.map((option) => (
-                                      <option key={option.email} value={option.email}>
-                                        {option.label}
-                                      </option>
-                                    ))
-                                  )}
-                                </select>
-                              </InputField>
-                              <p className="text-sm text-slate-500">
-                                Admin olarak seçtiğiniz QT kullanıcısı adına manuel veri girebilirsiniz.
-                              </p>
-                            </div>
-                          ) : null}
-
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <InputField label="Toplam dinleme süresi (saat)">
-                              <input
-                                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
-                                disabled={qtManualFormDisabled}
-                                onChange={(event) =>
-                                  setQtManualInputs((current) => {
-                                    setIsQtManualDirty(true);
-                                    return { ...current, totalListeningHours: event.target.value };
-                                  })
-                                }
-                                placeholder="Örn. 42,5"
-                                type="text"
-                                value={qtManualInputs.totalListeningHours}
-                              />
-                            </InputField>
-                            <InputField label="Değerlendirilen çağrı adedi">
-                              <input
-                                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
-                                disabled={qtManualFormDisabled}
-                                inputMode="numeric"
-                                onChange={(event) =>
-                                  setQtManualInputs((current) => {
-                                    setIsQtManualDirty(true);
-                                    return { ...current, totalEvaluatedCallCount: event.target.value };
-                                  })
-                                }
-                                placeholder="Örn. 120"
-                                type="text"
-                                value={qtManualInputs.totalEvaluatedCallCount}
-                              />
-                            </InputField>
-                            <InputField label="Değerlendirilen chat / e-posta adedi">
-                              <input
-                                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
-                                disabled={qtManualFormDisabled}
-                                inputMode="numeric"
-                                onChange={(event) =>
-                                  setQtManualInputs((current) => {
-                                    setIsQtManualDirty(true);
-                                    return { ...current, totalEvaluatedChatMailCount: event.target.value };
-                                  })
-                                }
-                                placeholder="Örn. 35"
-                                type="text"
-                                value={qtManualInputs.totalEvaluatedChatMailCount}
-                              />
-                            </InputField>
-                            <InputField label="Geri bildirim sayısı">
-                              <input
-                                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
-                                disabled={qtManualFormDisabled}
-                                inputMode="numeric"
-                                onChange={(event) =>
-                                  setQtManualInputs((current) => {
-                                    setIsQtManualDirty(true);
-                                    return { ...current, feedbackCount: event.target.value };
-                                  })
-                                }
-                                placeholder="Örn. 24"
-                                type="text"
-                                value={qtManualInputs.feedbackCount}
-                              />
-                            </InputField>
-                            <InputField label="Saat başına geri bildirim oranı">
-                              <input
-                                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
-                                disabled={qtManualFormDisabled}
-                                onChange={(event) =>
-                                  setQtManualInputs((current) => {
-                                    setIsQtManualDirty(true);
-                                    return { ...current, feedbackCoverage: event.target.value };
-                                  })
-                                }
-                                placeholder="Örn. 0,56"
-                                type="text"
-                                value={qtManualInputs.feedbackCoverage}
-                              />
-                            </InputField>
-                          </div>
-
-                          {qtManualEntryQuery.isPending ? (
-                            <p className="mt-4 text-sm text-slate-500">Seçili QT kullanıcısının mevcut verileri yükleniyor...</p>
-                          ) : null}
-
-                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                            <p className="text-sm text-slate-500">
-                              {selectedQtTarget?.targetUserName
-                                ? `${selectedQtTarget.targetUserName} için alanları boş bırakıp kaydetmek mevcut değeri kaldırır.`
-                                : "Alanları boş bırakıp kaydetmek mevcut değeri kaldırır."}
-                            </p>
-                            <button
-                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                              disabled={!selectedPeriodId || qtManualFormDisabled || (isAdminUser && !selectedQtTarget)}
-                              onClick={() => qtManualEntryMutation.mutate(qtManualInputs)}
-                              type="button"
-                            >
-                              <Save size={15} />
-                              {qtManualEntryMutation.isPending ? "Kaydediliyor..." : "QT değerlerini kaydet"}
-                            </button>
-                          </div>
-
-                          {qtManualEntryMutation.isError ? (
-                            <div className="mt-4 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                              {qtManualEntryMutation.error instanceof Error
-                                ? qtManualEntryMutation.error.message
-                                : "QT değerleri kaydedilirken bir hata oluştu."}
-                            </div>
-                          ) : null}
-                          {isAdminUser && qtTargetOptions.length === 0 ? (
-                            <div className="mt-4 rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                              Düzenlemek için önce Roller alanında en az bir kullanıcıyı `QT` rolüyle tanımlayın.
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <>
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <StatCard compact label="QT kullanıcısı" value={formatNumber(qtManualEntriesQuery.data?.length ?? 0)} />
-                            <StatCard compact label="Giriş türü" value="Manuel" />
-                            <StatCard
-                              compact
-                              label="Durum"
-                              value={qtManualEntriesQuery.isPending ? "Yükleniyor" : qtManualEntriesQuery.isError ? "Hata" : "Hazır"}
-                            />
-                            <StatCard compact label="CSV" value="Kapalı" />
-                          </div>
-                          <p className="mt-4 text-sm leading-6 text-slate-500">
-                            QT kullanıcıları seçili döneme ait dinleme, değerlendirme ve geri bildirim sayılarını bu alandan manuel girer.
-                          </p>
-                        </>
-                      )}
-                    </SurfaceCard>
-
-                    <SurfaceCard
-                      description="Seçili döneme ait manuel QT girişleri burada listelenir."
-                      title="QT kullanıcı girişleri"
-                      variant="default"
-                    >
-                      {qtManualEntriesQuery.isError ? (
-                        <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                          {qtManualEntriesQuery.error instanceof Error
-                            ? qtManualEntriesQuery.error.message
-                            : "QT girişleri alınırken bir hata oluştu."}
-                        </div>
-                      ) : (
-                        <DataTable
-                          columns={qtManualColumns}
-                          data={qtManualEntriesQuery.data ?? []}
-                          density="compact"
-                          emptyState={
-                            qtManualEntriesQuery.isPending
-                              ? "QT girişleri yükleniyor..."
-                              : "Seçili dönem için manuel QT girişi bulunmuyor."
-                          }
+                <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+                  <SurfaceCard
+                    description={datasetDescriptions[activeDatasetType]}
+                    title="CSV ile İçe Aktar"
+                    variant="default"
+                  >
+                    <div className="space-y-4">
+                      <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-[10px] border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50/70 dark:bg-slate-700/30 px-4 text-center transition hover:border-primary/40 hover:bg-sky-50/50 dark:hover:bg-slate-700/50">
+                        <FileSpreadsheet className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">CSV dosyası seçin</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          {selectedFiles[activeDatasetType]?.name ?? "Henüz dosya seçilmedi"}
+                        </span>
+                        <input
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) {
+                              setSelectedFiles((current) => ({ ...current, [activeDatasetType]: file }));
+                            }
+                          }}
+                          type="file"
                         />
-                      )}
-                    </SurfaceCard>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-                      <SurfaceCard
-                        description={datasetDescriptions[activeDatasetType]}
-                        title="CSV ile İçe Aktar"
-                        variant="default"
-                      >
+                      </label>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <button
+                          className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
+                          onClick={() => importMutation.mutate({ datasetType: activeDatasetType, commit: false })}
+                          type="button"
+                        >
+                          Ön izleme
+                        </button>
+                        <button
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-700 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 dark:hover:bg-slate-600"
+                          onClick={() => importMutation.mutate({ datasetType: activeDatasetType, commit: true })}
+                          type="button"
+                        >
+                          <Upload size={15} />
+                          CSV içe aktar
+                        </button>
+                      </div>
+
+                      {importMutation.isError ? (
+                        <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
+                          {importMutation.error instanceof Error ? importMutation.error.message : "CSV işlemi sırasında bir hata oluştu."}
+                        </div>
+                      ) : null}
+
+                      {importResult ? (
                         <div className="space-y-4">
-                          <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-[22px] border border-dashed border-slate-300 bg-slate-50/70 px-4 text-center transition hover:border-primary/40 hover:bg-sky-50/50">
-                            <FileSpreadsheet className="h-5 w-5 text-slate-500" />
-                            <span className="text-sm font-semibold text-slate-700">CSV dosyası seçin</span>
-                            <span className="text-xs text-slate-500">
-                              {selectedFiles[activeDatasetType]?.name ?? "Henüz dosya seçilmedi"}
-                            </span>
-                            <input
-                              className="hidden"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                if (file) {
-                                  setSelectedFiles((current) => ({ ...current, [activeDatasetType]: file }));
-                                }
-                              }}
-                              type="file"
-                            />
-                          </label>
-
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <button
-                              className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"
-                              onClick={() => importMutation.mutate({ datasetType: activeDatasetType, commit: false })}
-                              type="button"
-                            >
-                              Ön izleme
-                            </button>
-                            <button
-                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-                              onClick={() => importMutation.mutate({ datasetType: activeDatasetType, commit: true })}
-                              type="button"
-                            >
-                              <Upload size={15} />
-                              CSV içe aktar
-                            </button>
+                          <div className="flex flex-wrap items-center gap-3 rounded-[10px] border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 px-4 py-3 text-sm">
+                            <span className="font-medium text-slate-700 dark:text-slate-300">{formatNumber(importResult.rowCount)} satır</span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-600 dark:text-slate-400">{formatNumber(importResult.previewRows.length)} ön izleme</span>
+                            <span className="text-slate-400">•</span>
+                            <span className={importResult.errors.length > 0 ? "font-medium text-amber-600 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"}>{formatNumber(importResult.errors.length)} hata</span>
+                            <span className="text-slate-400">•</span>
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${importResult.committed ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" : "bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-300"}`}>{importResult.committed ? "İçe aktarıldı" : "Ön izleme"}</span>
                           </div>
 
-                          {importMutation.isError ? (
-                            <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                              {importMutation.error instanceof Error ? importMutation.error.message : "CSV işlemi sırasında bir hata oluştu."}
-                            </div>
-                          ) : null}
-
-                          {importResult ? (
-                            <div className="space-y-4">
-                              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                <StatCard compact label="Toplam satır" value={formatNumber(importResult.rowCount)} />
-                                <StatCard compact label="Ön izleme satırı" value={formatNumber(importResult.previewRows.length)} />
-                                <StatCard compact label="Hata" value={formatNumber(importResult.errors.length)} />
-                                <StatCard compact label="Durum" value={importResult.committed ? "İçe aktarıldı" : "Ön izleme"} />
-                              </div>
-
-                              {importResult.errors.length > 0 ? (
-                                <div className="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4">
-                                  <p className="text-sm font-semibold text-amber-800">CSV hata özeti</p>
-                                  <div className="mt-3 space-y-2">
-                                    {importResult.errors.slice(0, 5).map((error, index) => (
-                                      <div className="text-sm text-amber-700" key={`${error.row}-${index}`}>
-                                        Satır {error.row}
-                                        {error.field ? ` • ${error.field}` : ""}: {error.message}
-                                      </div>
-                                    ))}
+                          {importResult.errors.length > 0 ? (
+                            <div className="rounded-[10px] border border-amber-200 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/30 px-4 py-4">
+                              <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">CSV hata özeti</p>
+                              <div className="mt-3 space-y-2">
+                                {importResult.errors.slice(0, 5).map((error, index) => (
+                                  <div className="text-sm text-amber-700 dark:text-amber-400" key={`${error.row}-${index}`}>
+                                    Satır {error.row}
+                                    {error.field ? ` • ${error.field}` : ""}: {error.message}
                                   </div>
-                                </div>
-                              ) : null}
+                                ))}
+                              </div>
                             </div>
                           ) : null}
                         </div>
-                      </SurfaceCard>
-
-                      <SurfaceCard
-                        description="Mevcut kayıtları okuyun ve düzenlemek istediğiniz satırı seçin."
-                        title="Mevcut Kayıtlar"
-                        variant="default"
-                      >
-                        <DataTable
-                          columns={datasetColumns}
-                          data={datasetRows}
-                          density="compact"
-                          emptyState="Kayıt bulunmuyor. CSV ile veri aktararak başlayabilirsiniz."
-                        />
-                      </SurfaceCard>
+                      ) : null}
                     </div>
+                  </SurfaceCard>
 
-                    <RecordEditor
-                      onSave={async (updates) => {
-                        if (!selectedPeriodId || !selectedRecord || !activeDatasetType) {
-                          return;
-                        }
-
-                        await api.updatePeriod(auth.token, selectedPeriodId, {
-                          datasetType: activeDatasetType,
-                          recordId: selectedRecord.id,
-                          updates
-                        });
-                        await queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] });
-                      }}
-                      record={selectedRecord as Record<string, string | number | null> | null}
-                      title="Kayıt Düzenleyici"
+                  <SurfaceCard
+                    description="Mevcut kayıtları okuyun ve düzenlemek istediğiniz satırı seçin."
+                    title="Mevcut Kayıtlar"
+                    variant="default"
+                  >
+                    <DataTable
+                      columns={datasetColumns}
+                      data={datasetRows}
+                      density="compact"
+                      emptyState="Kayıt bulunmuyor. CSV ile veri aktararak başlayabilirsiniz."
                     />
-                  </>
-                )}
+                  </SurfaceCard>
+                </div>
+
+                <RecordEditor
+                  onSave={async (updates) => {
+                    if (!selectedPeriodId || !selectedRecord || !activeDatasetType) {
+                      return;
+                    }
+
+                    await api.updatePeriod(auth.token, selectedPeriodId, {
+                      datasetType: activeDatasetType,
+                      recordId: selectedRecord.id,
+                      updates
+                    });
+                    await queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] });
+                  }}
+                  record={selectedRecord as Record<string, string | number | null> | null}
+                  title="Kayıt Düzenleyici"
+                />
               </div>
             ) : null}
 
@@ -1505,7 +1147,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             label={band === "red" ? "Kırmızı" : band === "yellow" ? "Sarı" : "Yeşil"}
                           >
                             <input
-                              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                              className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
                               onChange={(event) =>
                                 queryClient.setQueryData(["thresholds", auth.token], (current: typeof thresholdsQuery.data) =>
                                   current
@@ -1528,6 +1170,71 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
               </div>
             ) : null}
 
+            {selectedSection === "representatives" ? (
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    className="inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a]"
+                    onClick={() => setShowCreateRepModal(true)}
+                    type="button"
+                  >
+                    <Plus size={15} />
+                    Yeni Temsilci
+                  </button>
+                  <div className="ml-auto flex items-center gap-2">
+                    <select
+                      className="rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                      value={repDepartmentFilter}
+                      onChange={(e) => setRepDepartmentFilter(e.target.value as typeof repDepartmentFilter)}
+                    >
+                      <option value="all">Tüm Departmanlar</option>
+                      <option value="cs">CS</option>
+                      <option value="sales">Satış</option>
+                    </select>
+                    <select
+                      className="rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                      value={repStatusFilter}
+                      onChange={(e) => setRepStatusFilter(e.target.value as typeof repStatusFilter)}
+                    >
+                      <option value="all">Tüm Durumlar</option>
+                      <option value="active">Aktif</option>
+                      <option value="departed">Ayrıldı</option>
+                      <option value="department_changed">Departman Değişti</option>
+                    </select>
+                  </div>
+                </div>
+                {representativesQuery.isLoading ? (
+                  <EmptyBlock message="Temsilciler yükleniyor..." />
+                ) : filteredRepresentatives.length === 0 ? (
+                  <EmptyBlock message="Henüz temsilci kaydı yok. Veri içe aktarıldığında temsilciler otomatik oluşturulur." />
+                ) : (
+                  <SurfaceCard title={`Temsilciler (${filteredRepresentatives.length})`} description="Temsilci durumlarını görüntüleyin ve düzenleyin." variant="default">
+                    <DataTable columns={representativeColumns} data={filteredRepresentatives} density="compact" />
+                  </SurfaceCard>
+                )}
+
+                {selectedRep ? (
+                  <RepresentativeDetailModal
+                    representative={selectedRep}
+                    mode="edit"
+                    isSaving={updateRepresentativeMutation.isPending}
+                    onClose={() => setSelectedRepKey(null)}
+                    onSave={(data) => updateRepresentativeMutation.mutate({ key: selectedRep.key, ...data })}
+                  />
+                ) : null}
+
+                {showCreateRepModal ? (
+                  <RepresentativeDetailModal
+                    mode="create"
+                    defaultDepartment="cs"
+                    isSaving={createRepresentativeMutation.isPending}
+                    onClose={() => setShowCreateRepModal(false)}
+                    onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "cs" })}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
             {selectedSection === "roles" ? (
               <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
                 <SurfaceCard
@@ -1541,17 +1248,17 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                 >
                   <form className="grid gap-4" onSubmit={roleForm.handleSubmit((values) => roleMutation.mutate(values))}>
                     {editingRoleEmail ? (
-                      <div className="rounded-[20px] border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                      <div className="rounded-[10px] border border-sky-200 dark:border-sky-700/40 bg-sky-50 dark:bg-sky-900/30 px-4 py-3 text-sm text-sky-800 dark:text-sky-400">
                         <span className="font-semibold">{editingRoleEmail}</span> için düzenleme modundasınız.
                       </div>
                     ) : null}
                     <InputField label="E-posta">
                       <input
                         className={[
-                          "h-11 w-full rounded-2xl border px-3.5 text-sm transition focus:border-primary/40 focus:outline-none",
+                          "h-11 w-full rounded-[10px] border px-3.5 text-sm transition focus:border-primary/40 focus:outline-none",
                           editingRoleEmail
-                            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500"
-                            : "border-slate-200 bg-white text-slate-700"
+                            ? "cursor-not-allowed border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400"
+                            : "border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-700 dark:text-slate-200"
                         ].join(" ")}
                         disabled={Boolean(editingRoleEmail)}
                         {...roleForm.register("email")}
@@ -1559,7 +1266,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     </InputField>
                     <InputField label="Rol">
                       <select
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none"
+                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
                         {...roleForm.register("role")}
                       >
                         {roleOptions.map((option) => (
@@ -1570,18 +1277,18 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       </select>
                     </InputField>
                     {(roleForm.formState.errors.email || roleForm.formState.errors.role) ? (
-                      <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
                         {roleForm.formState.errors.email?.message ?? roleForm.formState.errors.role?.message}
                       </div>
                     ) : null}
                     {roleMutation.isError ? (
-                      <div className="rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
                         {roleMutation.error instanceof Error ? roleMutation.error.message : "Rol kaydedilirken bir hata oluştu."}
                       </div>
                     ) : null}
                     <div className="flex flex-wrap gap-3">
                       <button
-                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[10px] bg-slate-950 dark:bg-slate-700 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700/50"
                         disabled={roleMutation.isPending}
                         type="submit"
                       >
@@ -1593,7 +1300,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       </button>
                       {editingRoleEmail ? (
                         <button
-                          className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                          className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-5 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700/30"
                           onClick={() => {
                             setEditingRoleEmail(null);
                             roleForm.reset({ email: "", role: "team" });
@@ -1631,10 +1338,10 @@ function SidebarButton(props: {
   return (
     <button
       className={[
-        "w-full rounded-[18px] border px-4 py-3 text-left text-sm font-semibold transition",
+        "w-full rounded-[10px] border px-4 py-3 text-left text-sm font-semibold transition",
         props.active
           ? "border-[#2f6b7a] bg-[#2f6b7a] text-white shadow-[0_16px_34px_rgba(47,107,122,0.22)]"
-          : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"
+          : "border-transparent bg-transparent text-slate-700 dark:text-slate-300 hover:border-slate-200 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700/30 hover:text-slate-950 dark:hover:text-slate-200"
       ].join(" ")}
       onClick={props.onClick}
       type="button"
@@ -1645,7 +1352,7 @@ function SidebarButton(props: {
 }
 
 function SidebarSectionTitle(props: { children: ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{props.children}</p>;
+  return <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{props.children}</p>;
 }
 
 function SidebarActionButton(props: {
@@ -1658,10 +1365,10 @@ function SidebarActionButton(props: {
   return (
     <button
       className={[
-        "inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition",
+        "inline-flex w-full items-center justify-center gap-2 rounded-[10px] px-4 py-3 text-sm font-semibold transition",
         props.primary
           ? "bg-[#2f6b7a] text-white shadow-[0_14px_28px_rgba(47,107,122,0.18)] hover:bg-[#285d6a]"
-          : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+          : "border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700/30",
         props.disabled ? "cursor-not-allowed opacity-50" : ""
       ].join(" ")}
       disabled={props.disabled}
@@ -1683,12 +1390,12 @@ function ImportShortcutRow(props: {
   return (
     <div
       className={[
-        "flex items-center justify-between gap-3 rounded-[20px] border px-4 py-3 transition",
-        props.active ? "border-sky-200 bg-sky-50/70" : "border-slate-200 bg-white"
+        "flex items-center justify-between gap-3 rounded-[10px] border px-4 py-3 transition",
+        props.active ? "border-sky-200 dark:border-sky-700/40 bg-sky-50/70 dark:bg-sky-900/30" : "border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800"
       ].join(" ")}
     >
       <button
-        className="min-w-0 flex-1 text-left text-sm font-medium text-slate-700 transition hover:text-slate-950"
+        className="min-w-0 flex-1 text-left text-sm font-medium text-slate-700 dark:text-slate-200 transition hover:text-slate-950 dark:hover:text-slate-200"
         onClick={props.onOpen}
         type="button"
       >
@@ -1696,7 +1403,7 @@ function ImportShortcutRow(props: {
       </button>
       {props.onDownload ? (
         <button
-          className="inline-flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+          className="inline-flex size-9 items-center justify-center rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 transition hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
           onClick={props.onDownload}
           type="button"
         >
@@ -1715,10 +1422,10 @@ function HeaderPill(props: { children: ReactNode; tone?: "neutral" | "accent" | 
       className={[
         "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
         tone === "accent"
-          ? "border-sky-200 bg-sky-50 text-sky-700"
+          ? "border-sky-200 dark:border-sky-700/40 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400"
           : tone === "success"
-            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-            : "border-slate-200 bg-slate-50 text-slate-600"
+            ? "border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+            : "border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400"
       ].join(" ")}
     >
       {props.children}
@@ -1729,7 +1436,7 @@ function HeaderPill(props: { children: ReactNode; tone?: "neutral" | "accent" | 
 function InputField(props: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-2">
-      <span className="text-sm font-semibold text-slate-700">{props.label}</span>
+      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{props.label}</span>
       {props.children}
     </label>
   );
@@ -1737,7 +1444,7 @@ function InputField(props: { label: string; children: ReactNode }) {
 
 function EmptyBlock(props: { message: string }) {
   return (
-    <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+    <div className="rounded-[10px] border border-dashed border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
       {props.message}
     </div>
   );
@@ -1775,23 +1482,6 @@ function parseManualCountInput(value: string) {
   }
 
   return Number(digits);
-}
-
-function parseNullableIntegerInput(value: string) {
-  const digits = value.replace(/[^\d]/g, "");
-  if (!digits) {
-    return null;
-  }
-  return Number(digits);
-}
-
-function parseNullableDecimalInput(value: string) {
-  const trimmed = value.trim().replace(",", ".");
-  if (!trimmed) {
-    return null;
-  }
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function getPreviousMonth(period: string) {

@@ -25,7 +25,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireAuth(request as never, ["admin", "team"]);
+    await requireAuth(request as never, ["admin", "team", "manager", "team_leader"]);
     const body = createPeriodSchema.parse(await request.json());
     const repository = await getRepository();
     const period = await repository.createReportPeriod({

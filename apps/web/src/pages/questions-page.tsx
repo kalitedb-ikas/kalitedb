@@ -6,6 +6,7 @@ import { selectDefaultReportPeriod, type QuestionPerformance } from "@kalitedb/s
 import { ExecutiveChartCard, HeatChip, PageHeader, QuestionSpotlight, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { useSearchParams } from "react-router-dom";
 
+import { PeriodSelect } from "../components/period-select";
 import { DataTable } from "../components/data-table";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -75,11 +76,10 @@ export function QuestionsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Sorular" />
+      <PageHeader title="Sorular" actions={<PeriodSelect />} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <StatCard
-          emphasis="primary"
           icon={<BookOpen size={18} />}
           label="Toplam soru"
           tone="neutral"
@@ -120,7 +120,7 @@ export function QuestionsPage() {
         <SurfaceCard
           actions={
             <select
-              className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 focus:border-primary/40 focus:outline-none"
+              className="h-10 rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-sm font-medium text-slate-700 dark:text-slate-400 focus:border-primary/40 focus:outline-none"
               onChange={(event) => setTopic(event.target.value)}
               value={topic}
             >

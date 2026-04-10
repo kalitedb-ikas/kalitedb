@@ -1,14 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExecutiveChartCard, MetricCarouselCard, StatCard } from "@kalitedb/ui";
 import { selectDefaultReportPeriod } from "@kalitedb/shared";
+import type { QtManualEntry, ReportPeriod } from "@kalitedb/shared";
 import { useEffect, useMemo, useState } from "react";
 import { Layers, MessageCircle, Save, Timer, Users, Waves } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
-import { formatNumber } from "../lib/format";
+import { formatNumber, formatPeriodMonth } from "../lib/format";
 import { getRepresentativeDisplayName, getRepresentativePhotoSrc } from "../lib/representative-photos";
+import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
+import {
+  QUARTER_SHORT,
+  aggregateQtManualEntries,
+  computeActivePeriodIds,
+  derivePeriodRangeSelectors
+} from "../lib/period-aggregation";
 
 function formatEvaluatedTotal(totalEvaluatedCallCount: number | null, totalEvaluatedChatMailCount: number | null) {
   const totalEvaluatedCount =
@@ -44,7 +52,7 @@ function sanitizeQtCardEyebrow(userName: string) {
 export function QtPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
     queryFn: () => api.getPeriods(auth.token),
@@ -62,7 +70,86 @@ export function QtPage() {
     staleTime: 5 * 60 * 1000
   });
 
-  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
+  // Kalite sekmesi CS dönemlerini kullanır (CS QT verisi orada)
+  const availablePeriods = useMemo<ReportPeriod[]>(
+    () =>
+      [...(periodsQuery.data ?? [])]
+        .filter((p) => (p.department ?? "cs") === "cs")
+        .sort((a, b) => a.month.localeCompare(b.month)),
+    [periodsQuery.data]
+  );
+
+  const now = new Date();
+  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+    const prevMonth = now.getMonth();
+    const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
+    const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
+    return {
+      year,
+      viewMode: "aylik",
+      monthPeriodId: searchParams.get("periodId") ?? undefined,
+      quarter
+    };
+  });
+
+  const selectedYear = periodRange.year;
+  const viewMode = periodRange.viewMode;
+  const selectedQuarter = periodRange.quarter ?? 1;
+
+  const { yearPeriods } = useMemo(
+    () => derivePeriodRangeSelectors(availablePeriods, selectedYear),
+    [availablePeriods, selectedYear]
+  );
+
+  const defaultPeriod = useMemo(
+    () => selectDefaultReportPeriod(yearPeriods) ?? selectDefaultReportPeriod(availablePeriods),
+    [yearPeriods, availablePeriods]
+  );
+
+  const periodId = yearPeriods.some((p) => p.id === periodRange.monthPeriodId)
+    ? periodRange.monthPeriodId
+    : defaultPeriod?.id;
+
+  useEffect(() => {
+    if (!periodRange.monthPeriodId && defaultPeriod?.id) {
+      setPeriodRange((prev) => ({ ...prev, monthPeriodId: defaultPeriod.id }));
+    }
+  }, [defaultPeriod?.id, periodRange.monthPeriodId]);
+
+  useEffect(() => {
+    const current = searchParams.get("periodId");
+    if (viewMode === "aylik" && periodId && current !== periodId) {
+      const params = new URLSearchParams(searchParams);
+      params.set("periodId", periodId);
+      setSearchParams(params, { replace: true });
+    }
+  }, [viewMode, periodId, searchParams, setSearchParams]);
+
+  const activePeriodIds = useMemo(
+    () =>
+      computeActivePeriodIds(yearPeriods, {
+        ...periodRange,
+        monthPeriodId: periodId
+      }),
+    [periodRange, periodId, yearPeriods]
+  );
+
+  const activePeriod = useMemo(
+    () => availablePeriods.find((p) => p.id === periodId),
+    [availablePeriods, periodId]
+  );
+
+  const viewLabel = useMemo(() => {
+    if (viewMode === "aylik") {
+      return activePeriod
+        ? formatPeriodMonth(activePeriod.month, { includeYear: true })
+        : "Dönem seçilmedi";
+    }
+    if (viewMode === "ceyreklik") {
+      return `${selectedYear} ${QUARTER_SHORT[selectedQuarter - 1]}`;
+    }
+    return `${selectedYear} (Yıllık)`;
+  }, [viewMode, activePeriod, selectedYear, selectedQuarter]);
   const [manualDraft, setManualDraft] = useState({
     totalListeningHours: "",
     totalEvaluatedCallCount: "",
@@ -73,11 +160,24 @@ export function QtPage() {
 
   const canEditManualEntry = meQuery.data?.role === "qt";
 
-  const qtEntriesQuery = useQuery({
-    enabled: Boolean(periodId),
-    queryKey: ["qt-manual-entries", auth.token, periodId],
-    queryFn: () => api.getQtManualEntries(auth.token, periodId!)
+  // Çoklu period için paralel fetch — her active period için ayrı query
+  const qtEntriesQueries = useQueries({
+    queries: activePeriodIds.map((pid) => ({
+      queryKey: ["qt-manual-entries", auth.token, pid],
+      queryFn: () => api.getQtManualEntries(auth.token, pid),
+      enabled: Boolean(pid),
+      staleTime: 60 * 1000
+    }))
   });
+
+  const aggregatedQtEntries: QtManualEntry[] = useMemo(() => {
+    const allResults = qtEntriesQueries
+      .map((q) => q.data)
+      .filter((d): d is QtManualEntry[] => Array.isArray(d));
+    if (allResults.length === 0) return [];
+    if (allResults.length === 1) return allResults[0]!;
+    return aggregateQtManualEntries(allResults);
+  }, [qtEntriesQueries]);
 
   const manualEntryQuery = useQuery({
     enabled: Boolean(periodId && canEditManualEntry),
@@ -111,13 +211,15 @@ export function QtPage() {
         totalEvaluatedCallCount: parseNullableInteger(manualDraft.totalEvaluatedCallCount),
         totalEvaluatedChatMailCount: parseNullableInteger(manualDraft.totalEvaluatedChatMailCount),
         feedbackCount: parseNullableInteger(manualDraft.feedbackCount),
-        feedbackCoverage: parseNullableNumber(manualDraft.feedbackCoverage)
+        feedbackCoverage: parseNullableNumber(manualDraft.feedbackCoverage),
+        trainingCount: null,
+        meetingCount: null
       });
     },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["qt-manual-entry", auth.token, periodId] }),
-        queryClient.invalidateQueries({ queryKey: ["qt-manual-entries", auth.token, periodId] })
+        queryClient.invalidateQueries({ queryKey: ["qt-manual-entries"] })
       ]);
     }
   });
@@ -132,9 +234,15 @@ export function QtPage() {
     return "red" as const;
   })();
 
+  const qtEntries = useMemo(() => {
+    return aggregatedQtEntries.filter((entry) => {
+      const name = (entry.userName || entry.userEmail).trim().toLowerCase();
+      return name !== "" && name !== "dev admin";
+    });
+  }, [aggregatedQtEntries]);
+
   const qtCards = useMemo(() => {
-    const entries = qtEntriesQuery.data ?? [];
-    if (entries.length === 0) {
+    if (qtEntries.length === 0) {
       return [
         {
           eyebrow: "Henüz veri yok",
@@ -152,7 +260,7 @@ export function QtPage() {
     }
 
     const tones = ["orange", "violet", "emerald"] as const;
-    return entries.map((entry, index) => {
+    return qtEntries.map((entry, index) => {
       const displayName = getRepresentativeDisplayName(entry.userName || entry.userEmail);
       const feedbackThreshold = thresholdsQuery.data?.feedbackCoverage;
       const feedbackBadgeTone =
@@ -171,27 +279,47 @@ export function QtPage() {
         badgeTone: feedbackBadgeTone,
         value:
           entry.totalListeningHours == null ? "-" : `${formatNumber(entry.totalListeningHours, 2)} saat`,
-        detail: `Degerlendirilen toplam ${formatEvaluatedTotal(entry.totalEvaluatedCallCount, entry.totalEvaluatedChatMailCount)} • Geri bildirim ${formatNumber(entry.feedbackCount)}`,
+        detail: `Degerlendirilen toplam ${formatEvaluatedTotal(entry.totalEvaluatedCallCount, entry.totalEvaluatedChatMailCount)} • Geri bildirim ${formatNumber(entry.feedbackCount)} • Eğitim ${formatNumber(entry.trainingCount)} • Toplantı ${formatNumber(entry.meetingCount)}`,
         imageAlt: displayName,
         imageSrc: getRepresentativePhotoSrc(displayName) ?? undefined,
         icon: index % 3 === 0 ? <Timer size={20} /> : index % 3 === 1 ? <Layers size={20} /> : <MessageCircle size={20} />,
         tone: tones[index % tones.length]
       };
     });
-  }, [qtEntriesQuery.data, thresholdsQuery.data]);
+  }, [qtEntries, thresholdsQuery.data]);
 
   const overviewStats = useMemo(() => {
-    const entries = qtEntriesQuery.data ?? [];
     return {
-      totalPeople: entries.length,
-      totalListeningHours: entries.reduce((sum, entry) => sum + (entry.totalListeningHours ?? 0), 0),
-      totalFeedback: entries.reduce((sum, entry) => sum + (entry.feedbackCount ?? 0), 0)
+      totalPeople: qtEntries.length,
+      totalListeningHours: qtEntries.reduce((sum, entry) => sum + (entry.totalListeningHours ?? 0), 0),
+      totalFeedback: qtEntries.reduce((sum, entry) => sum + (entry.feedbackCount ?? 0), 0)
     };
-  }, [qtEntriesQuery.data]);
+  }, [qtEntries]);
 
   return (
     <div className="space-y-6">
-      <section className="surface-default rounded-[34px] border border-white/75 px-6 py-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+      <section className="surface-default rounded-[10px] border border-white/75 px-6 py-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+              QT Raporu
+            </p>
+            <h2 className="mt-1 font-display text-xl font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">
+              {viewLabel}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Seçilen dönemde {overviewStats.totalPeople} QT üyesi veri girdi.
+            </p>
+          </div>
+          <PeriodRangeFilter
+            onChange={setPeriodRange}
+            periods={availablePeriods}
+            value={{ ...periodRange, monthPeriodId: periodId }}
+          />
+        </div>
+      </section>
+
+      <section className="surface-default rounded-[10px] border border-white/75 px-6 py-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
         <div className="grid gap-3 sm:grid-cols-2">
           <StatCard
             icon={<Waves size={18} />}
@@ -230,7 +358,7 @@ export function QtPage() {
 
       {canEditManualEntry ? (
         <ExecutiveChartCard title="QT veri girişi">
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-5">
+          <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-5 py-5">
             <p className="text-sm font-semibold text-slate-900">Manuel giriş alanı taşındı</p>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               QT verileri artık <span className="font-semibold">Yönetim &gt; QT</span> alanından giriliyor. Ayı seçip aynı ekrandan manuel kayıt yapabilirsiniz.
@@ -252,7 +380,7 @@ function QtFormField(props: {
     <label className="flex flex-col gap-2 text-sm font-medium text-slate-600">
       {props.label}
       <input
-        className="rounded-[20px] border border-white/50 bg-white/88 px-4 py-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100"
+        className="rounded-[10px] border border-white/50 bg-white/88 px-4 py-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100"
         disabled={props.disabled}
         onChange={(event) => props.onChange(event.target.value)}
         value={props.value}

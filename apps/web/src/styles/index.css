@@ -14,7 +14,7 @@
   --chart-grid: #e2e8f0;
   --chart-axis: #64748b;
   color: #0f172a;
-  --app-bg: #e3f3fe;
+  --app-bg: #FFFFFF;
   --surface-default-bg: rgba(255, 255, 255, 0.9);
   --surface-default-border: rgba(226, 232, 240, 0.9);
   --surface-elevated-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
@@ -112,7 +112,7 @@ body {
 .surface-dark,
 .surface-hero {
   position: relative;
-  border-radius: 28px;
+  border-radius: 10px;
   border: 1px solid transparent;
 }
 
@@ -237,7 +237,7 @@ body {
 .card,
 .card-elevated,
 .card-interactive {
-  border-radius: 24px;
+  border-radius: 10px;
   border: 1px solid var(--surface-default-border);
   background: var(--surface-default-bg);
   box-shadow: var(--shadow-soft);
@@ -500,6 +500,303 @@ body {
     opacity: 0.78;
     transform: translate3d(-50%, 0, 0) scale(1.08);
   }
+}
+
+/* ── Sky Toggle (dark mode switch) ── */
+
+.sky-toggle {
+  --toggle-size: 14px;
+  --container-width: 5.625em;
+  --container-height: 2.5em;
+  --container-radius: 6.25em;
+  --container-light-bg: #3D7EAE;
+  --container-night-bg: #1D1F2C;
+  --circle-container-diameter: 3.375em;
+  --sun-moon-diameter: 2.125em;
+  --sun-bg: #ECCA2F;
+  --moon-bg: #C4C9D1;
+  --spot-color: #959DB1;
+  --circle-container-offset: calc((var(--circle-container-diameter) - var(--container-height)) / 2 * -1);
+  --stars-color: #fff;
+  --clouds-color: #F3FDFF;
+  --back-clouds-color: #AACADF;
+  --sky-transition: .5s cubic-bezier(0, -0.02, 0.4, 1.25);
+  --circle-transition: .3s cubic-bezier(0, -0.02, 0.35, 1.17);
+}
+
+.sky-toggle,
+.sky-toggle *,
+.sky-toggle *::before,
+.sky-toggle *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-size: var(--toggle-size);
+}
+
+.sky-toggle__checkbox {
+  display: none;
+}
+
+.sky-toggle__container {
+  width: var(--container-width);
+  height: var(--container-height);
+  background-color: var(--container-light-bg);
+  border-radius: var(--container-radius);
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0em -0.062em 0.062em rgba(0, 0, 0, 0.25), 0em 0.062em 0.125em rgba(255, 255, 255, 0.94);
+  transition: var(--sky-transition);
+  position: relative;
+}
+
+.sky-toggle__container::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  box-shadow: 0em 0.05em 0.187em rgba(0, 0, 0, 0.25) inset, 0em 0.05em 0.187em rgba(0, 0, 0, 0.25) inset;
+  border-radius: var(--container-radius);
+}
+
+.sky-toggle__circle-container {
+  width: var(--circle-container-diameter);
+  height: var(--circle-container-diameter);
+  background-color: rgba(255, 255, 255, 0.1);
+  position: absolute;
+  left: var(--circle-container-offset);
+  top: var(--circle-container-offset);
+  border-radius: var(--container-radius);
+  box-shadow: inset 0 0 0 3.375em rgba(255, 255, 255, 0.1), inset 0 0 0 3.375em rgba(255, 255, 255, 0.1), 0 0 0 0.625em rgba(255, 255, 255, 0.1), 0 0 0 1.25em rgba(255, 255, 255, 0.1);
+  display: flex;
+  transition: var(--circle-transition);
+  pointer-events: none;
+}
+
+.sky-toggle__sun-moon-container {
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
+  width: var(--sun-moon-diameter);
+  height: var(--sun-moon-diameter);
+  margin: auto;
+  border-radius: var(--container-radius);
+  background-color: var(--sun-bg);
+  box-shadow: 0.062em 0.062em 0.062em 0em rgba(254, 255, 239, 0.61) inset, 0em -0.062em 0.062em 0em #a1872a inset;
+  filter: drop-shadow(0.062em 0.125em 0.125em rgba(0, 0, 0, 0.25)) drop-shadow(0em 0.062em 0.125em rgba(0, 0, 0, 0.25));
+  overflow: hidden;
+  transition: var(--sky-transition);
+}
+
+.sky-toggle__moon {
+  transform: translateX(100%);
+  width: 100%;
+  height: 100%;
+  background-color: var(--moon-bg);
+  border-radius: inherit;
+  box-shadow: 0.062em 0.062em 0.062em 0em rgba(254, 255, 239, 0.61) inset, 0em -0.062em 0.062em 0em #969696 inset;
+  transition: var(--sky-transition);
+  position: relative;
+}
+
+.sky-toggle__spot {
+  position: absolute;
+  top: 0.75em;
+  left: 0.312em;
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: var(--container-radius);
+  background-color: var(--spot-color);
+  box-shadow: 0em 0.0312em 0.062em rgba(0, 0, 0, 0.25) inset;
+}
+
+.sky-toggle__spot:nth-of-type(2) {
+  width: 0.375em;
+  height: 0.375em;
+  top: 0.937em;
+  left: 1.375em;
+}
+
+.sky-toggle__spot:nth-last-of-type(3) {
+  width: 0.25em;
+  height: 0.25em;
+  top: 0.312em;
+  left: 0.812em;
+}
+
+.sky-toggle__clouds {
+  width: 1.25em;
+  height: 1.25em;
+  background-color: var(--clouds-color);
+  border-radius: var(--container-radius);
+  position: absolute;
+  bottom: -0.625em;
+  left: 0.312em;
+  box-shadow: 0.937em 0.312em var(--clouds-color), -0.312em -0.312em var(--back-clouds-color), 1.437em 0.375em var(--clouds-color), 0.5em -0.125em var(--back-clouds-color), 2.187em 0 var(--clouds-color), 1.25em -0.062em var(--back-clouds-color), 2.937em 0.312em var(--clouds-color), 2em -0.312em var(--back-clouds-color), 3.625em -0.062em var(--clouds-color), 2.625em 0em var(--back-clouds-color), 4.5em -0.312em var(--clouds-color), 3.375em -0.437em var(--back-clouds-color), 4.625em -1.75em 0 0.437em var(--clouds-color), 4em -0.625em var(--back-clouds-color), 4.125em -2.125em 0 0.437em var(--back-clouds-color);
+  transition: 0.5s cubic-bezier(0, -0.02, 0.4, 1.25);
+}
+
+.sky-toggle__stars-container {
+  position: absolute;
+  color: var(--stars-color);
+  top: -100%;
+  left: 0.312em;
+  width: 2.75em;
+  height: auto;
+  transition: var(--sky-transition);
+}
+
+/* Checked (dark) state */
+.sky-toggle__checkbox:checked + .sky-toggle__container {
+  background-color: var(--container-night-bg);
+}
+
+.sky-toggle__checkbox:checked + .sky-toggle__container .sky-toggle__circle-container {
+  left: calc(100% - var(--circle-container-offset) - var(--circle-container-diameter));
+}
+
+.sky-toggle__checkbox:checked + .sky-toggle__container .sky-toggle__circle-container:hover {
+  left: calc(100% - var(--circle-container-offset) - var(--circle-container-diameter) - 0.187em);
+}
+
+.sky-toggle__circle-container:hover {
+  left: calc(var(--circle-container-offset) + 0.187em);
+}
+
+.sky-toggle__checkbox:checked + .sky-toggle__container .sky-toggle__moon {
+  transform: translate(0);
+}
+
+.sky-toggle__checkbox:checked + .sky-toggle__container .sky-toggle__clouds {
+  bottom: -4.062em;
+}
+
+.sky-toggle__checkbox:checked + .sky-toggle__container .sky-toggle__stars-container {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ── Dark mode: temel body/layout değişkenleri ── */
+
+/* ── Dark mode ── */
+
+html.dark {
+  color-scheme: dark;
+  --trend-label-stroke: #1e293b;
+  --app-bg: #0f172a;
+  --surface-default-bg: rgba(30, 41, 59, 0.9);
+  --surface-default-border: rgba(71, 85, 105, 0.45);
+  --surface-elevated-bg: linear-gradient(180deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.96));
+  --surface-elevated-border: rgba(71, 85, 105, 0.5);
+  --surface-subtle-bg: rgba(30, 41, 59, 0.72);
+  --surface-subtle-border: rgba(71, 85, 105, 0.4);
+  --surface-dark-bg: linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(15, 23, 42, 0.92));
+  --surface-dark-border: rgba(148, 163, 184, 0.2);
+  --surface-hero-bg:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 30%),
+    radial-gradient(circle at bottom left, rgba(99, 102, 241, 0.06), transparent 28%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.96));
+  --surface-hero-border: rgba(71, 85, 105, 0.5);
+  --shadow-soft: 0 16px 40px rgba(0, 0, 0, 0.2);
+  --shadow-medium: 0 22px 60px rgba(0, 0, 0, 0.28);
+  --shadow-strong: 0 32px 90px rgba(0, 0, 0, 0.36);
+  --glass-bg: rgba(30, 41, 59, 0.72);
+  --glass-border: rgba(71, 85, 105, 0.4);
+  --glass-shadow: 0 22px 60px rgba(0, 0, 0, 0.24);
+  --glass-shadow-strong: 0 30px 80px rgba(0, 0, 0, 0.32);
+  --glass-dark-bg: rgba(2, 6, 23, 0.8);
+  --glass-dark-border: rgba(148, 163, 184, 0.15);
+  color: #e2e8f0;
+}
+
+html.dark body {
+  background: var(--app-bg);
+  color: #e2e8f0;
+}
+
+html.dark ::selection {
+  background: rgba(249, 115, 22, 0.35);
+}
+
+html.dark :focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(15, 23, 42, 0.92),
+    0 0 0 4px rgba(249, 115, 22, 0.52);
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Dark: surface sınıfları renk override */
+html.dark .surface-default,
+html.dark .surface-elevated,
+html.dark .surface-subtle,
+html.dark .surface-hero {
+  color: #e2e8f0;
+}
+
+html.dark .surface-divider {
+  border-color: rgba(71, 85, 105, 0.5);
+}
+
+/* Dark: glass kartları */
+html.dark .glass-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.84), rgba(30, 41, 59, 0.62));
+  border-color: var(--glass-border);
+}
+
+html.dark .glass-card::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(71, 85, 105, 0.06) 65%, rgba(255, 255, 255, 0.02));
+}
+
+html.dark .glass-card-solid {
+  background: var(--surface-elevated-bg);
+  border-color: var(--surface-elevated-border);
+}
+
+html.dark .glass-card-solid::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(71, 85, 105, 0.06));
+}
+
+html.dark .glass-card-glow {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.74), rgba(30, 41, 59, 0.38));
+  border-color: rgba(71, 85, 105, 0.42);
+  box-shadow: 0 28px 90px rgba(56, 189, 248, 0.06), 0 22px 60px rgba(0, 0, 0, 0.28);
+}
+
+html.dark .glass-card-accent {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.12), rgba(30, 41, 59, 0.6));
+  border-color: rgba(71, 85, 105, 0.32);
+  box-shadow: 0 24px 80px rgba(249, 115, 22, 0.08), 0 20px 56px rgba(0, 0, 0, 0.24);
+}
+
+/* Dark: card sınıfları */
+html.dark .card,
+html.dark .card-elevated,
+html.dark .card-interactive {
+  border-color: var(--surface-default-border);
+  background: var(--surface-default-bg);
+  color: #e2e8f0;
+}
+
+html.dark .card-interactive:hover {
+  border-color: rgba(71, 85, 105, 0.6);
+}
+
+/* Dark: executive grid */
+html.dark .executive-grid::before {
+  background-image:
+    linear-gradient(rgba(71, 85, 105, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(71, 85, 105, 0.12) 1px, transparent 1px);
 }
 
 /* Dekoratif hero videosu: hareket azaltma tercihinde tamamen kapat */

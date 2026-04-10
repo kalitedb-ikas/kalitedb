@@ -13,6 +13,8 @@ import {
 import { resolveThresholdTone, selectDefaultReportPeriod } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+
+import { PeriodSelect } from "../components/period-select";
 import { useSearchParams } from "react-router-dom";
 
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
@@ -106,13 +108,12 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Genel Bakış" />
+      <PageHeader title="Genel Bakış" actions={<PeriodSelect />} />
 
       {snapshot ? (
         <>
           <div className="grid gap-4 lg:grid-cols-3">
             <StatCard
-              emphasis="primary"
               icon={<CheckCircle2 size={18} />}
               label="Audit ortalaması"
               tone={snapshot.thresholds.auditScore ? resolveThresholdTone(snapshot.summary.auditAverage, snapshot.thresholds.auditScore) : "neutral"}
@@ -195,7 +196,7 @@ export function DashboardPage() {
         </>
       ) : (
         <SurfaceCard title="Genel Bakış" variant="default">
-          <p className="text-sm text-slate-600">Veri yükleniyor veya henüz dönem bulunmuyor.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Veri yükleniyor veya henüz dönem bulunmuyor.</p>
         </SurfaceCard>
       )}
     </div>

@@ -47,7 +47,7 @@ const patchSchema = z.object({
     parseManualCountField,
     z.number().int().nonnegative().nullable().optional()
   ),
-  action: z.enum(["reset-dataset"]).optional(),
+  action: z.enum(["reset-dataset", "delete-record"]).optional(),
   datasetType: z.enum(["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"]).optional(),
   recordId: z.string().optional(),
   updates: z.record(z.string(), z.unknown()).optional()
@@ -82,7 +82,7 @@ export async function PATCH(
   context: { params: Promise<{ periodId: string }> }
 ) {
   try {
-    await requireAuth(request as never, ["admin", "team"]);
+    await requireAuth(request as never, ["admin", "team", "manager", "team_leader"]);
     const body = patchSchema.parse(await request.json());
     const { periodId } = await context.params;
     const repository = await getRepository();
@@ -105,6 +105,11 @@ export async function PATCH(
         datasetType: body.datasetType,
         reset: true as const
       });
+    }
+
+    if (body.action === "delete-record" && body.datasetType && body.recordId) {
+      await repository.deleteDatasetRecord(periodId, body.datasetType, body.recordId);
+      return jsonResponse({ deleted: true });
     }
 
     if (body.datasetType && body.recordId && body.updates) {

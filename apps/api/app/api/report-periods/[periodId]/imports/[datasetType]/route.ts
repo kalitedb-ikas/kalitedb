@@ -1,5 +1,6 @@
 import {
   datasetTypeSchema,
+  normalizeKey,
   parseDatasetCsv,
   type ImportJob
 } from "@kalitedb/shared";
@@ -16,7 +17,7 @@ export async function POST(
   context: { params: Promise<{ periodId: string; datasetType: string }> }
 ) {
   try {
-    const user = await requireAuth(request as never, ["admin", "team"]);
+    const user = await requireAuth(request as never, ["admin", "team", "manager", "team_leader"]);
     const { periodId, datasetType: rawDatasetType } = await context.params;
     const datasetType = datasetTypeSchema.parse(rawDatasetType);
     const repository = await getRepository();
@@ -76,7 +77,14 @@ export async function POST(
     }
 
     const storagePath = `imports/${periodId}/${datasetType}/${preview.sha256}.csv`;
-    await repository.storeImportFile(storagePath, text);
+
+    // CSV dosyasını sakla (başarısız olursa veri kaydını engelleme)
+    try {
+      await repository.storeImportFile(storagePath, text);
+    } catch {
+      // Storage bucket yoksa veya erişim hatası varsa devam et
+    }
+
     await repository.replaceDataset(periodId, datasetType, preview.validRows as never);
 
     const importJob: ImportJob = {
@@ -92,7 +100,41 @@ export async function POST(
       uploadedAt: new Date().toISOString()
     };
 
-    await repository.createImportJob(importJob);
+    try {
+      await repository.createImportJob(importJob);
+    } catch {
+      // Import job kaydı başarısız olursa da veri zaten yazıldı
+    }
+
+    // İçe aktarılan verideki yeni temsilcileri otomatik kaydet
+    if (datasetType === "agent-metrics" || datasetType === "audit-metrics") {
+      try {
+        const department = period.department ?? "cs";
+        const now = new Date().toISOString();
+        const rows = preview.validRows as Array<{ agentKey: string; agentName: string }>;
+        const seen = new Set<string>();
+
+        for (const row of rows) {
+          const key = row.agentKey || normalizeKey(row.agentName);
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+
+          const existing = await repository.getRepresentative(key);
+          if (!existing) {
+            await repository.upsertRepresentative({
+              key,
+              displayName: row.agentName,
+              department,
+              status: "active",
+              createdAt: now,
+              updatedAt: now
+            });
+          }
+        }
+      } catch {
+        // Temsilci kaydı başarısız olursa import'u engelleme
+      }
+    }
 
     return jsonResponse({
       ...preview,

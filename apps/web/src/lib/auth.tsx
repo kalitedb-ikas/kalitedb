@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { onAuthStateChanged, signInWithRedirect, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "./firebase";
 
@@ -50,8 +50,6 @@ export function AuthProvider(props: { children: ReactNode }) {
     const storedToken = window.localStorage.getItem(DEV_TOKEN_KEY);
     if (storedToken) {
       setDevToken(storedToken);
-      setLoading(false);
-      return;
     }
 
     if (!firebaseAuth) {
@@ -59,6 +57,8 @@ export function AuthProvider(props: { children: ReactNode }) {
       return;
     }
 
+    // Dev token varsa bile Firebase auth dinleyicisini kur —
+    // böylece varolan Google oturumu geri yüklenir ve Firestore erişimi sağlanır.
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
       setUser(nextUser);
       if (nextUser) {
@@ -90,7 +90,7 @@ export function AuthProvider(props: { children: ReactNode }) {
           return;
         }
 
-        await signInWithRedirect(firebaseAuth, googleProvider);
+        await signInWithPopup(firebaseAuth, googleProvider);
       },
       loginAsDev(role) {
         const nextToken = `dev-${role}`;

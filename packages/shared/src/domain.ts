@@ -3,7 +3,7 @@ import { z } from "zod";
 export const reportStatusSchema = z.enum(["draft", "published"]);
 export const datasetTypeSchema = z.enum(["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"]);
 export const thresholdDirectionSchema = z.enum(["higher_is_better", "lower_is_better"]);
-export const departmentSchema = z.enum(["cs", "sales"]);
+export const departmentSchema = z.enum(["cs", "sales", "quality"]);
 export const managerLevelSchema = z.enum(["senior", "mid", "junior"]);
 export const roleSchema = z.enum([
   // Yeni roller
@@ -56,6 +56,28 @@ export const agentSchema = z.object({
   agentId: z.string(),
   displayName: z.string().min(1),
   active: z.boolean().default(true)
+});
+
+export const representativeStatusSchema = z.enum(["active", "departed", "department_changed"]);
+
+export const timelineEventSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  startDate: z.string(),
+  endDate: z.string().optional(),
+  department: z.string().optional()
+});
+
+export const representativeSchema = z.object({
+  key: z.string(),
+  displayName: z.string().min(1),
+  department: departmentSchema,
+  status: representativeStatusSchema.default("active"),
+  statusNote: z.string().optional(),
+  badges: z.array(z.string()).default([]),
+  timeline: z.array(timelineEventSchema).default([]),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
 });
 
 const nullableNumber = z.number().nullable();
@@ -175,23 +197,131 @@ export const teamSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
+export const roleplayMetricSchema = z.object({
+  agentKey: z.string(),
+  agentName: z.string().min(1),
+  rolePlayCount: z.number().int().nonnegative(),
+  revOpsCount: z.number().int().nonnegative().nullable(),
+  note: z.string().optional(),
+  updatedAt: z.string().datetime()
+});
+
+export const trainingEventSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  color: z.string().default("#3b82f6"),
+  participants: z.array(z.string()).default([]),
+  trainer: z.string().optional(),
+  department: departmentSchema.default("sales"),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const salesEvaluationQuestionSchema = z.object({
+  id: z.string(),
+  questionText: z.string().min(1),
+  answer: z.string().default(""),
+  score: z.number(),
+  updatedAt: z.string().datetime()
+});
+
+export const salesMeetingStatusSchema = z.enum(["devam_ediyor", "kapandi", "kaybedildi"]);
+
+export const salesMeetingSchema = z.object({
+  id: z.string(),
+  periodId: z.string(),
+  date: z.string().optional(),
+  qualityMember: z.string().min(1),
+  salesRepresentative: z.string().min(1),
+  customerName: z.string().min(1),
+  status: salesMeetingStatusSchema.optional(),
+  licenseDetail: z.string().optional(),
+  licenseAmount: z.number().nullable().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export type SalesMeetingStatus = z.infer<typeof salesMeetingStatusSchema>;
+export type SalesMeeting = z.infer<typeof salesMeetingSchema>;
+
+/* ── Sales KPI ── */
+
+export const salesKpiAgentSchema = z.object({
+  agentKey: z.string(),
+  agentName: z.string(),
+  perfScore: z.number().nullable(),
+  salesAmount: z.number(),
+  licenseCount: z.number(),
+  avgLicensePrice: z.number(),
+  talkDurationSeconds: z.number(),
+  callAttempts: z.number(),
+  conversionRate: z.number(),
+  scaleCount: z.number().default(0),
+  scalePlusCount: z.number().default(0),
+  scaleConversion: z.number().default(0),
+  scalePlusConversion: z.number().default(0),
+  totalConversion: z.number().default(0)
+});
+
+export const salesKpiTargetsSchema = z.object({
+  perfScore: z.number(),
+  salesAmount: z.number(),
+  licenseCount: z.number(),
+  avgLicensePrice: z.number(),
+  talkDurationLabel: z.string(),
+  // Aylık toplam konuşma süresi hedefi (saniye). talkDurationLabel gösterim
+  // amaçlı serbest metin (ör. "35'"); bu alan sayısal karşılaştırma için
+  // kullanılır. Eski kayıtlarda yoksa null olur; UI tarafında label'dan
+  // parse edilerek fallback hesaplanır.
+  talkDurationTargetSeconds: z.number().nullable().optional().default(null),
+  callAttempts: z.number(),
+  conversionRate: z.number()
+});
+
+export const licenseSummarySchema = z.object({
+  preCount: z.number(),
+  scaleCount: z.number(),
+  scale2Plus1Count: z.number(),
+  scalePlusCount: z.number(),
+  scalePlus2Plus1Count: z.number()
+});
+
+export const salesKpiDataSchema = z.object({
+  targets: salesKpiTargetsSchema,
+  agents: z.array(salesKpiAgentSchema),
+  licenseSummary: licenseSummarySchema.optional(),
+  updatedAt: z.string()
+});
+
+export type SalesKpiAgent = z.infer<typeof salesKpiAgentSchema>;
+export type SalesKpiTargets = z.infer<typeof salesKpiTargetsSchema>;
+export type SalesKpiData = z.infer<typeof salesKpiDataSchema>;
+export type LicenseSummary = z.infer<typeof licenseSummarySchema>;
+
 export const qtManualEntrySchema = z.object({
   id: z.string(),
   periodId: z.string(),
   userKey: z.string(),
   userEmail: z.string().email(),
   userName: z.string().min(1),
-  totalListeningHours: nullableNumber,
-  totalEvaluatedCallCount: nullableInteger,
-  totalEvaluatedChatMailCount: nullableInteger,
-  feedbackCount: nullableInteger,
-  feedbackCoverage: nullableNumber,
+  totalListeningHours: nullableNumber.optional().default(null),
+  totalEvaluatedCallCount: nullableInteger.optional().default(null),
+  totalEvaluatedChatMailCount: nullableInteger.optional().default(null),
+  feedbackCount: nullableInteger.optional().default(null),
+  feedbackCoverage: nullableNumber.optional().default(null),
+  trainingCount: nullableInteger.optional().default(null),
+  meetingCount: nullableInteger.optional().default(null),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });
 
 export type ReportPeriod = z.infer<typeof reportPeriodSchema>;
 export type Agent = z.infer<typeof agentSchema>;
+export type RepresentativeStatus = z.infer<typeof representativeStatusSchema>;
+export type Representative = z.infer<typeof representativeSchema>;
+export type TimelineEvent = z.infer<typeof timelineEventSchema>;
 export type AgentMetric = z.infer<typeof agentMetricSchema>;
 export type AuditMetric = z.infer<typeof auditMetricSchema>;
 export type QuestionPerformance = z.infer<typeof questionPerformanceSchema>;
@@ -202,6 +332,9 @@ export type UserRoleAssignment = z.infer<typeof userRoleAssignmentSchema>;
 export type UserRoleEntry = z.infer<typeof userRoleEntrySchema>;
 export type User = z.infer<typeof userSchema>;
 export type Team = z.infer<typeof teamSchema>;
+export type RoleplayMetric = z.infer<typeof roleplayMetricSchema>;
+export type TrainingEvent = z.infer<typeof trainingEventSchema>;
+export type SalesEvaluationQuestion = z.infer<typeof salesEvaluationQuestionSchema>;
 export type QtManualEntry = z.infer<typeof qtManualEntrySchema>;
 
 export type ImportPreviewError = {

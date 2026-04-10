@@ -4,6 +4,7 @@ import {
   ExecutiveChartCard,
   HeatChip,
   Leaderboard,
+  PageHeader,
   StatCard
 } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
@@ -12,6 +13,7 @@ import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, PhoneCall, Users } f
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { PeriodSelect } from "../components/period-select";
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
 import { DataTable } from "../components/data-table";
 import { useAuth } from "../lib/auth";
@@ -252,6 +254,7 @@ export function CsatPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title="CSAT" actions={<PeriodSelect />} />
       {snapshot ? (
         <>
           <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
@@ -341,10 +344,10 @@ export function CsatPage() {
                 {csatSummary.channelMix.map((item) => (
                   <div key={item.label}>
                     <div className="mb-2 flex items-center justify-between text-sm">
-                      <span className="font-medium text-slate-600">{item.label}</span>
-                      <span className="font-semibold text-slate-900">{formatNumber(item.value)}</span>
+                      <span className="font-medium text-slate-600 dark:text-slate-400">{item.label}</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{formatNumber(item.value)}</span>
                     </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-200/70">
+                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700">
                       <div
                         className={`h-full rounded-full ${item.className}`}
                         style={{ width: `${Math.max(item.ratio * 100, 8)}%` }}
@@ -370,8 +373,8 @@ export function CsatPage() {
           </ExecutiveChartCard>
         </>
       ) : (
-        <div className="glass-card rounded-[30px] border border-white/40 bg-white/85 p-12 text-center shadow-glass">
-          <p className="text-slate-600">CSAT verisi yükleniyor...</p>
+        <div className="glass-card rounded-[10px] border border-white/40 bg-white/85 p-12 text-center shadow-glass dark:border-slate-600/40 dark:bg-slate-800/80">
+          <p className="text-slate-600 dark:text-slate-400">CSAT verisi yükleniyor...</p>
         </div>
       )}
     </div>
@@ -380,15 +383,15 @@ export function CsatPage() {
 
 function MetricInsight(props: { icon: React.ReactNode; title: string; value: string; detail: string }) {
   return (
-    <div className="rounded-[24px] border border-white/50 bg-white/82 p-4 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+    <div className="rounded-[10px] border border-white/50 bg-white/82 p-4 shadow-[0_18px_40px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/80 dark:shadow-none">
       <div className="flex items-center gap-3">
-        <div className="rounded-2xl border border-white/50 bg-white/72 p-2 text-slate-800">{props.icon}</div>
+        <div className="rounded-[10px] border border-white/50 bg-white/72 p-2 text-slate-800 dark:border-slate-600/40 dark:bg-slate-700/50 dark:text-slate-200">{props.icon}</div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">{props.title}</p>
-          <p className="mt-1 text-sm font-semibold text-slate-900">{props.value}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 dark:text-slate-400">{props.title}</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{props.value}</p>
         </div>
       </div>
-      <p className="mt-3 text-sm text-slate-600">{props.detail}</p>
+      <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">{props.detail}</p>
     </div>
   );
 }

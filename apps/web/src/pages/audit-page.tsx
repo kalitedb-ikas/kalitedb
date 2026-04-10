@@ -1,22 +1,26 @@
-import { ChampionSpotlightCard, ExecutiveChartCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
+import { ChampionSpotlightCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
-import { average, normalizeKey, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import type { AuditMetric } from "@kalitedb/shared";
 import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { PeriodSelect } from "../components/period-select";
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
 import { DataTable } from "../components/data-table";
+import {
+  AuditTableBadge,
+  MonthlyTable,
+  buildAgentAvatar,
+  isAuditSummaryRow,
+  type MonthlyAgentRow
+} from "../components/audit-shared";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
-import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { chart } from "../theme/colors";
-
-function isAuditSummaryRow(agentName: string) {
-  return normalizeKey(agentName).includes("ortalama");
-}
 
 type AuditAgentRow = {
   id: string;
@@ -125,7 +129,7 @@ export function AuditPage() {
 
         return left.agentName.localeCompare(right.agentName, "tr");
       });
-    
+
     return sortedAgents.map((agent, index) => ({
       ...agent,
       listIndex: index + 1
@@ -178,54 +182,63 @@ export function AuditPage() {
     };
   }, [currentAudits]);
 
-  const auditHistoryQueries = useQueries({
-    queries: sortedPeriods.map((period) => ({
-      enabled: true,
-      queryKey: ["audit-history", auth.token, period.id],
-      queryFn: () =>
-        api.getDashboard(auth.token, period.id, undefined, {
-          datasetTypes: ["audit-metrics"]
-        }),
-      staleTime: 5 * 60 * 1000
-    }))
-  });
-  const auditHistory = useMemo(() => {
-    const points = sortedPeriods
-      .map((period, index) => {
-        const detail = auditHistoryQueries[index]?.data;
-        const auditAverage = detail ? average(selectAuditMetrics(detail.datasets).map((item) => item.auditScore)) : null;
-        return {
-          periodId: period.id,
-          period: period.month,
-          title: period.title,
-          audit: auditAverage,
-          csat: null
-        };
-      })
-      .filter((item) => selectedYear ? item.period.startsWith(`${selectedYear}-`) : false);
-
-    return selectedYear
-      ? buildYearTrendPoints({
-          year: selectedYear,
-          currentPeriodId: periodId,
-          points
-        })
-      : [];
-  }, [auditHistoryQueries, periodId, selectedYear, sortedPeriods]);
-  const auditHistoryLoading = auditHistoryQueries.some((query) => query.isPending);
-  const auditHistoryError = auditHistoryQueries.some((query) => query.isError);
-  const previousPeriodIndex = useMemo(
-    () => sortedPeriods.findIndex((period) => period.id === periodId) - 1,
-    [periodId, sortedPeriods]
+  /* ── CS dönemleri (yıla göre) ── */
+  const csYearPeriods = useMemo(
+    () =>
+      sortedPeriods.filter(
+        (p) => (p.department ?? "cs") === "cs" && selectedYear && p.month.startsWith(`${selectedYear}-`)
+      ),
+    [sortedPeriods, selectedYear]
   );
-  const previousAuditDetail = previousPeriodIndex >= 0 ? auditHistoryQueries[previousPeriodIndex]?.data : undefined;
+  const csYearPeriodIds = useMemo(() => csYearPeriods.map((p) => p.id), [csYearPeriods]);
+
+  /* ── Toplu audit history ── */
+  const auditHistoryBulkQuery = useQuery({
+    enabled: csYearPeriodIds.length > 0,
+    queryKey: ["audit-history-bulk", auth.token, csYearPeriodIds],
+    queryFn: () => api.getAuditMetricsForPeriods(auth.token, csYearPeriodIds),
+    staleTime: 5 * 60 * 1000
+  });
+  const auditHistoryMap = auditHistoryBulkQuery.data;
+
+  const auditHistory = useMemo(() => {
+    if (!auditHistoryMap || !selectedYear) return [];
+
+    const points = csYearPeriods.map((period) => {
+      const audits = auditHistoryMap[period.id] ?? [];
+      const auditAverage = average(audits.filter((a) => !isAuditSummaryRow(a.agentName)).map((a) => a.auditScore));
+      return {
+        periodId: period.id,
+        period: period.month,
+        title: period.title,
+        audit: auditAverage,
+        csat: null
+      };
+    });
+
+    return buildYearTrendPoints({
+      year: selectedYear,
+      currentPeriodId: periodId,
+      points
+    });
+  }, [auditHistoryMap, csYearPeriods, periodId, selectedYear]);
+  const auditHistoryLoading = auditHistoryBulkQuery.isPending;
+  const auditHistoryError = auditHistoryBulkQuery.isError;
+
+  /* ── Önceki dönem karşılaştırma ── */
+  const previousPeriod = useMemo(() => {
+    const idx = csYearPeriods.findIndex((p) => p.id === periodId);
+    return idx > 0 ? csYearPeriods[idx - 1] : undefined;
+  }, [csYearPeriods, periodId]);
+  const previousAuditMetrics = previousPeriod && auditHistoryMap ? auditHistoryMap[previousPeriod.id] : undefined;
+
   const performanceShift = useMemo(() => {
-    if (!previousAuditDetail) {
+    if (!previousAuditMetrics) {
       return null;
     }
 
     const previousAuditMap = new Map(
-      selectAuditMetrics(previousAuditDetail.datasets)
+      previousAuditMetrics
         .filter((agent): agent is typeof agent & { auditScore: number } => agent.auditScore !== null)
         .map((agent) => [agent.agentKey, agent.auditScore])
     );
@@ -283,8 +296,39 @@ export function AuditPage() {
         .join(", "),
       delta: 0
     };
-  }, [currentAudits, previousAuditDetail]);
+  }, [currentAudits, previousAuditMetrics]);
 
+  /* ── Aylık audit pivot tablosu (ortalama) ── */
+  const auditMonthlyData = useMemo<MonthlyAgentRow[]>(() => {
+    if (!auditHistoryMap || !selectedYear) return [];
+
+    const agentMap = new Map<string, string>();
+    const agentMonths = new Map<string, (number | null)[]>();
+
+    for (const period of csYearPeriods) {
+      const monthIdx = Number(period.month.split("-")[1]) - 1;
+      const audits = auditHistoryMap[period.id] ?? [];
+
+      for (const audit of audits) {
+        if (isAuditSummaryRow(audit.agentName)) continue;
+        agentMap.set(audit.agentKey, audit.agentName);
+        if (!agentMonths.has(audit.agentKey)) {
+          agentMonths.set(audit.agentKey, Array(12).fill(null));
+        }
+        agentMonths.get(audit.agentKey)![monthIdx] = audit.auditScore;
+      }
+    }
+
+    return Array.from(agentMap.entries())
+      .map(([key, name]) => ({
+        agentKey: key,
+        agentName: name,
+        months: agentMonths.get(key) ?? Array(12).fill(null)
+      }))
+      .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
+  }, [auditHistoryMap, csYearPeriods, selectedYear]);
+
+  /* ── Aylık role-play pivot tablosu (toplam) ── */
   const columns: ColumnDef<AuditAgentRow, any>[] = [
     columnHelper.accessor("listIndex", {
       header: "#",
@@ -303,13 +347,12 @@ export function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Audit" />
+      <PageHeader title="Audit" actions={<PeriodSelect />} />
 
       {snapshot ? (
         <>
           <div className="grid gap-4 lg:grid-cols-3">
             <StatCard
-              emphasis="primary"
               icon={<ShieldCheck size={18} />}
               label="Takım audit ortalaması"
               tone={auditThreshold ? resolveThresholdTone(snapshot.summary.auditAverage, auditThreshold) : "neutral"}
@@ -354,25 +397,6 @@ export function AuditPage() {
                 title="En düşük audit"
                 value={lowestAuditGroup?.names ?? "Henüz yok"}
               />
-              <SurfaceCard
-                title="Kısa özet"
-                variant="default"
-              >
-                <div className="space-y-3">
-                  <SummaryLine
-                    title="Değerlendirilen temsilci"
-                    value={formatNumber(evaluatedAgentCount)}
-                  />
-                  <SummaryLine
-                    title="En yüksek audit"
-                    value={formatAuditScore(snapshot.highlights.bestAudit?.value)}
-                  />
-                  <SummaryLine
-                    title="En düşük audit"
-                    value={formatAuditScore(snapshot.highlights.lowestAudit?.value)}
-                  />
-                </div>
-              </SurfaceCard>
             </div>
           </div>
 
@@ -406,6 +430,8 @@ export function AuditPage() {
           <SurfaceCard
             title="Detay tablo görünümü"
             variant="default"
+            headerClassName="bg-emerald-800 border-emerald-700 dark:bg-emerald-900"
+            titleClassName="text-white"
           >
             <DataTable
               columns={columns}
@@ -414,90 +440,20 @@ export function AuditPage() {
               emptyState="Seçilen dönemde gösterilecek audit kaydı bulunamadı."
             />
           </SurfaceCard>
+
+          <MonthlyTable
+            data={auditMonthlyData}
+            summaryMode="average"
+            title="Aylık Audit Skorları"
+            valueFormatter={(v) => formatAuditScore(v)}
+          />
+
         </>
       ) : (
         <SurfaceCard title="Audit" variant="default">
-          <p className="text-sm text-slate-600">Audit verisi yükleniyor...</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Audit verisi yükleniyor...</p>
         </SurfaceCard>
       )}
     </div>
   );
-}
-
-function SummaryLine(props: { title: string; value: string; detail?: string | undefined }) {
-  return (
-    <div className="rounded-[22px] border border-slate-200 bg-white/92 px-4 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{props.title}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-950">{props.value}</p>
-      {props.detail ? <p className="mt-1 text-sm text-slate-500">{props.detail}</p> : null}
-    </div>
-  );
-}
-
-function AuditTableBadge(props: { value: number | null | undefined; isPercent?: boolean }) {
-  if (props.value === null || props.value === undefined) {
-    return <span className="text-slate-400">-</span>;
-  }
-
-  const toneClass =
-    props.value < 70
-      ? "border-rose-200 bg-rose-50 text-rose-700"
-      : props.value < 85
-        ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-        : "border-emerald-300 bg-emerald-100 text-emerald-800";
-
-  return (
-    <span className={`inline-flex min-w-24 justify-center rounded-full border px-3 py-1.5 text-sm font-semibold ${toneClass}`}>
-      {props.isPercent ? formatPercent(props.value) : formatAuditScore(props.value)}
-    </span>
-  );
-}
-
-function buildAgentAvatar(name: string, index: number) {
-  const repositoryPhoto = getRepresentativePhotoSrc(name);
-  if (repositoryPhoto) {
-    return repositoryPhoto;
-  }
-
-  const palettes: Array<{ start: string; end: string }> = [
-    { start: "#fb923c", end: "#f97316" },
-    { start: "#38bdf8", end: "#0ea5e9" },
-    { start: "#34d399", end: "#10b981" },
-    { start: "#a78bfa", end: "#8b5cf6" }
-  ];
-  const palette = palettes[index % palettes.length] || { start: "#fb923c", end: "#f97316" };
-  const initials = name
-    .split(" ")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
-      <defs>
-        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="${palette.start}" />
-          <stop offset="100%" stop-color="${palette.end}" />
-        </linearGradient>
-      </defs>
-      <rect width="160" height="160" rx="40" fill="url(#bg)" />
-      <text
-        x="50%"
-        y="54%"
-        dominant-baseline="middle"
-        text-anchor="middle"
-        fill="white"
-        font-family="Inter, Arial, sans-serif"
-        font-size="52"
-        font-weight="700"
-        letter-spacing="4"
-      >
-        ${initials}
-      </text>
-    </svg>
-  `;
-
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }

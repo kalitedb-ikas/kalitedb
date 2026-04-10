@@ -94,6 +94,18 @@ service cloud.firestore {
       allow create, update, delete: if canManageReports();
     }
 
+    // Role-play metrikleri (satış)
+    match /reportPeriods/{periodId}/roleplayMetrics/{recordId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canManageReports();
+    }
+
+    // Değerlendirme soruları (satış)
+    match /reportPeriods/{periodId}/evaluationQuestions/{questionId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canManageReports();
+    }
+
     // QT manuel girişleri
     match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
       allow get, list: if isAuthed();
@@ -112,7 +124,9 @@ service cloud.firestore {
     match /userRoles/{emailKey} {
       allow get: if isAdmin() || (isAuthed() && userEmail() == emailKey);
       allow list: if isAdmin();
-      allow create, update, delete: if isAdmin();
+      // Kendi rolünü oluşturabilir (bootstrap: ilk kullanıcıların admin olabilmesi için)
+      allow create: if isAdmin() || (isAuthed() && userEmail() == emailKey);
+      allow update, delete: if isAdmin();
     }
 
     // Yeni kullanıcı dokümanları
@@ -129,6 +143,30 @@ service cloud.firestore {
       allow create: if isManagerOrAbove();
       allow update: if isManagerOrAbove() || isOwnTeamLeader(teamId);
       allow delete: if isAdmin();
+    }
+
+    // Satış KPI verileri
+    match /reportPeriods/{periodId}/salesKpiData/{docId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canManageReports();
+    }
+
+    // Satış toplantıları
+    match /reportPeriods/{periodId}/salesMeetings/{meetingId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canManageReports();
+    }
+
+    // Temsilci yönetimi
+    match /representatives/{repKey} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canManageReports();
+    }
+
+    // Eğitim takvimi etkinlikleri
+    match /trainingEvents/{eventId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canManageReports();
     }
 
     // İçe aktarma işleri

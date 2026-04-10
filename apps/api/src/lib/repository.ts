@@ -10,6 +10,7 @@ import {
   qtManualEntrySchema,
   qtMetricSchema,
   reportPeriodSchema,
+  representativeSchema,
   teamSchema,
   userSchema,
   type AgentMetric,
@@ -21,6 +22,8 @@ import {
   type QuestionPerformance,
   type QtManualEntry,
   type QtMetric,
+  type Representative,
+  type RepresentativeStatus,
   type ReportDatasets,
   type ReportPeriod,
   type Team,
@@ -58,6 +61,7 @@ type LocalDb = {
   users: User[];
   teams: Team[];
   qtManualEntries: QtManualEntry[];
+  representatives: Representative[];
 };
 
 export type ReportPeriodDraftPatch = Partial<
@@ -81,6 +85,11 @@ export type Repository = {
     datasetType: T,
     recordId: string
   ): Promise<DatasetRecordMap[T] | undefined>;
+  deleteDatasetRecord(
+    periodId: string,
+    datasetType: DatasetType,
+    recordId: string
+  ): Promise<void>;
   createReportPeriod(input: {
     month: string;
     title: string;
@@ -121,6 +130,12 @@ export type Repository = {
   listQtManualEntries(periodId: string): Promise<QtManualEntry[]>;
   upsertQtManualEntry(entry: QtManualEntry): Promise<QtManualEntry>;
   storeImportFile(storagePath: string, content: string): Promise<void>;
+  // Temsilci yönetimi
+  listRepresentatives(filters?: { status?: RepresentativeStatus; department?: Department }): Promise<Representative[]>;
+  getRepresentative(key: string): Promise<Representative | undefined>;
+  upsertRepresentative(rep: Representative): Promise<Representative>;
+  deleteRepresentative(key: string): Promise<void>;
+  batchUpdateRepresentativeStatus(keys: string[], status: RepresentativeStatus): Promise<void>;
 };
 
 const DATA_FILE_PATH = path.join(process.cwd(), ".data", "local-db.json");
@@ -147,7 +162,8 @@ async function ensureLocalDb(): Promise<LocalDb> {
       userRoles: parsed.userRoles ?? [],
       users: parsed.users ?? [],
       teams: parsed.teams ?? [],
-      qtManualEntries: parsed.qtManualEntries ?? []
+      qtManualEntries: parsed.qtManualEntries ?? [],
+      representatives: parsed.representatives ?? []
     };
   } catch {
     const db: LocalDb = {
@@ -158,7 +174,8 @@ async function ensureLocalDb(): Promise<LocalDb> {
       userRoles: [],
       users: [],
       teams: [],
-      qtManualEntries: []
+      qtManualEntries: [],
+      representatives: []
     };
 
     await persistLocalDb(db);
@@ -283,13 +300,23 @@ async function createFileRepository(): Promise<Repository> {
     },
     async createReportPeriod(input) {
       const db = await ensureLocalDb();
+      const department = input.department ?? "cs";
+
+      // Aynı ay+departman için mükerrer dönem kontrolü
+      const existing = db.reportPeriods.find(
+        (p) => p.month === input.month && (p.department ?? "cs") === department
+      );
+      if (existing) {
+        return existing;
+      }
+
       const now = new Date().toISOString();
       const period = reportPeriodSchema.parse({
         id: crypto.randomUUID(),
         month: input.month,
         title: input.title,
         status: "draft",
-        department: input.department ?? "cs",
+        department,
         compareToPeriodId: input.compareToPeriodId,
         createdAt: now,
         updatedAt: now
@@ -361,6 +388,16 @@ async function createFileRepository(): Promise<Repository> {
 
       await persistLocalDb(db);
       return parsed;
+    },
+    async deleteDatasetRecord(periodId, datasetType, recordId) {
+      const db = await ensureLocalDb();
+      db.datasets[periodId] ??= emptyDatasets();
+      const property = datasetKeyToProperty(datasetType);
+      const rows = db.datasets[periodId][property] as Array<{ id: string }>;
+      const index = rows.findIndex((entry) => entry.id === recordId);
+      if (index < 0) throw new ApiError(404, "Kayıt bulunamadı.");
+      rows.splice(index, 1);
+      await persistLocalDb(db);
     },
     async createImportJob(job) {
       const db = await ensureLocalDb();
@@ -507,6 +544,42 @@ async function createFileRepository(): Promise<Repository> {
       await persistLocalDb(db);
       return updated;
     },
+    async listRepresentatives(filters) {
+      const db = await ensureLocalDb();
+      let reps = db.representatives ?? [];
+      if (filters?.status) reps = reps.filter((r) => r.status === filters.status);
+      if (filters?.department) reps = reps.filter((r) => r.department === filters.department);
+      return reps.sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
+    },
+    async getRepresentative(key) {
+      const db = await ensureLocalDb();
+      return (db.representatives ?? []).find((r) => r.key === key);
+    },
+    async upsertRepresentative(rep) {
+      const db = await ensureLocalDb();
+      const parsed = representativeSchema.parse(rep);
+      db.representatives ??= [];
+      const index = db.representatives.findIndex((r) => r.key === parsed.key);
+      if (index >= 0) {
+        db.representatives[index] = parsed;
+      } else {
+        db.representatives.push(parsed);
+      }
+      await persistLocalDb(db);
+      return parsed;
+    },
+    async batchUpdateRepresentativeStatus(keys, status) {
+      const db = await ensureLocalDb();
+      const now = new Date().toISOString();
+      const keySet = new Set(keys);
+      for (const rep of db.representatives ?? []) {
+        if (keySet.has(rep.key)) {
+          rep.status = status;
+          rep.updatedAt = now;
+        }
+      }
+      await persistLocalDb(db);
+    },
     async storeImportFile(storagePath, content) {
       const filePath = path.join(process.cwd(), ".data", storagePath);
       await mkdir(path.dirname(filePath), { recursive: true });
@@ -563,12 +636,12 @@ async function createFirebaseRepository(): Promise<Repository> {
     );
   };
   const fetchImportJobs = async (periodId: string, limit?: number) => {
-    let query = db.collection("importJobs").where("periodId", "==", periodId).orderBy("uploadedAt", "desc");
-    if (limit && limit > 0) {
-      query = query.limit(limit);
-    }
-    const snapshot = await query.get();
-    return snapshot.docs.map((doc) => importJobSchema.parse({ id: doc.id, ...doc.data() }));
+    // Composite index gerektirmemek için sadece periodId ile filtrele, sıralama client-side
+    const snapshot = await db.collection("importJobs").where("periodId", "==", periodId).get();
+    const jobs = snapshot.docs
+      .map((doc) => importJobSchema.parse({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+    return limit && limit > 0 ? jobs.slice(0, limit) : jobs;
   };
 
   return {
@@ -628,27 +701,44 @@ async function createFirebaseRepository(): Promise<Repository> {
         : undefined;
     },
     async createReportPeriod(input) {
+      const department = input.department ?? "cs";
+
+      // Aynı ay+departman için mükerrer dönem kontrolü (composite index gerektirmeden)
+      const allForMonth = await db
+        .collection("reportPeriods")
+        .where("month", "==", input.month)
+        .get();
+      const existingDoc = allForMonth.docs.find(
+        (doc) => (doc.data().department ?? "cs") === department
+      );
+      if (existingDoc) {
+        return reportPeriodSchema.parse({ id: existingDoc.id, ...existingDoc.data() });
+      }
+
       const now = new Date().toISOString();
       const payload = reportPeriodSchema.parse({
         id: crypto.randomUUID(),
         month: input.month,
         title: input.title,
         status: "draft",
-        department: input.department ?? "cs",
+        department,
         compareToPeriodId: input.compareToPeriodId,
         createdAt: now,
         updatedAt: now
       });
 
-      await db.collection("reportPeriods").doc(payload.id).set({
+      const docData: Record<string, unknown> = {
         month: payload.month,
         title: payload.title,
         status: payload.status,
         department: payload.department,
-        compareToPeriodId: payload.compareToPeriodId,
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt
-      });
+      };
+      if (payload.compareToPeriodId) {
+        docData.compareToPeriodId = payload.compareToPeriodId;
+      }
+      await db.collection("reportPeriods").doc(payload.id).set(docData);
 
       return payload;
     },
@@ -707,6 +797,10 @@ async function createFirebaseRepository(): Promise<Repository> {
       const parsed = parseDatasetRecord(datasetType, record);
       await db.collection("reportPeriods").doc(periodId).collection(property).doc(record.id).set(parsed);
       return parsed;
+    },
+    async deleteDatasetRecord(periodId, datasetType, recordId) {
+      const property = datasetKeyToProperty(datasetType);
+      await db.collection("reportPeriods").doc(periodId).collection(property).doc(recordId).delete();
     },
     async createImportJob(job) {
       await db.collection("importJobs").doc(job.id).set(importJobSchema.parse(job));
@@ -840,6 +934,35 @@ async function createFirebaseRepository(): Promise<Repository> {
       const updated = teamSchema.parse({ ...current, ...patch, updatedAt: new Date().toISOString() });
       await db.collection("teams").doc(teamId).set(updated);
       return updated;
+    },
+    async listRepresentatives(filters) {
+      let q: FirebaseFirestore.Query = db.collection("representatives");
+      if (filters?.status) q = q.where("status", "==", filters.status);
+      if (filters?.department) q = q.where("department", "==", filters.department);
+      const snapshot = await q.orderBy("displayName", "asc").get();
+      return snapshot.docs.map((doc) => representativeSchema.parse({ key: doc.id, ...doc.data() }));
+    },
+    async getRepresentative(key) {
+      const doc = await db.collection("representatives").doc(key).get();
+      return doc.exists ? representativeSchema.parse({ key: doc.id, ...doc.data() }) : undefined;
+    },
+    async upsertRepresentative(rep) {
+      const parsed = representativeSchema.parse(rep);
+      await db.collection("representatives").doc(parsed.key).set(parsed);
+      return parsed;
+    },
+    async deleteRepresentative(key) {
+      await db.collection("representatives").doc(key).delete();
+    },
+    async batchUpdateRepresentativeStatus(keys, status) {
+      const now = new Date().toISOString();
+      for (const chunk of chunkItems(keys, 500)) {
+        const batch = db.batch();
+        for (const key of chunk) {
+          batch.update(db.collection("representatives").doc(key), { status, updatedAt: now });
+        }
+        await batch.commit();
+      }
     },
     async storeImportFile(storagePath, content) {
       const bucket = storage.bucket();

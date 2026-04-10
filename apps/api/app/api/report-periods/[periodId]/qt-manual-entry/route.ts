@@ -13,6 +13,8 @@ const patchSchema = z.object({
   totalEvaluatedChatMailCount: z.number().int().nonnegative().nullable(),
   feedbackCount: z.number().int().nonnegative().nullable(),
   feedbackCoverage: z.number().nonnegative().nullable(),
+  trainingCount: z.number().int().nonnegative().nullable(),
+  meetingCount: z.number().int().nonnegative().nullable(),
   targetEmail: z.string().email().optional(),
   targetUserName: z.string().min(1).optional()
 });
@@ -38,6 +40,8 @@ function buildDefaultEntry(
     totalEvaluatedChatMailCount: null,
     feedbackCount: null,
     feedbackCoverage: null,
+    trainingCount: null,
+    meetingCount: null,
     createdAt: now,
     updatedAt: now
   };
@@ -150,6 +154,8 @@ export async function PATCH(
       totalEvaluatedChatMailCount: payload.totalEvaluatedChatMailCount,
       feedbackCount: payload.feedbackCount,
       feedbackCoverage: payload.feedbackCoverage,
+      trainingCount: payload.trainingCount,
+      meetingCount: payload.meetingCount,
       userEmail: target.userEmail,
       userName: payload.targetUserName?.trim() || current.userName || target.userName,
       updatedAt: new Date().toISOString()
