@@ -1,5 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { getRedirectResult, onAuthStateChanged, signInWithRedirect, signOut, type User } from "firebase/auth";
+import {
+  getRedirectResult,
+  onAuthStateChanged,
+  signInWithPopup,
+  signInWithRedirect,
+  signOut,
+  type User
+} from "firebase/auth";
 
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "./firebase";
 
@@ -57,7 +64,7 @@ export function AuthProvider(props: { children: ReactNode }) {
       return;
     }
 
-    // signInWithRedirect dönüşünü işle (GitHub Pages COOP nedeniyle popup çalışmaz)
+    // signInWithRedirect dönüşünü işle
     getRedirectResult(firebaseAuth).catch(() => {
       // Redirect sonucu yoksa (normal sayfa yüklemesi) sessizce devam et
     });
@@ -95,7 +102,21 @@ export function AuthProvider(props: { children: ReactNode }) {
           return;
         }
 
-        await signInWithRedirect(firebaseAuth, googleProvider);
+        // Önce popup dene; COOP engeli varsa (GitHub Pages) redirect'e düş
+        try {
+          await signInWithPopup(firebaseAuth, googleProvider);
+        } catch (error: unknown) {
+          const code = (error as { code?: string }).code;
+          if (
+            code === "auth/popup-blocked" ||
+            code === "auth/popup-closed-by-user" ||
+            code === "auth/cancelled-popup-request"
+          ) {
+            await signInWithRedirect(firebaseAuth, googleProvider);
+          } else {
+            throw error;
+          }
+        }
       },
       loginAsDev(role) {
         const nextToken = `dev-${role}`;
