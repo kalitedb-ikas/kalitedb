@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithPopup, signOut, type User } from "firebase/auth";
+import { getRedirectResult, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut, type User } from "firebase/auth";
 
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "./firebase";
 
@@ -18,40 +18,6 @@ const DEV_TOKEN_KEY = "kalitedb.devToken";
 
 /** Firebase ID tokens expire after 60 min — refresh 5 min early. */
 const TOKEN_REFRESH_INTERVAL_MS = 55 * 60 * 1000;
-
-const GOOGLE_CLIENT_ID = "838169214324-uh1bpdokm8ase9314qaghiefgok25n9k.apps.googleusercontent.com";
-
-/**
- * GitHub Pages'ta Firebase popup/redirect çalışmıyor (content blocker + COOP).
- * Manuel Google OAuth implicit flow kullan:
- * 1. Google'a tam sayfa yönlendir (response_type=id_token)
- * 2. Google geri yönlendirince URL hash'ten id_token'ı al
- * 3. signInWithCredential ile Firebase'e giriş yap
- */
-function buildGoogleOAuthUrl(): string {
-  const nonce = crypto.randomUUID();
-  sessionStorage.setItem("oauth_nonce", nonce);
-
-  const redirectUri = window.location.origin + window.location.pathname;
-  const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri,
-    response_type: "id_token",
-    scope: "openid email profile",
-    nonce,
-    prompt: "select_account"
-  });
-
-  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-}
-
-function parseIdTokenFromHash(): string | null {
-  const hash = window.location.hash;
-  if (!hash) return null;
-
-  const params = new URLSearchParams(hash.substring(1));
-  return params.get("id_token");
-}
 
 export function AuthProvider(props: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -90,22 +56,14 @@ export function AuthProvider(props: { children: ReactNode }) {
       return;
     }
 
-    // URL hash'te Google OAuth id_token var mı kontrol et
-    const idToken = parseIdTokenFromHash();
-    if (idToken) {
-      // Hash'i temizle (token URL'de kalmasın)
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-
-      // Firebase'e giriş yap
-      const credential = GoogleAuthProvider.credential(idToken);
-      signInWithCredential(firebaseAuth, credential)
-        .then((result) => {
-          console.log("[Auth] Google OAuth başarılı:", result.user.email);
-        })
-        .catch((err) => {
-          console.error("[Auth] signInWithCredential hatası:", err);
-        });
-    }
+    // signInWithRedirect dönüşünü kontrol et
+    getRedirectResult(firebaseAuth)
+      .then((result) => {
+        if (result?.user) {
+          console.log("[Auth] Redirect başarılı:", result.user.email);
+        }
+      })
+      .catch(() => {});
 
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
       setUser(nextUser);
@@ -138,14 +96,7 @@ export function AuthProvider(props: { children: ReactNode }) {
           return;
         }
 
-        // GitHub Pages'ta manuel OAuth redirect kullan
-        if (window.location.hostname.endsWith("github.io")) {
-          window.location.href = buildGoogleOAuthUrl();
-          return;
-        }
-
-        // Localhost'ta popup kullan
-        await signInWithPopup(firebaseAuth, googleProvider);
+        await signInWithRedirect(firebaseAuth, googleProvider);
       },
       loginAsDev(role) {
         const nextToken = `dev-${role}`;
