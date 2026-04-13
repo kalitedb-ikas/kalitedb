@@ -1,6 +1,6 @@
 import { getAnalytics, isSupported, type Analytics } from "firebase/analytics";
 import { initializeApp, getApps } from "firebase/app";
-import { GoogleAuthProvider, getAuth } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseCoreConfig = {
@@ -33,7 +33,6 @@ export const firebaseApp = isFirebaseConfigured
 
 export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : undefined;
 export const firebaseDb = firebaseApp ? getFirestore(firebaseApp) : undefined;
-export const googleProvider = firebaseApp ? new GoogleAuthProvider() : undefined;
 export const firebaseAnalyticsPromise: Promise<Analytics | undefined> =
   typeof window !== "undefined" && firebaseApp && firebaseOptionalConfig.measurementId
     ? isSupported().then((supported) => (supported && firebaseApp ? getAnalytics(firebaseApp) : undefined))
