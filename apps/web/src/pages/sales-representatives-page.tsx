@@ -384,15 +384,7 @@ export function SalesRepresentativesPage() {
       return Math.min(120, (actual / target) * 100);
     };
 
-    // ÖNEMLİ: Hedeflerden sadece `salesAmount` takım geneli (aylık toplam takım
-    // hedefi, ör. 27M TRY). Diğerleri (perfScore, licenseCount, callAttempts,
-    // conversionRate, talkDurationTargetSeconds) zaten kişi başı değerler.
-    // Radar bir temsilciyi gösterdiğinden satış hedefini takımdaki aktif agent
-    // sayısına bölerek kişi başı hedef elde ediyoruz.
-    const agentCount = Math.max(kpiAgents.length, 1);
-    const perPersonSalesTarget =
-      targets?.salesAmount != null ? targets.salesAmount / agentCount : null;
-
+    // Tüm hedefler kişi başı değerdir (salesAmount dahil).
     // Eski kayıtlarda talkDurationTargetSeconds olmayabilir — label'dan fallback hesapla.
     const talkTargetSeconds =
       targets?.talkDurationTargetSeconds ?? parseTalkDurationLabelToSeconds(targets?.talkDurationLabel ?? "");
@@ -405,7 +397,7 @@ export function SalesRepresentativesPage() {
       },
       {
         metric: "Satış",
-        value: norm(selectedKpi.salesAmount, perPersonSalesTarget),
+        value: norm(selectedKpi.salesAmount, targets?.salesAmount),
         rawValue: formatTryCurrency(selectedKpi.salesAmount)
       },
       {
@@ -429,7 +421,7 @@ export function SalesRepresentativesPage() {
         rawValue: formatHms(selectedKpi.talkDurationSeconds)
       }
     ];
-  }, [selectedKpi, kpiQuery.data?.targets, kpiAgents.length]);
+  }, [selectedKpi, kpiQuery.data?.targets]);
 
   const handleRepresentativeChange = (agentKey: string) => {
     const next = new URLSearchParams(searchParams);
