@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { onAuthStateChanged, signInWithRedirect, signOut, type User } from "firebase/auth";
+import { getRedirectResult, onAuthStateChanged, signInWithRedirect, signOut, type User } from "firebase/auth";
 
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "./firebase";
 
@@ -56,6 +56,11 @@ export function AuthProvider(props: { children: ReactNode }) {
       setLoading(false);
       return;
     }
+
+    // signInWithRedirect dönüşünü işle (GitHub Pages COOP nedeniyle popup çalışmaz)
+    getRedirectResult(firebaseAuth).catch(() => {
+      // Redirect sonucu yoksa (normal sayfa yüklemesi) sessizce devam et
+    });
 
     // Dev token varsa bile Firebase auth dinleyicisini kur —
     // böylece varolan Google oturumu geri yüklenir ve Firestore erişimi sağlanır.
