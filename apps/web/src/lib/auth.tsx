@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   GoogleAuthProvider,
+  getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User,
 } from "firebase/auth";
@@ -65,6 +67,9 @@ export function AuthProvider(props: { children: ReactNode }) {
       return;
     }
 
+    // Redirect dönüşünü yakala (canlıda signInWithRedirect kullanıldığında)
+    getRedirectResult(firebaseAuth).catch(() => {});
+
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
       setUser(nextUser);
       if (nextUser) {
@@ -96,14 +101,18 @@ export function AuthProvider(props: { children: ReactNode }) {
           return;
         }
 
-        // signInWithPopup: COOP uyarıları çıkabilir ama auth sonucu
-        // postMessage ile geldiği için genelde çalışır.
-        console.log("[KaliteDB] signInWithPopup başlatılıyor...");
+        // Popup dene — COOP yüzünden patlarsa redirect'e düş.
         try {
-          const result = await signInWithPopup(firebaseAuth, googleProvider);
-          console.log("[KaliteDB] signInWithPopup başarılı:", result.user.email);
+          await signInWithPopup(firebaseAuth, googleProvider);
         } catch (err: any) {
-          console.error("[KaliteDB] signInWithPopup hatası:", err?.code, err?.message);
+          if (err?.code === "auth/popup-blocked" ||
+              err?.code === "auth/popup-closed-by-user" ||
+              err?.code === "auth/cancelled-popup-request" ||
+              err?.code === "auth/internal-error") {
+            // Popup çalışmadı — tam sayfa redirect ile dene
+            await signInWithRedirect(firebaseAuth, googleProvider);
+            return;
+          }
           throw err;
         }
       },
