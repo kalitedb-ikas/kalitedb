@@ -102,21 +102,13 @@ export function AuthProvider(props: { children: ReactNode }) {
           return;
         }
 
-        // Önce popup dene; COOP engeli varsa (GitHub Pages) redirect'e düş
-        try {
-          await signInWithPopup(firebaseAuth, googleProvider);
-        } catch (error: unknown) {
-          const code = (error as { code?: string }).code;
-          if (
-            code === "auth/popup-blocked" ||
-            code === "auth/popup-closed-by-user" ||
-            code === "auth/cancelled-popup-request"
-          ) {
-            await signInWithRedirect(firebaseAuth, googleProvider);
-          } else {
-            throw error;
-          }
+        // GitHub Pages COOP header popup'ı engelliyor — redirect kullan
+        if (window.location.hostname.endsWith("github.io")) {
+          await signInWithRedirect(firebaseAuth, googleProvider);
+          return;
         }
+
+        await signInWithPopup(firebaseAuth, googleProvider);
       },
       loginAsDev(role) {
         const nextToken = `dev-${role}`;
