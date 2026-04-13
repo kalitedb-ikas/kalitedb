@@ -381,7 +381,7 @@ export function SalesRepresentativesPage() {
     // ise o metrik radar'a 0 olarak düşer (sahte fallback yok).
     const norm = (actual: number | null | undefined, target: number | null | undefined) => {
       if (actual == null || target == null || target <= 0) return 0;
-      return Math.min(120, (actual / target) * 100);
+      return Math.min(100, (actual / target) * 100);
     };
 
     // salesAmount takım toplamıdır. Radar kişi başı hedefi kullanır:
