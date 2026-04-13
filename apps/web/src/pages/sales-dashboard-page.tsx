@@ -294,7 +294,7 @@ export function SalesDashboardPage() {
       return DONUT_KEYS.map((item, i) => ({
         name: item.label,
         value: licenseSummary[item.key],
-        color: donutColors[i]
+        color: donutColors[i] ?? salesInk
       })).filter((d) => d.value > 0);
     }
 

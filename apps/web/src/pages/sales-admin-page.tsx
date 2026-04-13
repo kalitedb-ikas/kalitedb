@@ -150,7 +150,7 @@ export function SalesAdminPage() {
   });
 
   const createRepresentativeMutation = useMutation({
-    mutationFn: (input: { displayName: string; department: "cs" | "sales" }) =>
+    mutationFn: (input: { displayName: string; department: "cs" | "sales" | "quality" }) =>
       api.createRepresentative(auth.token, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["representatives"] });

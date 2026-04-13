@@ -57,7 +57,7 @@ export function TimelineDisplay(props: { events: TimelineEvent[] }) {
 
 type SaveData = {
   displayName?: string;
-  department?: "cs" | "sales";
+  department?: "cs" | "sales" | "quality";
   badges: string[];
   timeline: TimelineEvent[];
 };
@@ -65,7 +65,7 @@ type SaveData = {
 type Props = {
   representative?: Representative;
   mode?: "create" | "edit";
-  defaultDepartment?: "cs" | "sales";
+  defaultDepartment?: "cs" | "sales" | "quality";
   onSave: (data: SaveData) => void;
   onClose: () => void;
   isSaving: boolean;
@@ -74,7 +74,7 @@ type Props = {
 export function RepresentativeDetailModal({ representative, mode = "edit", defaultDepartment = "cs", onSave, onClose, isSaving }: Props) {
   const isCreate = mode === "create";
   const [displayName, setDisplayName] = useState(representative?.displayName ?? "");
-  const [department, setDepartment] = useState<"cs" | "sales">(representative?.department ?? defaultDepartment);
+  const [department, setDepartment] = useState<"cs" | "sales" | "quality">(representative?.department ?? defaultDepartment);
   const [badges, setBadges] = useState<string[]>(representative?.badges ?? []);
   const [timeline, setTimeline] = useState<TimelineEvent[]>(representative?.timeline ?? []);
 
