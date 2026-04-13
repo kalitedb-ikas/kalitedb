@@ -333,7 +333,7 @@ async function populateRepresentativesFromFirebase(): Promise<{ created: number;
 
   // Tüm dönemlerden agent isimlerini topla
   const periodsSnap = await getDocs(collection(firebaseDb, "reportPeriods"));
-  const agentMap = new Map<string, { name: string; department: "cs" | "sales" }>();
+  const agentMap = new Map<string, { name: string; department: "cs" | "sales" | "quality" }>();
 
   for (const periodDoc of periodsSnap.docs) {
     const periodData = periodDoc.data();
@@ -399,7 +399,7 @@ async function deriveRepresentativesFromFallback(): Promise<Representative[]> {
   const fallback = await loadPublicFallback();
   if (!fallback) return [];
 
-  const agentMap = new Map<string, { name: string; department: "cs" | "sales" }>();
+  const agentMap = new Map<string, { name: string; department: "cs" | "sales" | "quality" }>();
   const now = new Date().toISOString();
 
   for (const [periodId, dashboard] of Object.entries(fallback.dashboards)) {
@@ -2037,7 +2037,7 @@ export const api = {
   },
   async createRepresentative(
     token: string | null,
-    body: { displayName: string; department: "cs" | "sales" }
+    body: { displayName: string; department: "cs" | "sales" | "quality" }
   ): Promise<Representative> {
     const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
     if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
