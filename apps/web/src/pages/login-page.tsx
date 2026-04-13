@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArrowRight, Gauge, LogOut } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, ArrowRight, Gauge, Loader2, LogOut } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
@@ -7,6 +8,8 @@ import { api } from "../lib/api";
 
 export function LoginPage() {
   const auth = useAuth();
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
   const isDevAuthMode = import.meta.env.VITE_DEV_AUTH_MODE === "true";
   const meQuery = useQuery({
     enabled: Boolean(auth.token),
@@ -62,13 +65,45 @@ export function LoginPage() {
 
             <button
               className="mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-              disabled={auth.authMode === "none"}
-              onClick={() => void auth.loginWithGoogle()}
+              disabled={auth.authMode === "none" || loginLoading}
+              onClick={async () => {
+                setLoginError(null);
+                setLoginLoading(true);
+                try {
+                  await auth.loginWithGoogle();
+                } catch (err: any) {
+                  console.error("[KaliteDB] loginWithGoogle hatası:", err);
+                  setLoginError(err?.message ?? "Google girişi başarısız oldu.");
+                } finally {
+                  setLoginLoading(false);
+                }
+              }}
               type="button"
             >
-              {auth.authMode === "dev" && !hasFirebaseUser ? "Google ile bağlan" : "Google ile oturum aç"}
-              <ArrowRight className="h-4 w-4" />
+              {loginLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Giriş yapılıyor...
+                </>
+              ) : (
+                <>
+                  {auth.authMode === "dev" && !hasFirebaseUser ? "Google ile bağlan" : "Google ile oturum aç"}
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
+
+            {loginError ? (
+              <div className="mt-4 rounded-[10px] border border-red-200 bg-red-50/90 p-4 text-sm text-red-900">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Google girişi başarısız</p>
+                    <p className="mt-1">{loginError}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             {auth.token && meQuery.isPending ? (
               <p className="mt-4 text-sm text-slate-500">Hesap doğrulanıyor...</p>
