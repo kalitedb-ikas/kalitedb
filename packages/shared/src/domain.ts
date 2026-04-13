@@ -277,7 +277,10 @@ export const salesKpiTargetsSchema = z.object({
   // parse edilerek fallback hesaplanır.
   talkDurationTargetSeconds: z.number().nullable().optional().default(null),
   callAttempts: z.number(),
-  conversionRate: z.number()
+  conversionRate: z.number(),
+  /** Kişi başı aylık satış hedefi (TRY). salesAmount takım toplamıdır; radar
+   *  ve bireysel karşılaştırmalar bu alanı kullanır. */
+  perPersonSalesTarget: z.number().nullable().optional().default(null)
 });
 
 export const licenseSummarySchema = z.object({
