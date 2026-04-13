@@ -26,6 +26,7 @@ const DEV_TOKEN_KEY = "kalitedb.devToken";
 const TOKEN_REFRESH_INTERVAL_MS = 55 * 60 * 1000;
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export function AuthProvider(props: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
