@@ -21,7 +21,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { useDarkMode } from "../lib/use-dark-mode";
 import { api } from "../lib/api";
-import { formatNumber, formatPercent, formatSeconds, parseTalkDurationLabelToSeconds } from "../lib/format";
+import { formatNumber, formatPercent, parseTalkDurationLabelToSeconds } from "../lib/format";
 import { brand, chart, chartDark, chartTooltipLight, chartTooltipDark } from "../theme/colors";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
@@ -49,6 +49,10 @@ function formatHms(secs: number) {
   const s = Math.round(secs % 60);
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+/** Satış sayfasına özel ana grafik rengi — light: koyu lacivert, dark: açık slate */
+const SALES_INK_LIGHT = "#1F2839";
+const SALES_INK_DARK = "#94A3B8";
 
 function formatShortMonth(period: string) {
   const [year, month] = period.split("-").map(Number);
@@ -120,6 +124,7 @@ export function SalesRepresentativesPage() {
 
   /* ── Grafik tema degiskenleri ── */
   const { isDark } = useDarkMode();
+  const salesInk = isDark ? SALES_INK_DARK : SALES_INK_LIGHT;
   const axisFill = isDark ? "rgba(255,255,255,0.6)" : chart.axis;
   const gridStroke = isDark ? chartDark.grid : chart.grid;
   const tooltipStyle = isDark ? { ...chartTooltipDark } : { ...chartTooltipLight };
@@ -628,13 +633,13 @@ export function SalesRepresentativesPage() {
                         <XAxis dataKey="label" tick={{ fontSize: 11, fill: axisFill }} tickLine={false} />
                         <YAxis tick={{ fontSize: 11, fill: axisFill }} tickLine={false} tickFormatter={(v) => formatNumber(v)} width={65} />
                         <Tooltip contentStyle={{ ...tooltipStyle }} formatter={((v: number) => [formatTryCurrency(v), "Satış Tutarı"]) as any} labelFormatter={(_, p) => (p?.[0]?.payload as any)?.fullLabel ?? _} />
-                        <Line type="monotone" dataKey="salesAmount" stroke={brand.primary} strokeWidth={3} strokeLinecap="round" connectNulls={false} activeDot={{ r: 6, stroke: "#ffffff", strokeWidth: 2 }} dot={(dotProps: any) => {
+                        <Line type="monotone" dataKey="salesAmount" stroke={salesInk} strokeWidth={3} strokeLinecap="round" connectNulls={false} activeDot={{ r: 6, stroke: isDark ? "#1e293b" : "#ffffff", strokeWidth: 2 }} dot={(dotProps: any) => {
                           const pl = dotProps.payload;
                           if (dotProps.cx == null || dotProps.cy == null || pl.salesAmount === null) return <g key={dotProps.index} />;
                           return (
                             <g key={dotProps.index}>
-                              <circle cx={dotProps.cx} cy={dotProps.cy} fill={pl.isCurrent ? brand.primary : "#ffffff"} r={pl.isCurrent ? 5 : 3.5} stroke={brand.primary} strokeWidth={pl.isCurrent ? 3 : 2} />
-                              <text fill={brand.primary} fontSize={10} fontWeight={700} paintOrder="stroke" stroke={labelStroke} strokeWidth={4} textAnchor="middle" x={dotProps.cx} y={dotProps.cy - 14}>{formatNumber(pl.salesAmount)}</text>
+                              <circle cx={dotProps.cx} cy={dotProps.cy} fill={pl.isCurrent ? salesInk : isDark ? "#1e293b" : "#ffffff"} r={pl.isCurrent ? 5 : 3.5} stroke={salesInk} strokeWidth={pl.isCurrent ? 3 : 2} />
+                              <text fill={salesInk} fontSize={10} fontWeight={700} paintOrder="stroke" stroke={labelStroke} strokeWidth={4} textAnchor="middle" x={dotProps.cx} y={dotProps.cy - 14}>{formatNumber(pl.salesAmount)}</text>
                             </g>
                           );
                         }} />
@@ -780,7 +785,7 @@ export function SalesRepresentativesPage() {
                       <RadarChart data={radarData} outerRadius="80%">
                         <PolarGrid stroke={gridStroke} />
                         <PolarAngleAxis dataKey="metric" tick={{ fontSize: 11, fill: axisFill }} />
-                        <Radar dataKey="value" stroke={brand.primary} fill={brand.primary} fillOpacity={0.25} strokeWidth={2} />
+                        <Radar dataKey="value" stroke={salesInk} fill={salesInk} fillOpacity={0.25} strokeWidth={2} />
                         <Tooltip contentStyle={{ ...tooltipStyle, borderRadius: 10 }} formatter={((value: number, _: string, entry: any) => { const item = entry.payload; return [`${item.rawValue} (${formatNumber(value, 0)}%)`, item.metric]; }) as any} />
                       </RadarChart>
                     </ResponsiveContainer>

@@ -2,8 +2,8 @@ import { ChampionSpotlightCard, InsightTile, Leaderboard, PageHeader, StatCard, 
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
-import type { AuditMetric, RoleplayMetric } from "@kalitedb/shared";
-import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users, X } from "lucide-react";
+import type { AuditMetric } from "@kalitedb/shared";
+import { ShieldCheck, TrendingDown, TrendingUp, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
@@ -24,7 +24,7 @@ import {
 } from "../components/audit-shared";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
-import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth } from "../lib/format";
+import { formatAuditScore, formatNumber } from "../lib/format";
 import { chart } from "../theme/colors";
 
 type AuditAgentRow = {
@@ -80,8 +80,6 @@ export function SalesAuditPage() {
   const periodId = yearPeriods.some((p) => p.id === periodRange.monthPeriodId)
     ? periodRange.monthPeriodId
     : defaultPeriod?.id;
-  const selectedPeriod = yearPeriods.find((p) => p.id === periodId);
-
   useEffect(() => {
     if (!periodRange.monthPeriodId && defaultPeriod?.id) {
       setPeriodRange((prev) => ({ ...prev, monthPeriodId: defaultPeriod.id }));
@@ -474,7 +472,7 @@ export function SalesAuditPage() {
               people={auditLeaders}
               score={formatAuditScore(topAuditScore)}
               showPodium={false}
-              theme="orange"
+              theme="ink"
               title="En yüksek audit skoru"
             />
 

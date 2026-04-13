@@ -107,12 +107,12 @@ export function DashboardPage() {
   const yearlyTrend = yearlyTrendQuery.data ?? [];
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Genel Bakış" actions={<PeriodSelect />} />
+    <div className="space-y-8">
+      <PageHeader className="dash-section" title="Genel Bakış" actions={<PeriodSelect />} />
 
       {snapshot ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="dash-section dash-delay-1 grid gap-4 lg:grid-cols-3">
             <StatCard
               icon={<CheckCircle2 size={18} />}
               label="Audit ortalaması"
@@ -137,7 +137,7 @@ export function DashboardPage() {
             />
           </div>
 
-          <ExecutiveChartCard title="Yıllık">
+          <ExecutiveChartCard className="dash-section dash-delay-2" title="Yıllık">
             <div className="grid gap-4 xl:grid-cols-2">
               <TrendLineCard
                 color={chart.barDefault}
@@ -173,7 +173,7 @@ export function DashboardPage() {
             </div>
           </ExecutiveChartCard>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className="dash-section dash-delay-3 grid gap-6 xl:grid-cols-2">
             <Leaderboard
               items={snapshot.rankings.auditTop.slice(0, 5).map((agent) => ({
                 id: agent.id,

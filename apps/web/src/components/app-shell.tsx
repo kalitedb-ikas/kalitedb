@@ -85,7 +85,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const userInitial = (props.currentUser?.displayName ?? auth.user?.displayName ?? "K")[0]?.toUpperCase() ?? "K";

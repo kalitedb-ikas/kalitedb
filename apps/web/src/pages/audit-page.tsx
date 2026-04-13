@@ -1,8 +1,7 @@
 import { ChampionSpotlightCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
-import type { AuditMetric } from "@kalitedb/shared";
 import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";

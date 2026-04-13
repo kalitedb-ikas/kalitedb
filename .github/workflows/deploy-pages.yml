@@ -31,7 +31,7 @@ jobs:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'kalitedb-5a7eb' }}
       CLOUD_RUN_REGION: ${{ vars.CLOUD_RUN_REGION || 'europe-west1' }}
       CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'kalitedb-api' }}
-      APP_WEB_ORIGIN: https://zafercobannn.github.io
+      APP_WEB_ORIGIN: https://kalitedb-ikas.github.io
       FIREBASE_STORAGE_BUCKET: kalitedb-5a7eb.firebasestorage.app
     steps:
       - name: Checkout
