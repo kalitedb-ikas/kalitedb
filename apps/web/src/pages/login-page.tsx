@@ -11,7 +11,14 @@ export function LoginPage() {
   const meQuery = useQuery({
     enabled: Boolean(auth.token),
     queryKey: ["me", auth.token],
-    queryFn: () => api.getMe(auth.token),
+    queryFn: async () => {
+      try {
+        return await api.getMe(auth.token);
+      } catch (err) {
+        console.error("[KaliteDB] getMe hatası:", err);
+        throw err;
+      }
+    },
     retry: false,
     staleTime: 5 * 60 * 1000
   });
