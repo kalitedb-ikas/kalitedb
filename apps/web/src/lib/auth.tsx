@@ -22,7 +22,6 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const DEV_TOKEN_KEY = "kalitedb.devToken";
-const AUTH_PENDING_KEY = "kalitedb.authPending";
 
 /** Firebase ID tokens expire after 60 min — refresh 5 min early. */
 const TOKEN_REFRESH_INTERVAL_MS = 55 * 60 * 1000;
@@ -48,8 +47,7 @@ export function AuthProvider(props: { children: ReactNode }) {
         const freshToken = await firebaseUser.getIdToken(true);
         setToken(freshToken);
       } catch {
-        // Token refresh failed — user will get 401 on next API call,
-        // which is better than silently swallowing the error.
+        // silent
       }
     }, TOKEN_REFRESH_INTERVAL_MS);
   }
@@ -61,34 +59,35 @@ export function AuthProvider(props: { children: ReactNode }) {
     }
 
     if (!firebaseAuth) {
+      console.warn("[Auth] Firebase yapılandırılmamış");
       setLoading(false);
       return;
     }
 
-    // signInWithRedirect dönüşünü işle
-    getRedirectResult(firebaseAuth).catch(() => {});
+    // Redirect dönüşünü kontrol et
+    console.log("[Auth] getRedirectResult kontrol ediliyor...");
+    getRedirectResult(firebaseAuth)
+      .then((result) => {
+        if (result?.user) {
+          console.log("[Auth] Redirect başarılı:", result.user.email);
+        } else {
+          console.log("[Auth] Redirect sonucu yok (normal yükleme)");
+        }
+      })
+      .catch((err) => {
+        console.error("[Auth] Redirect hatası:", err);
+      });
 
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
+      console.log("[Auth] onAuthStateChanged:", nextUser?.email ?? "null");
       setUser(nextUser);
-
-      // Popup sonrası sayfa yenileme ile gelen auth — pending flag'i temizle
       if (nextUser) {
-        window.sessionStorage.removeItem(AUTH_PENDING_KEY);
         const freshToken = await nextUser.getIdToken();
         setToken(freshToken);
         startRefreshTimer(nextUser);
       } else {
         setToken(null);
         clearRefreshTimer();
-
-        // Popup COOP hatası sonrası sayfa yenilendi ama auth hala gelmedi —
-        // redirect ile dene (tek sefer)
-        const pending = window.sessionStorage.getItem(AUTH_PENDING_KEY);
-        if (pending === "popup-failed" && firebaseAuth && googleProvider) {
-          window.sessionStorage.setItem(AUTH_PENDING_KEY, "redirect-attempted");
-          signInWithRedirect(firebaseAuth, googleProvider).catch(() => {});
-          return; // loading kalacak, redirect olacak
-        }
       }
       setLoading(false);
     });
@@ -111,14 +110,16 @@ export function AuthProvider(props: { children: ReactNode }) {
           return;
         }
 
-        try {
+        console.log("[Auth] loginWithGoogle çağrıldı, hostname:", window.location.hostname);
+
+        // GitHub Pages'ta signInWithRedirect kullan (popup COOP sorunu)
+        // Localhost'ta signInWithPopup kullan
+        if (window.location.hostname.endsWith("github.io")) {
+          console.log("[Auth] signInWithRedirect başlatılıyor...");
+          await signInWithRedirect(firebaseAuth, googleProvider);
+        } else {
+          console.log("[Auth] signInWithPopup başlatılıyor...");
           await signInWithPopup(firebaseAuth, googleProvider);
-        } catch {
-          // Popup COOP/cancel hatası — auth IndexedDB'ye yazılmış olabilir.
-          // Sayfayı yenile; yeniden yüklendiğinde onAuthStateChanged kontrol eder.
-          // Eğer hala yoksa redirect denenecek.
-          window.sessionStorage.setItem(AUTH_PENDING_KEY, "popup-failed");
-          window.location.reload();
         }
       },
       loginAsDev(role) {
@@ -129,7 +130,6 @@ export function AuthProvider(props: { children: ReactNode }) {
       },
       async logout() {
         window.localStorage.removeItem(DEV_TOKEN_KEY);
-        window.sessionStorage.removeItem(AUTH_PENDING_KEY);
         setDevToken(null);
         clearRefreshTimer();
         if (firebaseAuth) {
