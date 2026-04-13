@@ -147,7 +147,10 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
       perfScore: datasetsWithTargets.reduce((s, d) => s + d.targets.perfScore, 0) / n,
       avgLicensePrice: datasetsWithTargets.reduce((s, d) => s + d.targets.avgLicensePrice, 0) / n,
       conversionRate: datasetsWithTargets.reduce((s, d) => s + d.targets.conversionRate, 0) / n,
-      talkDurationLabel: datasetsWithTargets[n - 1]!.targets.talkDurationLabel
+      talkDurationLabel: datasetsWithTargets[n - 1]!.targets.talkDurationLabel,
+      perPersonSalesTarget: datasetsWithTargets.some((d) => d.targets.perPersonSalesTarget != null)
+        ? datasetsWithTargets.reduce((s, d) => s + (d.targets.perPersonSalesTarget ?? 0), 0)
+        : null
     };
   }
 
