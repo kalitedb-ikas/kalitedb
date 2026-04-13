@@ -981,12 +981,6 @@ export function SalesAdminPage() {
   });
 
   /* ── Tekil silme/güncelleme mutasyonları ── */
-  const deleteAuditRecordMutation = useMutation({
-    mutationFn: async (recordId: string) => {
-      await api.updatePeriod(auth.token, selectedPeriodId, { datasetType: "audit-metrics" as any, recordId, updates: null } as any);
-    },
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] }); }
-  });
 
   const deleteRoleplayRecordMutation = useMutation({
     mutationFn: (agentKey: string) => api.deleteRoleplayMetric(auth.token, selectedPeriodId, agentKey),
@@ -1499,7 +1493,7 @@ function AuditSection(props: {
   onCsvImport: (file: File) => void;
 }) {
   const {
-    activePeriodMonth, availableAgents, selectedPeriod, auditRows, validRowCount, auditSaveSuccess,
+    availableAgents, selectedPeriod, auditRows, validRowCount, auditSaveSuccess,
     createPeriodMutation, saveAuditMutation, periodDetailsQuery,
     onAddRow, onRemoveRow, onUpdateRow, onDeleteSavedRecord, onUpdateSavedRecord
   } = props;
@@ -1627,7 +1621,7 @@ function RoleplaySection(props: {
   onCsvImport: (file: File) => void;
 }) {
   const {
-    activePeriodMonth, availableAgents, selectedPeriod, roleplayRows, validRowCount, roleplaySaveSuccess,
+    availableAgents, selectedPeriod, roleplayRows, validRowCount, roleplaySaveSuccess,
     createPeriodMutation, saveRoleplayMutation, saveNoteMutation, roleplayQuery, deleteRecordMutation, updateRecordMutation,
     onAddRow, onRemoveRow, onUpdateRow
   } = props;
@@ -1813,7 +1807,7 @@ function EvaluationSection(props: {
   onCsvImport: (file: File) => void;
 }) {
   const {
-    activePeriodMonth, selectedPeriod, evaluationRows, validRowCount, evaluationSaveSuccess,
+    selectedPeriod, evaluationRows, validRowCount, evaluationSaveSuccess,
     createPeriodMutation, saveEvaluationMutation, evaluationQuery, deleteRecordMutation, updateRecordMutation,
     onAddRow, onRemoveRow, onUpdateRow, onCsvImport
   } = props;
@@ -1963,7 +1957,7 @@ function MeetingsSection(props: {
   deleteAllMeetingsMutation: { mutate: () => void; isPending: boolean };
 }) {
   const {
-    activePeriodMonth, meetingsCount, meetingsImportSuccess, meetings, selectedPeriodId,
+    meetingsCount, meetingsImportSuccess, meetings,
     saveMeetingsMutation, createMeetingMutation, updateMeetingMutation, deleteMeetingMutation,
     deleteAllMeetingsMutation
   } = props;
@@ -2163,7 +2157,7 @@ function KpiSection(props: {
   updateLicenseSummaryMutation: { mutate: (s: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number }) => void; isPending: boolean };
 }) {
   const {
-    activePeriodMonth, kpiAgentCount, kpiData, kpiImportSuccess, selectedPeriodId,
+    kpiAgentCount, kpiData, kpiImportSuccess,
     saveKpiMutation, addAgentMutation, updateAgentMutation, deleteAgentMutation, resetAgentsMutation, updateTargetsMutation, updateLicenseSummaryMutation
   } = props;
 
@@ -2262,12 +2256,6 @@ function KpiSection(props: {
   };
 
   const formatTryCurrency = (v: number) => new Intl.NumberFormat("tr-TR").format(v) + " TRY";
-  const formatHms = (secs: number) => {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = Math.round(secs % 60);
-    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  };
 
   return (
     <div className="space-y-6">

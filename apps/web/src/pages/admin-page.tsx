@@ -568,10 +568,6 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       ? "Yayında"
       : "Taslak";
   const currentStatusTone = selectedPeriod?.status === "published" ? "success" : "neutral";
-  const datasetCount =
-    (periodDetailsQuery.data?.datasets.agentMetrics.length ?? 0) +
-    (periodDetailsQuery.data?.datasets.auditMetrics.length ?? 0) +
-    (periodDetailsQuery.data?.datasets.questionPerformance.length ?? 0);
 
   const handleResetDataset = () => {
     if (!activeDatasetType || !selectedPeriodId) {

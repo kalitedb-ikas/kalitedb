@@ -8,7 +8,7 @@ import {
   SurfaceCard
 } from "@kalitedb/ui";
 import { selectDefaultReportPeriod } from "@kalitedb/shared";
-import type { SalesKpiAgent, SalesKpiData, LicenseSummary } from "@kalitedb/shared";
+import type { SalesKpiAgent, LicenseSummary } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -28,14 +28,10 @@ import {
   YAxis
 } from "recharts";
 import {
-  ArrowDownRight,
   Award,
-  Crown,
-  PhoneCall,
   Target,
   TrendingDown,
-  TrendingUp,
-  Trophy
+  TrendingUp
 } from "lucide-react";
 
 import { useAuth } from "../lib/auth";
@@ -51,6 +47,10 @@ import {
   computeActivePeriodIds,
   derivePeriodRangeSelectors
 } from "../lib/period-aggregation";
+
+/** Satış sayfasına özel ana grafik rengi — light: koyu lacivert, dark: açık slate */
+const SALES_INK_LIGHT = "#1F2839";
+const SALES_INK_DARK = "#94A3B8";
 
 /* ── Yardimci fonksiyonlar ── */
 
@@ -114,10 +114,10 @@ function truncateName(name: string, max = 10): string {
   return name.slice(0, max - 1) + "…";
 }
 
-const DONUT_COLORS = [
-  { key: "scaleCount", label: "Scale", color: brand.primary },
-  { key: "scalePlusCount", label: "Scale Plus", color: brand.accent },
-  { key: "preCount", label: "Pre", color: brand.sky }
+const DONUT_KEYS = [
+  { key: "scaleCount", label: "Scale" },
+  { key: "scalePlusCount", label: "Scale Plus" },
+  { key: "preCount", label: "Pre" }
 ] as const;
 
 /* ── Ana Component ── */
@@ -128,8 +128,9 @@ export function SalesDashboardPage() {
   const now = new Date();
 
   // Dark mode'da chart renkleri
-  const axisFill = isDark ? "rgba(255,255,255,0.6)" : chart.axis;
-  const axisMutedFill = isDark ? "rgba(255,255,255,0.45)" : chart.axisMuted;
+  const salesInk = isDark ? SALES_INK_DARK : SALES_INK_LIGHT;
+  const axisFill = isDark ? "rgba(255,255,255,0.72)" : "#334155";
+  const axisMutedFill = isDark ? "rgba(255,255,255,0.6)" : "#475569";
   const gridStroke = isDark ? chartDark.grid : chart.grid;
   const gridMutedStroke = isDark ? chartDark.grid : chart.gridMuted;
   const tooltipStyle = isDark ? { ...chartTooltipDark } : { ...chartTooltipLight };
@@ -288,11 +289,12 @@ export function SalesDashboardPage() {
       ? licenseSummary.preCount + licenseSummary.scaleCount + licenseSummary.scalePlusCount
       : 0;
 
+    const donutColors = [salesInk, brand.accent, brand.sky];
     if (licenseSummary && lsTotal > 0) {
-      return DONUT_COLORS.map((item) => ({
+      return DONUT_KEYS.map((item, i) => ({
         name: item.label,
         value: licenseSummary[item.key],
-        color: item.color
+        color: donutColors[i]
       })).filter((d) => d.value > 0);
     }
 
@@ -300,7 +302,7 @@ export function SalesDashboardPage() {
     if (summary.totalScaleCount > 0 || summary.totalScalePlusCount > 0) {
       const otherCount = summary.totalLicenseCount - summary.totalScaleCount - summary.totalScalePlusCount;
       return [
-        { name: "Scale", value: summary.totalScaleCount, color: brand.primary },
+        { name: "Scale", value: summary.totalScaleCount, color: salesInk },
         { name: "Scale Plus", value: summary.totalScalePlusCount, color: brand.accent },
         ...(otherCount > 0 ? [{ name: "Diğer", value: otherCount, color: brand.sky }] : [])
       ].filter((d) => d.value > 0);
@@ -430,7 +432,7 @@ export function SalesDashboardPage() {
                 imageSrc={getRepresentativePhotoSrc(summary.topByAmount.agentName) ?? undefined}
                 score={formatCurrency(summary.topByAmount.salesAmount)}
                 metricLabel="Satış Tutarı"
-                theme="orange"
+                theme="ink"
                 achievement={`${formatNumber(summary.topByAmount.licenseCount)} lisans satışı ile toplam satışın %${formatNumber((summary.topByAmount.salesAmount / summary.totalSalesAmount) * 100, 1)}'${summary.topByAmount.salesAmount / summary.totalSalesAmount >= 0.1 ? "i" : "u"}`}
                 showPodium={false}
               />
@@ -503,13 +505,13 @@ export function SalesDashboardPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke={gridMutedStroke} vertical={false} />
                       <XAxis
                         dataKey="agentName"
-                        tickFormatter={(v: string) => truncateName(v, 12)}
-                        tick={{ fontSize: 10, fill: axisMutedFill }}
+                        tickFormatter={(v: string) => truncateName(v, 16)}
+                        tick={{ fontSize: 12, fontWeight: 500, fill: axisMutedFill }}
                         tickLine={false}
                         interval={0}
-                        angle={-40}
+                        angle={-30}
                         textAnchor="end"
-                        height={70}
+                        height={80}
                       />
                       <YAxis tick={{ fontSize: 11, fill: axisMutedFill }} tickLine={false} tickFormatter={(v) => formatNumber(v)} />
                       <Tooltip
@@ -520,7 +522,7 @@ export function SalesDashboardPage() {
                         {[...agents].sort((a, b) => b.salesAmount - a.salesAmount).map((agent) => (
                           <Cell
                             key={agent.agentKey}
-                            fill={targets && agent.salesAmount >= targets.salesAmount ? brand.emerald : brand.primary}
+                            fill={targets && agent.salesAmount >= targets.salesAmount ? brand.emerald : salesInk}
                           />
                         ))}
                       </Bar>
@@ -560,11 +562,11 @@ export function SalesDashboardPage() {
                         <Line
                           type="monotone"
                           dataKey="salesAmount"
-                          stroke={brand.primary}
+                          stroke={salesInk}
                           strokeWidth={3}
                           strokeLinecap="round"
                           connectNulls={false}
-                          activeDot={{ r: 6, stroke: "#ffffff", strokeWidth: 2 }}
+                          activeDot={{ r: 6, stroke: isDark ? "#1e293b" : "#ffffff", strokeWidth: 2 }}
                           dot={(dotProps: any) => {
                             const payload = dotProps.payload;
                             if (dotProps.cx == null || dotProps.cy == null || payload.salesAmount === null) return <g key={dotProps.index} />;
@@ -576,13 +578,13 @@ export function SalesDashboardPage() {
                                 <circle
                                   cx={dotProps.cx}
                                   cy={dotProps.cy}
-                                  fill={payload.isCurrent ? brand.primary : "#ffffff"}
+                                  fill={payload.isCurrent ? salesInk : isDark ? "#1e293b" : "#ffffff"}
                                   r={payload.isCurrent ? 5 : 3.5}
-                                  stroke={brand.primary}
+                                  stroke={salesInk}
                                   strokeWidth={payload.isCurrent ? 3 : 2}
                                 />
                                 <text
-                                  fill={brand.primary}
+                                  fill={salesInk}
                                   fontSize={10}
                                   fontWeight={700}
                                   paintOrder="stroke"
@@ -721,6 +723,7 @@ export function SalesDashboardPage() {
                   <InsightTile
                     key={agent.agentKey}
                     icon={<TrendingDown size={18} />}
+                    imageSrc={getRepresentativePhotoSrc(agent.agentName) ?? undefined}
                     title="Düşük Performans"
                     value={agent.agentName}
                     description={`${formatCurrency(agent.salesAmount)} satış, ${formatNumber(agent.licenseCount)} lisans, %${formatNumber(agent.conversionRate, 2)} dönüşüm`}
@@ -742,10 +745,10 @@ export function SalesDashboardPage() {
                       <YAxis
                         dataKey="name"
                         type="category"
-                        tickFormatter={(v: string) => truncateName(v, 14)}
-                        tick={{ fontSize: 11, fill: axisFill }}
+                        tickFormatter={(v: string) => truncateName(v, 16)}
+                        tick={{ fontSize: 12, fontWeight: 500, fill: axisFill }}
                         tickLine={false}
-                        width={110}
+                        width={120}
                       />
                     <Tooltip
                       contentStyle={{ ...tooltipStyle, borderRadius: 10 }}
@@ -756,7 +759,7 @@ export function SalesDashboardPage() {
                     />
                     <Bar dataKey="efficiency" radius={[0, 6, 6, 0]}>
                       {callEfficiency.map((item, i) => (
-                        <Cell key={item.name} fill={i === 0 ? brand.emerald : i < 3 ? brand.primary : chart.barAlternate} />
+                        <Cell key={item.name} fill={i === 0 ? brand.emerald : i < 3 ? salesInk : chart.barAlternate} />
                       ))}
                       <LabelList
                         dataKey="efficiency"
@@ -782,13 +785,13 @@ export function SalesDashboardPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke={gridMutedStroke} vertical={false} />
                       <XAxis
                         dataKey="name"
-                        tickFormatter={(v: string) => truncateName(v, 12)}
-                        tick={{ fontSize: 10, fill: axisMutedFill }}
+                        tickFormatter={(v: string) => truncateName(v, 16)}
+                        tick={{ fontSize: 12, fontWeight: 500, fill: axisMutedFill }}
                         tickLine={false}
                         interval={0}
-                        angle={-40}
+                        angle={-30}
                         textAnchor="end"
-                        height={70}
+                        height={80}
                       />
                       <YAxis tick={{ fontSize: 11, fill: axisMutedFill }} tickLine={false} />
                       <Tooltip
@@ -800,7 +803,7 @@ export function SalesDashboardPage() {
                         height={36}
                         formatter={(value: string) => (value === "scale" ? "Scale" : "Scale Plus")}
                       />
-                      <Bar dataKey="scale" stackId="a" fill={brand.primary} radius={[0, 0, 0, 0]} />
+                      <Bar dataKey="scale" stackId="a" fill={salesInk} radius={[0, 0, 0, 0]} />
                       <Bar dataKey="scalePlus" stackId="a" fill={brand.accent} radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>

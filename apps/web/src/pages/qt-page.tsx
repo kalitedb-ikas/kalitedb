@@ -1,9 +1,9 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { ExecutiveChartCard, MetricCarouselCard, StatCard } from "@kalitedb/ui";
 import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { QtManualEntry, ReportPeriod } from "@kalitedb/shared";
 import { useEffect, useMemo, useState } from "react";
-import { Layers, MessageCircle, Save, Timer, Users, Waves } from "lucide-react";
+import { Layers, MessageCircle, Timer, Users, Waves } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
@@ -31,27 +31,12 @@ function formatEvaluatedTotal(totalEvaluatedCallCount: number | null, totalEvalu
   return formatNumber(totalEvaluatedCount);
 }
 
-function parseNullableInteger(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
-}
-
-function parseNullableNumber(value: string) {
-  const trimmed = value.trim().replace(",", ".");
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function sanitizeQtCardEyebrow(userName: string) {
   return userName.trim().toLowerCase() === "dev admin" ? "" : userName;
 }
 
 export function QtPage() {
   const auth = useAuth();
-  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -150,13 +135,6 @@ export function QtPage() {
     }
     return `${selectedYear} (Yıllık)`;
   }, [viewMode, activePeriod, selectedYear, selectedQuarter]);
-  const [manualDraft, setManualDraft] = useState({
-    totalListeningHours: "",
-    totalEvaluatedCallCount: "",
-    totalEvaluatedChatMailCount: "",
-    feedbackCount: "",
-    feedbackCoverage: ""
-  });
 
   const canEditManualEntry = meQuery.data?.role === "qt";
 
@@ -178,61 +156,6 @@ export function QtPage() {
     if (allResults.length === 1) return allResults[0]!;
     return aggregateQtManualEntries(allResults);
   }, [qtEntriesQueries]);
-
-  const manualEntryQuery = useQuery({
-    enabled: Boolean(periodId && canEditManualEntry),
-    queryKey: ["qt-manual-entry", auth.token, periodId],
-    queryFn: () => api.getQtManualEntry(auth.token, periodId!),
-    staleTime: 60 * 1000
-  });
-
-  useEffect(() => {
-    const entry = manualEntryQuery.data;
-    if (!entry) return;
-
-    setManualDraft({
-      totalListeningHours: entry.totalListeningHours == null ? "" : String(entry.totalListeningHours),
-      totalEvaluatedCallCount: entry.totalEvaluatedCallCount == null ? "" : String(entry.totalEvaluatedCallCount),
-      totalEvaluatedChatMailCount:
-        entry.totalEvaluatedChatMailCount == null ? "" : String(entry.totalEvaluatedChatMailCount),
-      feedbackCount: entry.feedbackCount == null ? "" : String(entry.feedbackCount),
-      feedbackCoverage: entry.feedbackCoverage == null ? "" : String(entry.feedbackCoverage)
-    });
-  }, [manualEntryQuery.data]);
-
-  const manualEntryMutation = useMutation({
-    mutationFn: async () => {
-      if (!periodId) {
-        throw new Error("Dönem bulunamadı.");
-      }
-
-      return api.updateQtManualEntry(auth.token, periodId, {
-        totalListeningHours: parseNullableNumber(manualDraft.totalListeningHours),
-        totalEvaluatedCallCount: parseNullableInteger(manualDraft.totalEvaluatedCallCount),
-        totalEvaluatedChatMailCount: parseNullableInteger(manualDraft.totalEvaluatedChatMailCount),
-        feedbackCount: parseNullableInteger(manualDraft.feedbackCount),
-        feedbackCoverage: parseNullableNumber(manualDraft.feedbackCoverage),
-        trainingCount: null,
-        meetingCount: null
-      });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["qt-manual-entry", auth.token, periodId] }),
-        queryClient.invalidateQueries({ queryKey: ["qt-manual-entries"] })
-      ]);
-    }
-  });
-
-  const feedbackTone = (() => {
-    const value = manualEntryQuery.data?.feedbackCoverage;
-    const threshold = thresholdsQuery.data?.feedbackCoverage;
-
-    if (value === null || value === undefined || !threshold) return "neutral" as const;
-    if (value >= threshold.green) return "green" as const;
-    if (value >= threshold.yellow) return "yellow" as const;
-    return "red" as const;
-  })();
 
   const qtEntries = useMemo(() => {
     return aggregatedQtEntries.filter((entry) => {
@@ -367,24 +290,5 @@ export function QtPage() {
         </ExecutiveChartCard>
       ) : null}
     </div>
-  );
-}
-
-function QtFormField(props: {
-  label: string;
-  value: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-2 text-sm font-medium text-slate-600">
-      {props.label}
-      <input
-        className="rounded-[10px] border border-white/50 bg-white/88 px-4 py-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100"
-        disabled={props.disabled}
-        onChange={(event) => props.onChange(event.target.value)}
-        value={props.value}
-      />
-    </label>
   );
 }

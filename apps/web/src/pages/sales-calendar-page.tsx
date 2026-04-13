@@ -66,11 +66,6 @@ function formatWeekTitle(start: Date, end: Date) {
   return `${sf.format(start)} – ${ef.format(end)}`;
 }
 
-function formatShortDate(date: Date) {
-  const formatter = new Intl.DateTimeFormat("tr-TR", { weekday: "short", day: "numeric", month: "short" });
-  const result = formatter.format(date);
-  return result.charAt(0).toLocaleUpperCase("tr-TR") + result.slice(1);
-}
 
 function isToday(dateStr: string) {
   return dateStr === toDateStr(new Date());
@@ -392,7 +387,7 @@ function ColumnView(props: {
       <div className={cols === 1 ? "min-w-0" : "min-w-[480px]"}>
         {/* Day headers */}
         <div className={`grid gap-px rounded-t-[10px] bg-slate-200 dark:bg-slate-700`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-          {props.days.map((d, i) => {
+          {props.days.map((d) => {
             const dateStr = toDateStr(d);
             const today = isToday(dateStr);
             const dow = d.getDay();

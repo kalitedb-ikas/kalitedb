@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cn } from "./utils";
 
 type Tone = "green" | "yellow" | "red" | "neutral";
-type ChampionTheme = "orange" | "violet" | "emerald";
+type ChampionTheme = "orange" | "violet" | "emerald" | "ink";
 type SurfaceVariant = "default" | "elevated" | "subtle" | "dark" | "hero";
 
 const toneMap: Record<Tone, string> = {
@@ -80,6 +80,19 @@ const championThemes: Record<
     stageSource:
       "radial-gradient(circle, rgba(255,255,255,0.98) 0%, rgba(167,243,208,0.92) 24%, rgba(34,211,238,0.34) 56%, rgba(34,211,238,0) 78%)",
     stageFloor: "radial-gradient(circle, rgba(94,234,212,0.18) 0%, rgba(255,255,255,0) 72%)"
+  },
+  ink: {
+    accent: "text-slate-700 dark:text-slate-200",
+    glow: "bg-[radial-gradient(circle,_rgba(31,40,57,0.22)_0%,_rgba(31,40,57,0)_72%)]",
+    halo: "from-slate-300/90 via-slate-400/65 to-slate-600/40",
+    bar: "from-slate-300/85 via-slate-400/65 to-slate-600/50",
+    tag: "border-slate-300/60 bg-slate-50/90 text-slate-700",
+    ring: "border-slate-300/75",
+    stageBeam:
+      "linear-gradient(180deg, rgba(226,232,240,0.58) 0%, rgba(148,163,184,0.22) 34%, rgba(255,255,255,0) 100%)",
+    stageSource:
+      "radial-gradient(circle, rgba(255,255,255,0.98) 0%, rgba(203,213,225,0.92) 24%, rgba(100,116,139,0.34) 56%, rgba(100,116,139,0) 78%)",
+    stageFloor: "radial-gradient(circle, rgba(148,163,184,0.18) 0%, rgba(255,255,255,0) 72%)"
   }
 };
 
@@ -317,6 +330,30 @@ export function HeatChip(props: {
   );
 }
 
+const podiumRankStyles: Record<number, { badge: string; row: string; value: string }> = {
+  0: {
+    badge: "border-amber-300/80 bg-gradient-to-br from-amber-50 to-orange-50 text-amber-700 shadow-[0_2px_8px_rgba(251,191,36,0.18)] dark:border-amber-600/50 dark:from-amber-900/40 dark:to-orange-900/30 dark:text-amber-400",
+    row: "border-amber-200/60 bg-gradient-to-r from-amber-50/50 via-white/90 to-white/90 shadow-[0_10px_28px_rgba(251,191,36,0.08)] dark:border-amber-700/30 dark:from-amber-900/20 dark:via-slate-800/60 dark:to-slate-800/60",
+    value: "text-amber-700 dark:text-amber-400"
+  },
+  1: {
+    badge: "border-slate-300/80 bg-gradient-to-br from-slate-100 to-slate-50 text-slate-600 shadow-[0_2px_6px_rgba(148,163,184,0.14)] dark:border-slate-500/50 dark:from-slate-700/50 dark:to-slate-800/40 dark:text-slate-300",
+    row: "border-slate-200/80 bg-gradient-to-r from-slate-50/60 via-white/90 to-white/90 shadow-[0_10px_25px_rgba(15,23,42,0.05)] dark:border-slate-600/35 dark:from-slate-700/20 dark:via-slate-800/60 dark:to-slate-800/60",
+    value: "text-slate-700 dark:text-slate-300"
+  },
+  2: {
+    badge: "border-orange-200/70 bg-gradient-to-br from-orange-50 to-amber-50/60 text-orange-700/80 shadow-[0_2px_6px_rgba(249,115,22,0.1)] dark:border-orange-700/40 dark:from-orange-900/30 dark:to-amber-900/20 dark:text-orange-400",
+    row: "border-orange-200/40 bg-gradient-to-r from-orange-50/30 via-white/90 to-white/90 shadow-[0_10px_25px_rgba(15,23,42,0.04)] dark:border-orange-800/20 dark:from-orange-900/10 dark:via-slate-800/60 dark:to-slate-800/60",
+    value: "text-orange-700/80 dark:text-orange-400"
+  }
+};
+
+const defaultRankStyle = {
+  badge: "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-400",
+  row: "border-slate-200/90 bg-white/92 shadow-[0_10px_25px_rgba(15,23,42,0.04)] dark:border-slate-600/40 dark:bg-slate-800/60",
+  value: "text-slate-900 dark:text-slate-200"
+};
+
 export function Leaderboard(props: {
   title: string;
   items: Array<{ id: string; label: string; value: string; delta?: string; subtitle?: string; imageSrc?: string | undefined }>;
@@ -324,33 +361,39 @@ export function Leaderboard(props: {
 }) {
   return (
     <SurfaceCard className={props.className} title={props.title} variant="default">
-      <ul className="space-y-3">
-        {props.items.map((item, index) => (
-          <li
-            key={item.id}
-            className="flex items-center justify-between gap-3 rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white/92 dark:bg-slate-800/60 px-4 py-3 shadow-[0_10px_25px_rgba(15,23,42,0.04)]"
-          >
-            <div className="flex items-center gap-3">
-              <span
-                className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-[10px] border text-xs font-semibold",
-                  index === 0 ? "border-orange-200 bg-orange-50 text-orange-700" : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-400"
-                )}
-              >
-                {index + 1}
-              </span>
-              {item.imageSrc ? (
-                <img src={item.imageSrc} alt={item.label} className="h-9 w-9 rounded-full object-cover" />
-              ) : null}
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-200">{item.label}</p>
-                {item.subtitle ? <p className="text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</p> : null}
-                {item.delta ? <p className="text-xs text-slate-500 dark:text-slate-400">{item.delta}</p> : null}
+      <ul className="space-y-2.5">
+        {props.items.map((item, index) => {
+          const style = podiumRankStyles[index] ?? defaultRankStyle;
+          return (
+            <li
+              key={item.id}
+              className={cn(
+                "flex items-center justify-between gap-3 rounded-[10px] border px-4 py-3 transition-all duration-200 hover:scale-[1.01]",
+                style.row
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border text-xs font-bold",
+                    style.badge
+                  )}
+                >
+                  {index + 1}
+                </span>
+                {item.imageSrc ? (
+                  <img src={item.imageSrc} alt={item.label} className="h-9 w-9 rounded-full object-cover" />
+                ) : null}
+                <div>
+                  <p className={cn("text-sm font-semibold", index < 3 ? "text-slate-950 dark:text-slate-100" : "text-slate-900 dark:text-slate-200")}>{item.label}</p>
+                  {item.subtitle ? <p className="text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</p> : null}
+                  {item.delta ? <p className="text-xs text-slate-500 dark:text-slate-400">{item.delta}</p> : null}
+                </div>
               </div>
-            </div>
-            <span className="text-sm font-semibold text-slate-900 dark:text-slate-200 tabular-nums">{item.value}</span>
-          </li>
-        ))}
+              <span className={cn("text-sm font-bold tabular-nums", style.value)}>{item.value}</span>
+            </li>
+          );
+        })}
       </ul>
     </SurfaceCard>
   );
@@ -453,13 +496,18 @@ export function InsightTile(props: {
   title: string;
   value: string;
   description?: string | undefined;
+  imageSrc?: string | undefined;
 }) {
   return (
     <div className="surface-subtle rounded-[10px] border border-slate-200/80 dark:border-slate-600/40 p-4">
       <div className="flex items-start gap-3">
-        <div className="inline-flex items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white/92 dark:bg-slate-800/60 p-2 text-slate-700 dark:text-slate-300">
-          {props.icon}
-        </div>
+        {props.imageSrc ? (
+          <img src={props.imageSrc} alt={props.value} className="h-9 w-9 shrink-0 rounded-full object-cover" />
+        ) : (
+          <div className="inline-flex items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white/92 dark:bg-slate-800/60 p-2 text-slate-700 dark:text-slate-300">
+            {props.icon}
+          </div>
+        )}
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{props.title}</p>
           <p className="mt-1 text-sm font-semibold text-slate-950 dark:text-slate-100">{props.value}</p>

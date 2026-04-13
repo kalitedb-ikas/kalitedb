@@ -1141,7 +1141,7 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
 
   try {
     result = await fetchAndParse(primaryUrl, requestInit);
-  } catch (error) {
+  } catch {
     if (!canUseLocalApiFallback()) {
       throw new Error(buildExternalApiHelpMessage(primaryUrl));
     }
@@ -1269,7 +1269,7 @@ export const api = {
 
     try {
       return await requestWithPublicFallback<ReportPeriod[]>("/api/report-periods", { token }, (fallback) => fallback.periods);
-    } catch (error) {
+    } catch {
       const hasAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
       if (!hasAuth) {
         console.warn("[KaliteDB] Dönemler yüklenemedi: API kapalı ve Firebase oturumu yok. Google ile giriş yapın veya API sunucusunu başlatın.");
