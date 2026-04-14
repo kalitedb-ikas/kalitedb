@@ -2,13 +2,16 @@ import { PageHeader, SurfaceCard } from "@kalitedb/ui";
 import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import confetti from "canvas-confetti";
 import { collection, doc, getDocs, setDoc } from "firebase/firestore";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Trophy } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { firebaseDb } from "../lib/firebase";
 import { formatNumber, formatPeriodMonth } from "../lib/format";
+import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import {
   QUARTER_SHORT,
@@ -396,6 +399,22 @@ export function SalesSuccessIndexPage() {
   const isLoading = periodsQuery.isPending || kpiQuery.isPending;
   const hasData = agents.length > 0;
 
+  const [showPodium, setShowPodium] = useState(false);
+  const top3 = useMemo(() => {
+    const scored = [...rows].sort((a, b) => b.score - a.score);
+    return scored.slice(0, 3);
+  }, [rows]);
+
+  const firePodiumConfetti = useCallback(() => {
+    const end = Date.now() + 3000;
+    const frame = () => {
+      confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, zIndex: 9999 });
+      confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, zIndex: 9999 });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  }, []);
+
   const tdCls = "px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap";
   const tdCenterCls = "px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap text-center";
   const thBase = "px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-white whitespace-nowrap cursor-pointer select-none hover:bg-emerald-700 dark:hover:bg-emerald-800 transition-colors";
@@ -415,11 +434,22 @@ export function SalesSuccessIndexPage() {
       <PageHeader
         title="Başarı Endeksi"
         actions={
-          <PeriodRangeFilter
-            onChange={setPeriodRange}
-            periods={salesPeriods}
-            value={{ ...periodRange, monthPeriodId: monthlyPeriodId }}
-          />
+          <div className="flex items-center gap-2">
+            {hasData && top3.length >= 3 ? (
+              <button
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-gradient-to-r from-amber-50 to-amber-100 px-4 py-2 text-sm font-semibold text-amber-800 shadow-sm transition hover:shadow-md hover:from-amber-100 hover:to-amber-200 dark:border-amber-600 dark:from-amber-900/40 dark:to-amber-800/40 dark:text-amber-300 dark:hover:from-amber-900/60 dark:hover:to-amber-800/60"
+                onClick={() => { setShowPodium(true); setTimeout(firePodiumConfetti, 400); }}
+                type="button"
+              >
+                <Trophy size={15} /> Podyum
+              </button>
+            ) : null}
+            <PeriodRangeFilter
+              onChange={setPeriodRange}
+              periods={salesPeriods}
+              value={{ ...periodRange, monthPeriodId: monthlyPeriodId }}
+            />
+          </div>
         }
       />
 
@@ -554,6 +584,150 @@ export function SalesSuccessIndexPage() {
           </div>
         </SurfaceCard>
       )}
+
+      {/* ── Podyum Modal ── */}
+      {showPodium && top3.length >= 3 ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
+          onClick={() => setShowPodium(false)}
+        >
+          <div className="relative mx-4 w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            {/* Kapatma butonu */}
+            <button
+              className="absolute -top-2 right-0 z-10 rounded-full bg-white/90 p-2 text-slate-500 shadow-lg transition hover:bg-white hover:text-slate-800 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+              onClick={() => setShowPodium(false)}
+              type="button"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+
+            {/* Başlık */}
+            <div className="mb-8 text-center">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-400">{monthLabel}</p>
+              <h2 className="mt-1 font-display text-3xl font-bold tracking-tight text-white">Başarı Endeksi</h2>
+            </div>
+
+            {/* Podyum */}
+            <div className="flex items-end justify-center gap-4">
+              {/* 2. — Sol */}
+              <PodiumCard
+                rank={2}
+                name={top3[1]!.agentName}
+                score={top3[1]!.score}
+                photo={getRepresentativePhotoSrc(top3[1]!.agentName)}
+                height="h-44"
+                delay="animation-delay-200"
+              />
+              {/* 1. — Orta */}
+              <PodiumCard
+                rank={1}
+                name={top3[0]!.agentName}
+                score={top3[0]!.score}
+                photo={getRepresentativePhotoSrc(top3[0]!.agentName)}
+                height="h-56"
+                delay="animation-delay-0"
+              />
+              {/* 3. — Sağ */}
+              <PodiumCard
+                rank={3}
+                name={top3[2]!.agentName}
+                score={top3[2]!.score}
+                photo={getRepresentativePhotoSrc(top3[2]!.agentName)}
+                height="h-36"
+                delay="animation-delay-400"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ── Podium Card ── */
+
+const podiumThemes = {
+  1: {
+    ring: "ring-amber-400",
+    bg: "bg-gradient-to-b from-amber-50 to-amber-100 dark:from-amber-900/50 dark:to-amber-800/40",
+    badge: "bg-gradient-to-br from-amber-400 to-yellow-500 text-white shadow-[0_4px_20px_rgba(245,158,11,0.5)]",
+    name: "text-amber-900 dark:text-amber-200",
+    score: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-300/60 dark:border-amber-600/40",
+    pedestal: "bg-gradient-to-t from-amber-500 to-amber-400",
+  },
+  2: {
+    ring: "ring-slate-400",
+    bg: "bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-700/60 dark:to-slate-800/60",
+    badge: "bg-gradient-to-br from-slate-400 to-slate-500 text-white shadow-[0_4px_16px_rgba(100,116,139,0.4)]",
+    name: "text-slate-800 dark:text-slate-200",
+    score: "text-slate-600 dark:text-slate-300",
+    border: "border-slate-300/60 dark:border-slate-600/40",
+    pedestal: "bg-gradient-to-t from-slate-500 to-slate-400",
+  },
+  3: {
+    ring: "ring-amber-700",
+    bg: "bg-gradient-to-b from-orange-50 to-orange-100 dark:from-orange-900/40 dark:to-orange-800/30",
+    badge: "bg-gradient-to-br from-amber-700 to-orange-700 text-white shadow-[0_4px_16px_rgba(180,83,9,0.4)]",
+    name: "text-orange-900 dark:text-orange-200",
+    score: "text-orange-700 dark:text-orange-300",
+    border: "border-orange-300/60 dark:border-orange-600/40",
+    pedestal: "bg-gradient-to-t from-amber-800 to-amber-700",
+  },
+} as const;
+
+function PodiumCard(props: {
+  rank: 1 | 2 | 3;
+  name: string;
+  score: number;
+  photo: string | null;
+  height: string;
+  delay: string;
+}) {
+  const theme = podiumThemes[props.rank];
+  const initials = props.name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+
+  const isFirst = props.rank === 1;
+  const cardWidth = isFirst ? "w-48" : "w-40";
+
+  return (
+    <div className={`flex flex-col items-center ${cardWidth} animate-podium-rise`} style={{ animationDelay: `${(props.rank === 1 ? 0 : props.rank === 2 ? 150 : 300)}ms` }}>
+      {/* Kart */}
+      <div className={`relative w-full rounded-2xl border ${theme.border} ${theme.bg} p-4 text-center shadow-xl backdrop-blur-sm`}>
+        {/* Sıra rozeti */}
+        <div className={`absolute -top-4 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full text-sm font-black ${theme.badge}`}>
+          {props.rank}
+        </div>
+
+        {/* Fotoğraf */}
+        <div className={`mx-auto mt-2 ${isFirst ? "h-20 w-20" : "h-16 w-16"} overflow-hidden rounded-full ring-4 ${theme.ring} ring-offset-2 ring-offset-white dark:ring-offset-slate-900`}>
+          {props.photo ? (
+            <img src={props.photo} alt={props.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300 text-lg font-bold text-slate-600 dark:from-slate-600 dark:to-slate-700 dark:text-slate-300">
+              {initials}
+            </div>
+          )}
+        </div>
+
+        {/* İsim */}
+        <p className={`mt-3 text-sm font-bold leading-tight ${theme.name}`}>{props.name}</p>
+
+        {/* Skor */}
+        <p className={`mt-1 font-display text-2xl font-black tracking-tight ${theme.score}`}>
+          {formatNumber(props.score * 100, 1)}
+        </p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">puan</p>
+      </div>
+
+      {/* Podyum ayağı */}
+      <div className={`mt-2 w-full rounded-b-lg ${theme.pedestal} ${props.height} flex items-start justify-center pt-3`}>
+        <span className="text-3xl font-black text-white/80">{props.rank}</span>
+      </div>
     </div>
   );
 }
