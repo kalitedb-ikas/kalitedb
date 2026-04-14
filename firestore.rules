@@ -62,6 +62,24 @@ service cloud.firestore {
       return canManageReports() || isQuality();
     }
 
+    // ─── Departman erişim kontrolü ──────────────────────────────────────────
+
+    // Kullanıcının belirli bir departmana erişimi olup olmadığını kontrol eder.
+    // userRoles dokümanındaki "departments" array alanını okur.
+    function hasDepartmentAccess(dept) {
+      return isAdmin() || (
+        isAuthed() &&
+        exists(/databases/$(database)/documents/userRoles/$(userEmail())) &&
+        'departments' in get(/databases/$(database)/documents/userRoles/$(userEmail())).data &&
+        dept in get(/databases/$(database)/documents/userRoles/$(userEmail())).data.departments
+      );
+    }
+
+    // Belirli bir departman verisini yönetebilir (kalite ekibi dahil)
+    function canManageDepartmentData(dept) {
+      return canManageReports() || (isQuality() && hasDepartmentAccess(dept));
+    }
+
     // ─── Koleksiyon kuralları ────────────────────────────────────────────────
 
     // Dönem üst dokümanı
@@ -97,13 +115,13 @@ service cloud.firestore {
     // Role-play metrikleri (satış)
     match /reportPeriods/{periodId}/roleplayMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if canManageDepartmentData('sales');
     }
 
     // Değerlendirme soruları (satış)
     match /reportPeriods/{periodId}/evaluationQuestions/{questionId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if canManageDepartmentData('sales');
     }
 
     // QT manuel girişleri
@@ -148,25 +166,25 @@ service cloud.firestore {
     // Satış KPI verileri
     match /reportPeriods/{periodId}/salesKpiData/{docId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if canManageDepartmentData('sales');
     }
 
     // Satış toplantıları
     match /reportPeriods/{periodId}/salesMeetings/{meetingId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if canManageDepartmentData('sales');
     }
 
     // Temsilci yönetimi
     match /representatives/{repKey} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if canManageReports() || (isQuality() && (hasDepartmentAccess('sales') || hasDepartmentAccess('cs')));
     }
 
     // Eğitim takvimi etkinlikleri
     match /trainingEvents/{eventId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if canManageReports() || (isQuality() && (hasDepartmentAccess('sales') || hasDepartmentAccess('cs')));
     }
 
     // İçe aktarma işleri

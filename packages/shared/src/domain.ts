@@ -163,6 +163,7 @@ export const userRoleAssignmentSchema = z.object({
   uid: z.string().optional(),
   email: z.string().email(),
   role: roleSchema,
+  departments: z.array(departmentSchema).default([]),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });

@@ -1,4 +1,4 @@
-import { roleSchema, userRoleAssignmentSchema } from "@kalitedb/shared";
+import { departmentSchema, roleSchema, userRoleAssignmentSchema } from "@kalitedb/shared";
 import { z } from "zod";
 
 import { requireAuth } from "@/src/lib/auth";
@@ -10,7 +10,8 @@ export const OPTIONS = optionsResponse;
 const upsertRoleSchema = z.object({
   uid: z.string().optional(),
   email: z.string().email(),
-  role: roleSchema
+  role: roleSchema,
+  departments: z.array(departmentSchema).default([])
 });
 
 export async function GET(request: Request) {

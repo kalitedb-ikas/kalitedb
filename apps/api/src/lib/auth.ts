@@ -132,7 +132,7 @@ async function authenticateToken(token: string): Promise<AuthUser> {
       updatedAt: now
     });
     // Eski koleksiyona da yaz (geriye dönük uyumluluk)
-    await repository.upsertUserRole({ uid: decoded.uid, email, role: "admin", createdAt: now, updatedAt: now });
+    await repository.upsertUserRole({ uid: decoded.uid, email, role: "admin", departments: [], createdAt: now, updatedAt: now });
   }
 
   const mappedRole = (decoded.role as Role | undefined) ?? user?.role ?? (await repository.findRoleByEmail(email));
