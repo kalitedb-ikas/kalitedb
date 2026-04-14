@@ -30,7 +30,8 @@ import {
   aggregateAuditMetrics,
   aggregateMultiPeriodKpi,
   computeActivePeriodIds,
-  derivePeriodRangeSelectors
+  derivePeriodRangeSelectors,
+  getQuarterPeriodIds
 } from "../lib/period-aggregation";
 import { RepresentativeSelect } from "../components/representative-select";
 import { BadgePill, TimelineDisplay } from "../components/representative-detail-modal";
@@ -208,6 +209,22 @@ export function SalesRepresentativesPage() {
 
   const activePeriodIdsKey = activePeriodIds.join(",");
 
+  // Önceki dönem period ID'leri (çeyreklik: önceki çeyrek, yıllık: önceki yıl)
+  const prevActivePeriodIds = useMemo(() => {
+    if (periodRange.viewMode === "aylik") return []; // aylık karşılaştırma trendData'dan gelir
+    if (periodRange.viewMode === "ceyreklik" && periodRange.quarter) {
+      const prevQ = periodRange.quarter - 1;
+      if (prevQ >= 1) return getQuarterPeriodIds(yearPeriods, prevQ);
+      // Q1 ise önceki yılın Q4'ü — şimdilik atla
+      return [];
+    }
+    // Yıllık: önceki yılın dönemleri
+    const prevYear = String(Number(periodRange.year) - 1);
+    return salesPeriods.filter((p) => p.month.startsWith(`${prevYear}-`)).map((p) => p.id);
+  }, [periodRange, yearPeriods, salesPeriods]);
+
+  const prevActivePeriodIdsKey = prevActivePeriodIds.join(",");
+
   // Çoklu period KPI: aylıkta tek fetch, çeyreklik/yıllıkta paralel + aggregate
   const kpiQuery = useQuery({
     enabled: activePeriodIds.length > 0,
@@ -245,6 +262,31 @@ export function SalesRepresentativesPage() {
   const auditMetrics: AuditMetric[] = auditQuery.data ?? [];
   const kpiAgents: SalesKpiAgent[] =
     kpiQuery.data && "agents" in kpiQuery.data ? kpiQuery.data.agents : [];
+
+  // Önceki dönem verileri (çeyreklik/yıllık karşılaştırma için)
+  const prevKpiQuery = useQuery({
+    enabled: prevActivePeriodIds.length > 0,
+    queryKey: ["sales-rep-prev-kpi", auth.token, prevActivePeriodIdsKey],
+    queryFn: async () => {
+      const results = await Promise.all(
+        prevActivePeriodIds.map((pid) => api.getSalesKpiData(auth.token, pid))
+      );
+      if (results.length === 1) return results[0];
+      return aggregateMultiPeriodKpi(results);
+    },
+    staleTime: 60 * 1000
+  });
+
+  const prevAuditQuery = useQuery({
+    enabled: prevActivePeriodIds.length > 0,
+    queryKey: ["sales-rep-prev-audit", auth.token, prevActivePeriodIdsKey],
+    queryFn: async (): Promise<AuditMetric[]> => {
+      const auditMap = await api.getAuditMetricsForPeriods(auth.token, prevActivePeriodIds);
+      const metricsPerPeriod = prevActivePeriodIds.map((pid) => auditMap[pid] ?? []);
+      return aggregateAuditMetrics(metricsPerPeriod);
+    },
+    staleTime: 60 * 1000
+  });
 
   const { activeKeys } = useActiveRepresentativeKeys();
 
@@ -423,6 +465,29 @@ export function SalesRepresentativesPage() {
     };
   }, [rankingModalMetric, kpiAgents, auditMetrics, metricDefs]);
 
+  /* ── Takım ortalamaları ── */
+  const teamAverages = useMemo(() => {
+    const avg = (values: (number | null | undefined)[]) => {
+      const valid = values.filter((v): v is number => v != null);
+      return valid.length > 0 ? valid.reduce((s, v) => s + v, 0) / valid.length : null;
+    };
+    return {
+      salesAmount: avg(kpiAgents.map((a) => a.salesAmount)),
+      licenseCount: avg(kpiAgents.map((a) => a.licenseCount)),
+      perfScore: avg(kpiAgents.map((a) => a.perfScore)),
+      conversionRate: avg(kpiAgents.map((a) => a.conversionRate)),
+      callAttempts: avg(kpiAgents.map((a) => a.callAttempts)),
+      talkDurationSeconds: avg(kpiAgents.map((a) => a.talkDurationSeconds)),
+      avgLicensePrice: avg(kpiAgents.map((a) => a.avgLicensePrice)),
+      scaleCount: avg(kpiAgents.map((a) => a.scaleCount)),
+      scalePlusCount: avg(kpiAgents.map((a) => a.scalePlusCount)),
+      scaleConversion: avg(kpiAgents.map((a) => a.scaleConversion)),
+      scalePlusConversion: avg(kpiAgents.map((a) => a.scalePlusConversion)),
+      totalConversion: avg(kpiAgents.map((a) => a.totalConversion)),
+      auditScore: avg(auditMetrics.map((a) => a.auditScore)),
+    } as Record<string, number | null>;
+  }, [kpiAgents, auditMetrics]);
+
   /* ── Grafik 1: Aylik Satis Trendi — coklu donem verisi ── */
   const last6Periods = useMemo(
     () =>
@@ -479,6 +544,55 @@ export function SalesRepresentativesPage() {
 
   const trendData = trendQuery.data ?? [];
   const auditTrendData = auditTrendQuery.data ?? [];
+
+  /* ── Önceki dönem verisi (aylık: trendData, çeyreklik/yıllık: prevKpiQuery) ── */
+  const prevPeriodValues = useMemo(() => {
+    if (periodRange.viewMode === "aylik") {
+      const currentIdx = trendData.findIndex((p) => p.isCurrent);
+      const prev = currentIdx > 0 ? trendData[currentIdx - 1] : null;
+      const prevAudit = (() => {
+        const idx = auditTrendData.findIndex((p) => p.isCurrent);
+        return idx > 0 ? auditTrendData[idx - 1] : null;
+      })();
+      return {
+        salesAmount: prev?.salesAmount ?? null,
+        licenseCount: prev?.licenseCount ?? null,
+        perfScore: prev?.perfScore ?? null,
+        conversionRate: prev?.conversionRate ?? null,
+        callAttempts: prev?.callAttempts ?? null,
+        talkDurationSeconds: prev?.talkDurationSeconds ?? null,
+        scaleCount: null as number | null,
+        scalePlusCount: null as number | null,
+        scaleConversion: null as number | null,
+        scalePlusConversion: null as number | null,
+        totalConversion: null as number | null,
+        avgLicensePrice: null as number | null,
+        auditScore: prevAudit?.auditScore ?? null,
+      } as Record<string, number | null>;
+    }
+
+    // Çeyreklik / Yıllık: önceki dönem query'sinden al
+    if (!selectedRepresentative) return {} as Record<string, number | null>;
+    const prevAgents: SalesKpiAgent[] = prevKpiQuery.data && "agents" in prevKpiQuery.data ? prevKpiQuery.data.agents : [];
+    const prevAgent = prevAgents.find((a) => a.agentKey === selectedRepresentative.agentKey);
+    const prevAudits: AuditMetric[] = prevAuditQuery.data ?? [];
+    const prevAudit = prevAudits.find((a) => a.agentKey === selectedRepresentative.agentKey);
+    return {
+      salesAmount: prevAgent?.salesAmount ?? null,
+      licenseCount: prevAgent?.licenseCount ?? null,
+      perfScore: prevAgent?.perfScore ?? null,
+      conversionRate: prevAgent?.conversionRate ?? null,
+      callAttempts: prevAgent?.callAttempts ?? null,
+      talkDurationSeconds: prevAgent?.talkDurationSeconds ?? null,
+      scaleCount: prevAgent?.scaleCount ?? null,
+      scalePlusCount: prevAgent?.scalePlusCount ?? null,
+      scaleConversion: prevAgent?.scaleConversion ?? null,
+      scalePlusConversion: prevAgent?.scalePlusConversion ?? null,
+      totalConversion: prevAgent?.totalConversion ?? null,
+      avgLicensePrice: prevAgent?.avgLicensePrice ?? null,
+      auditScore: prevAudit?.auditScore ?? null,
+    } as Record<string, number | null>;
+  }, [periodRange.viewMode, trendData, auditTrendData, selectedRepresentative, prevKpiQuery.data, prevAuditQuery.data]);
 
   /* ── KPI Radar ── */
   const radarData = useMemo(() => {
@@ -595,20 +709,24 @@ export function SalesRepresentativesPage() {
 
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
                       {([
-                        { metricKey: "perfScore", label: "Perf. Değ.", value: formatOrNa(selectedKpi?.perfScore, (v) => formatNumber(v, 1)) },
-                        { metricKey: "salesAmount", label: "Satış Tutarı", value: formatOrNa(selectedKpi?.salesAmount, formatTryCurrency) },
-                        { metricKey: "licenseCount", label: "Lisans", value: formatOrNa(selectedKpi?.licenseCount, (v) => formatNumber(v)) },
-                        { metricKey: "talkDurationSeconds", label: "Konuşma", value: formatOrNa(selectedKpi?.talkDurationSeconds, formatHms) },
-                        { metricKey: "conversionRate", label: "Dönüşüm", value: formatOrNa(selectedKpi?.conversionRate, (v) => formatPercent(v)) },
-                        { metricKey: "scaleCount", label: "Scale 2+1", value: formatOrNa(selectedKpi?.scaleCount, (v) => formatNumber(v)) },
-                        { metricKey: "scalePlusCount", label: "Scale+ 2+1", value: formatOrNa(selectedKpi?.scalePlusCount, (v) => formatNumber(v)) },
-                        { metricKey: "totalConversion", label: "Toplam %", value: formatOrNa(selectedKpi?.totalConversion, (v) => formatPercent(v)) },
+                        { metricKey: "perfScore", label: "Perf. Değ.", value: formatOrNa(selectedKpi?.perfScore, (v) => formatNumber(v, 1)), raw: selectedKpi?.perfScore, fmt: (v: number) => formatNumber(v, 1) },
+                        { metricKey: "salesAmount", label: "Satış Tutarı", value: formatOrNa(selectedKpi?.salesAmount, formatTryCurrency), raw: selectedKpi?.salesAmount, fmt: formatTryCurrency },
+                        { metricKey: "licenseCount", label: "Lisans", value: formatOrNa(selectedKpi?.licenseCount, (v) => formatNumber(v)), raw: selectedKpi?.licenseCount, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "talkDurationSeconds", label: "Konuşma", value: formatOrNa(selectedKpi?.talkDurationSeconds, formatHms), raw: selectedKpi?.talkDurationSeconds, fmt: formatHms },
+                        { metricKey: "conversionRate", label: "Dönüşüm", value: formatOrNa(selectedKpi?.conversionRate, (v) => formatPercent(v)), raw: selectedKpi?.conversionRate, fmt: (v: number) => formatPercent(v) },
+                        { metricKey: "scaleCount", label: "Scale 2+1", value: formatOrNa(selectedKpi?.scaleCount, (v) => formatNumber(v)), raw: selectedKpi?.scaleCount, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "scalePlusCount", label: "Scale+ 2+1", value: formatOrNa(selectedKpi?.scalePlusCount, (v) => formatNumber(v)), raw: selectedKpi?.scalePlusCount, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "totalConversion", label: "Toplam %", value: formatOrNa(selectedKpi?.totalConversion, (v) => formatPercent(v)), raw: selectedKpi?.totalConversion, fmt: (v: number) => formatPercent(v) },
                       ] as const).map((card) => (
                         <RankedMetricCard
                           key={card.metricKey}
                           label={card.label}
                           value={card.value}
                           rank={metricRankMap[card.metricKey]}
+                          currentValue={card.raw ?? null}
+                          teamAvg={teamAverages[card.metricKey]}
+                          prevValue={prevPeriodValues[card.metricKey]}
+                          format={card.fmt}
                           onClick={() => setRankingModalMetric(card.metricKey)}
                         />
                       ))}
@@ -922,8 +1040,25 @@ export function SalesRepresentativesPage() {
   );
 }
 
-function RankedMetricCard(props: { label: string; value: string; rank: { rank: number; total: number } | null | undefined; onClick: () => void }) {
+function RankedMetricCard(props: {
+  label: string;
+  value: string;
+  rank: { rank: number; total: number } | null | undefined;
+  currentValue?: number | null | undefined;
+  teamAvg?: number | null | undefined;
+  prevValue?: number | null | undefined;
+  format?: ((v: number) => string) | undefined;
+  onClick: () => void;
+}) {
   const r = props.rank;
+  const cur = props.currentValue;
+  const avg = props.teamAvg;
+  const prev = props.prevValue;
+  const fmt = props.format ?? ((v: number) => String(v));
+
+  const avgDiff = cur != null && avg != null ? cur - avg : null;
+  const prevDiff = cur != null && prev != null ? cur - prev : null;
+
   return (
     <button
       className="group relative rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-left transition hover:border-slate-300 hover:shadow-sm dark:border-slate-600/40 dark:bg-slate-800/60 dark:hover:border-slate-500/60"
@@ -940,6 +1075,20 @@ function RankedMetricCard(props: { label: string; value: string; rank: { rank: n
         ) : null}
       </div>
       <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">{props.value}</p>
+      {(avgDiff != null || prevDiff != null) ? (
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+          {avgDiff != null ? (
+            <span className={["text-[10px] font-medium", avgDiff >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"].join(" ")}>
+              {avgDiff >= 0 ? "\u25B2" : "\u25BC"} Ort: {fmt(avg!)}
+            </span>
+          ) : null}
+          {prevDiff != null ? (
+            <span className={["text-[10px] font-medium", prevDiff > 0 ? "text-emerald-600 dark:text-emerald-400" : prevDiff < 0 ? "text-rose-500 dark:text-rose-400" : "text-slate-400"].join(" ")}>
+              {prevDiff > 0 ? "\u25B2" : prevDiff < 0 ? "\u25BC" : "="} {prevDiff > 0 ? "+" : ""}{fmt(Math.abs(prevDiff))}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </button>
   );
 }
