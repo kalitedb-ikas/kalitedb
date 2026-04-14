@@ -325,67 +325,21 @@ export function SalesRepresentativesPage() {
     frame();
   }, []);
 
-  const isTopInAnyMetric = useMemo(() => {
-    if (!selectedRepresentative || kpiAgents.length < 2) return false;
-    const key = selectedRepresentative.agentKey;
-
-    const kpiMetrics: Array<(a: SalesKpiAgent) => number | null | undefined> = [
-      (a) => a.salesAmount,
-      (a) => a.licenseCount,
-      (a) => a.perfScore,
-      (a) => a.conversionRate,
-      (a) => a.callAttempts,
-      (a) => a.talkDurationSeconds,
-      (a) => a.avgLicensePrice,
-      (a) => a.scaleCount,
-      (a) => a.scalePlusCount,
-      (a) => a.scaleConversion,
-      (a) => a.scalePlusConversion,
-      (a) => a.totalConversion,
-    ];
-
-    for (const getValue of kpiMetrics) {
-      const valid = kpiAgents.filter((a) => getValue(a) != null);
-      if (valid.length < 2) continue;
-      const top = valid.reduce((best, cur) => (getValue(cur) ?? 0) > (getValue(best) ?? 0) ? cur : best);
-      if (top.agentKey === key) return true;
-    }
-
-    const validAudit = auditMetrics.filter((a) => a.auditScore != null);
-    if (validAudit.length >= 2) {
-      const topAudit = validAudit.reduce((best, cur) => (cur.auditScore ?? 0) > (best.auditScore ?? 0) ? cur : best);
-      if (topAudit.agentKey === key) return true;
-    }
-
-    return false;
-  }, [selectedRepresentative, kpiAgents, auditMetrics]);
-
-  useEffect(() => {
-    if (
-      isTopInAnyMetric &&
-      selectedRepresentative &&
-      !confettiFiredRef.current.has(selectedRepresentative.agentKey)
-    ) {
-      confettiFiredRef.current.add(selectedRepresentative.agentKey);
-      fireConfetti();
-    }
-  }, [isTopInAnyMetric, selectedRepresentative, fireConfetti]);
-
   /* ── Metrik sıralamaları ve modal ── */
-  type MetricDef = { key: string; label: string; getValue: (a: SalesKpiAgent) => number | null | undefined; format: (v: number) => string };
+  type MetricDef = { key: string; label: string; getValue: (a: SalesKpiAgent) => number | null | undefined; format: (v: number) => string; tiebreaker?: (a: SalesKpiAgent) => number };
   const metricDefs: MetricDef[] = useMemo(() => [
     { key: "salesAmount", label: "Satış tutarı", getValue: (a) => a.salesAmount, format: formatTryCurrency },
     { key: "licenseCount", label: "Lisans adedi", getValue: (a) => a.licenseCount, format: (v) => formatNumber(v) },
     { key: "perfScore", label: "Perf. değerlendirme", getValue: (a) => a.perfScore, format: (v) => formatNumber(v, 1) },
-    { key: "conversionRate", label: "Dönüşüm oranı", getValue: (a) => a.conversionRate, format: (v) => formatPercent(v) },
+    { key: "conversionRate", label: "Dönüşüm oranı", getValue: (a) => a.conversionRate, format: (v) => formatPercent(v), tiebreaker: (a) => a.licenseCount ?? 0 },
     { key: "callAttempts", label: "Arama girişimi", getValue: (a) => a.callAttempts, format: (v) => formatNumber(v) },
     { key: "talkDurationSeconds", label: "Konuşma süresi", getValue: (a) => a.talkDurationSeconds, format: formatHms },
     { key: "avgLicensePrice", label: "Ort. lisans fiyatı", getValue: (a) => a.avgLicensePrice, format: formatTryCurrency },
     { key: "scaleCount", label: "Scale 2+1", getValue: (a) => a.scaleCount, format: (v) => formatNumber(v) },
     { key: "scalePlusCount", label: "Scale+ 2+1", getValue: (a) => a.scalePlusCount, format: (v) => formatNumber(v) },
-    { key: "scaleConversion", label: "Scale %", getValue: (a) => a.scaleConversion, format: (v) => formatPercent(v) },
-    { key: "scalePlusConversion", label: "Scale+ %", getValue: (a) => a.scalePlusConversion, format: (v) => formatPercent(v) },
-    { key: "totalConversion", label: "Toplam dönüşüm %", getValue: (a) => a.totalConversion, format: (v) => formatPercent(v) },
+    { key: "scaleConversion", label: "Scale %", getValue: (a) => a.scaleConversion, format: (v) => formatPercent(v), tiebreaker: (a) => a.scaleCount ?? 0 },
+    { key: "scalePlusConversion", label: "Scale+ %", getValue: (a) => a.scalePlusConversion, format: (v) => formatPercent(v), tiebreaker: (a) => a.scalePlusCount ?? 0 },
+    { key: "totalConversion", label: "Toplam dönüşüm %", getValue: (a) => a.totalConversion, format: (v) => formatPercent(v), tiebreaker: (a) => (a.scaleCount ?? 0) + (a.scalePlusCount ?? 0) },
   ], []);
 
   const metricRankMap = useMemo(() => {
@@ -395,7 +349,11 @@ export function SalesRepresentativesPage() {
     for (const def of metricDefs) {
       const valid = kpiAgents.filter((a) => def.getValue(a) != null);
       if (valid.length < 2) { map[def.key] = null; continue; }
-      const sorted = [...valid].sort((a, b) => (def.getValue(b) as number) - (def.getValue(a) as number));
+      const sorted = [...valid].sort((a, b) => {
+        const diff = (def.getValue(b) as number) - (def.getValue(a) as number);
+        if (diff !== 0 || !def.tiebreaker) return diff;
+        return def.tiebreaker(b) - def.tiebreaker(a);
+      });
       const idx = sorted.findIndex((a) => a.agentKey === key);
       map[def.key] = idx >= 0 ? { rank: idx + 1, total: sorted.length } : null;
     }
@@ -408,6 +366,25 @@ export function SalesRepresentativesPage() {
     }
     return map;
   }, [selectedRepresentative, kpiAgents, auditMetrics, metricDefs]);
+
+  const isTopInAnyMetric = useMemo(() => {
+    if (!selectedRepresentative) return false;
+    for (const k of Object.keys(metricRankMap)) {
+      if (metricRankMap[k]?.rank === 1) return true;
+    }
+    return false;
+  }, [selectedRepresentative, metricRankMap]);
+
+  useEffect(() => {
+    if (
+      isTopInAnyMetric &&
+      selectedRepresentative &&
+      !confettiFiredRef.current.has(selectedRepresentative.agentKey)
+    ) {
+      confettiFiredRef.current.add(selectedRepresentative.agentKey);
+      fireConfetti();
+    }
+  }, [isTopInAnyMetric, selectedRepresentative, fireConfetti]);
 
   const topMetricLabels = useMemo(() => {
     const labels: string[] = [];
@@ -437,7 +414,11 @@ export function SalesRepresentativesPage() {
     return {
       label: def.label,
       rows: [...valid]
-        .sort((a, b) => (def.getValue(b) as number) - (def.getValue(a) as number))
+        .sort((a, b) => {
+          const diff = (def.getValue(b) as number) - (def.getValue(a) as number);
+          if (diff !== 0 || !def.tiebreaker) return diff;
+          return def.tiebreaker(b) - def.tiebreaker(a);
+        })
         .map((a, i) => ({ rank: i + 1, agentKey: a.agentKey, name: a.agentName, value: def.format(def.getValue(a) as number) }))
     };
   }, [rankingModalMetric, kpiAgents, auditMetrics, metricDefs]);
