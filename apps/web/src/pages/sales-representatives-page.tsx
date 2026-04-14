@@ -312,7 +312,7 @@ export function SalesRepresentativesPage() {
       ? null
       : representativeRanking.findIndex((item) => item.agentKey === selectedRepresentative.agentKey) + 1 || null;
 
-  /* ── Confetti: #1 temsilci detayı açıldığında bir kereye mahsus patlar ── */
+  /* ── Confetti: herhangi bir metrikte #1 olan temsilcide bir kereye mahsus patlar ── */
   const confettiFiredRef = useRef<Set<string>>(new Set());
 
   const fireConfetti = useCallback(() => {
@@ -325,17 +325,51 @@ export function SalesRepresentativesPage() {
     frame();
   }, []);
 
+  const isTopInAnyMetric = useMemo(() => {
+    if (!selectedRepresentative || kpiAgents.length < 2) return false;
+    const key = selectedRepresentative.agentKey;
+
+    const kpiMetrics: Array<(a: SalesKpiAgent) => number | null | undefined> = [
+      (a) => a.salesAmount,
+      (a) => a.licenseCount,
+      (a) => a.perfScore,
+      (a) => a.conversionRate,
+      (a) => a.callAttempts,
+      (a) => a.talkDurationSeconds,
+      (a) => a.avgLicensePrice,
+      (a) => a.scaleCount,
+      (a) => a.scalePlusCount,
+      (a) => a.scaleConversion,
+      (a) => a.scalePlusConversion,
+      (a) => a.totalConversion,
+    ];
+
+    for (const getValue of kpiMetrics) {
+      const valid = kpiAgents.filter((a) => getValue(a) != null);
+      if (valid.length < 2) continue;
+      const top = valid.reduce((best, cur) => (getValue(cur) ?? 0) > (getValue(best) ?? 0) ? cur : best);
+      if (top.agentKey === key) return true;
+    }
+
+    const validAudit = auditMetrics.filter((a) => a.auditScore != null);
+    if (validAudit.length >= 2) {
+      const topAudit = validAudit.reduce((best, cur) => (cur.auditScore ?? 0) > (best.auditScore ?? 0) ? cur : best);
+      if (topAudit.agentKey === key) return true;
+    }
+
+    return false;
+  }, [selectedRepresentative, kpiAgents, auditMetrics]);
+
   useEffect(() => {
     if (
-      selectedRank === 1 &&
+      isTopInAnyMetric &&
       selectedRepresentative &&
-      selectedKpi?.salesAmount != null &&
       !confettiFiredRef.current.has(selectedRepresentative.agentKey)
     ) {
       confettiFiredRef.current.add(selectedRepresentative.agentKey);
       fireConfetti();
     }
-  }, [selectedRank, selectedRepresentative, selectedKpi?.salesAmount, fireConfetti]);
+  }, [isTopInAnyMetric, selectedRepresentative, fireConfetti]);
 
   /* ── Grafik 1: Aylik Satis Trendi — coklu donem verisi ── */
   const last6Periods = useMemo(
