@@ -276,7 +276,22 @@ export function SalesRepresentativesPage() {
       }));
   }, [activeKeys, auditMetrics, kpiAgents, repsQuery.data]);
 
-  const selectedAgentKey = searchParams.get("agentKey") ?? representatives[0]?.agentKey;
+  const representativeRanking = useMemo(
+    () =>
+      representatives
+        .map((item) => {
+          const kpi = kpiAgents.find((record) => record.agentKey === item.agentKey) ?? null;
+          return {
+            agentKey: item.agentKey,
+            salesAmount: kpi?.salesAmount ?? null
+          };
+        })
+        .sort((left, right) => (right.salesAmount ?? -1) - (left.salesAmount ?? -1)),
+    [kpiAgents, representatives]
+  );
+
+  const topPerformerKey = representativeRanking[0]?.salesAmount != null ? representativeRanking[0].agentKey : null;
+  const selectedAgentKey = searchParams.get("agentKey") ?? topPerformerKey ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
   const selectedAudit = auditMetrics.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
   const selectedKpi: SalesKpiAgent | null = kpiAgents.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
@@ -291,20 +306,6 @@ export function SalesRepresentativesPage() {
     conversionRate: selectedKpi?.conversionRate
   });
   const selectedState = resolveSuccessState(selectedSuccessIndex);
-
-  const representativeRanking = useMemo(
-    () =>
-      representatives
-        .map((item) => {
-          const kpi = kpiAgents.find((record) => record.agentKey === item.agentKey) ?? null;
-          return {
-            agentKey: item.agentKey,
-            salesAmount: kpi?.salesAmount ?? null
-          };
-        })
-        .sort((left, right) => (right.salesAmount ?? -1) - (left.salesAmount ?? -1)),
-    [kpiAgents, representatives]
-  );
 
   const selectedRank =
     selectedRepresentative == null
