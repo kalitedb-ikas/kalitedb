@@ -1583,7 +1583,7 @@ export const api = {
       return getRolesFromFirebase();
     });
   },
-  createRole(token: string | null, body: { uid?: string; email: string; role: Role }) {
+  createRole(token: string | null, body: { uid?: string; email: string; role: Role; departments?: ("cs" | "sales" | "quality")[] }) {
     return request<UserRoleAssignment>("/api/users/roles", {
       token,
       method: "POST",

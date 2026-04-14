@@ -47,7 +47,8 @@ import {
 
 const roleSchema = z.object({
   email: z.string().email(),
-  role: z.enum(["admin", "manager", "team_leader", "quality", "representative", "team", "ceo", "qt"])
+  role: z.enum(["admin", "manager", "team_leader", "quality", "representative", "team", "ceo", "qt"]),
+  departments: z.array(z.enum(["cs", "sales", "quality"]))
 });
 
 const roleOptions = [
@@ -219,7 +220,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
   const roleForm = useForm<z.infer<typeof roleSchema>>({
     resolver: zodResolver(roleSchema),
-    defaultValues: { email: "", role: "team" }
+    defaultValues: { email: "", role: "team", departments: [] }
   });
 
   const createPeriodMutation = useMutation({
@@ -541,6 +542,16 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         }
       },
       {
+        header: "Departmanlar",
+        id: "departments",
+        cell: ({ row }) => {
+          const deps = row.original.departments ?? [];
+          if (deps.length === 0) return <span className="text-slate-400">—</span>;
+          const labels: Record<string, string> = { cs: "CS", sales: "Satış", quality: "Kalite" };
+          return deps.map((d) => labels[d] ?? d).join(", ");
+        }
+      },
+      {
         header: "İşlem",
         id: "action",
         cell: ({ row }) => (
@@ -550,7 +561,8 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
               setEditingRoleEmail(row.original.email);
               roleForm.reset({
                 email: row.original.email,
-                role: row.original.role
+                role: row.original.role,
+                departments: row.original.departments ?? []
               });
             }}
             type="button"
@@ -1272,6 +1284,31 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                         ))}
                       </select>
                     </InputField>
+                    <InputField label="Departman erişimi">
+                      <div className="flex flex-wrap gap-4 pt-1">
+                        {([["cs", "CS"], ["sales", "Satış"]] as const).map(([dep, label]) => {
+                          const checked = (roleForm.watch("departments") ?? []).includes(dep);
+                          return (
+                            <label key={dep} className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary/30"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const current = roleForm.getValues("departments") ?? [];
+                                  roleForm.setValue(
+                                    "departments",
+                                    e.target.checked ? [...current, dep] : current.filter((d) => d !== dep),
+                                    { shouldDirty: true }
+                                  );
+                                }}
+                              />
+                              {label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </InputField>
                     {(roleForm.formState.errors.email || roleForm.formState.errors.role) ? (
                       <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
                         {roleForm.formState.errors.email?.message ?? roleForm.formState.errors.role?.message}
@@ -1299,7 +1336,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                           className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-5 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700/30"
                           onClick={() => {
                             setEditingRoleEmail(null);
-                            roleForm.reset({ email: "", role: "team" });
+                            roleForm.reset({ email: "", role: "team", departments: [] });
                           }}
                           type="button"
                         >

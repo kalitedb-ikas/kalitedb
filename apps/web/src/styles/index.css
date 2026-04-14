@@ -346,20 +346,6 @@ body {
   scroll-snap-align: start;
 }
 
-.champion-spotlight::after {
-  content: "";
-  position: absolute;
-  inset: auto 22px 18px auto;
-  width: 120px;
-  height: 120px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(circle, rgba(255, 255, 255, 0.16) 0, rgba(255, 255, 255, 0) 72%);
-  opacity: 0.65;
-  pointer-events: none;
-}
-
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
@@ -446,80 +432,6 @@ body {
 @media (min-width: 1024px) {
   .trend-value-label {
     display: block;
-  }
-}
-
-.champion-stage-fixture {
-  filter: drop-shadow(0 10px 22px rgba(15, 23, 42, 0.12));
-}
-
-.champion-stage-source {
-  animation: championStageSourcePulse 4.6s ease-in-out infinite;
-}
-
-.champion-stage-beam-left {
-  transform-origin: 22% 0%;
-  animation: championStageSweepLeft 4.9s ease-in-out infinite;
-}
-
-.champion-stage-beam-right {
-  transform-origin: 78% 0%;
-  animation: championStageSweepRight 4.9s ease-in-out infinite;
-}
-
-.champion-stage-floor {
-  animation: championStageFloorGlow 4.8s ease-in-out infinite;
-}
-
-@keyframes championStageSourcePulse {
-  0%,
-  100% {
-    opacity: 0.94;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.04);
-  }
-}
-
-@keyframes championStageSweepLeft {
-  0%,
-  100% {
-    opacity: 0.8;
-    transform: rotate(-10deg) translate3d(0, 0, 0) scaleY(1) scaleX(1);
-  }
-
-  50% {
-    opacity: 0.98;
-    transform: rotate(-1deg) translate3d(12px, 4px, 0) scaleY(1.08) scaleX(1.05);
-  }
-}
-
-@keyframes championStageSweepRight {
-  0%,
-  100% {
-    opacity: 0.8;
-    transform: rotate(10deg) translate3d(0, 0, 0) scaleY(1) scaleX(1);
-  }
-
-  50% {
-    opacity: 0.98;
-    transform: rotate(1deg) translate3d(-12px, 4px, 0) scaleY(1.08) scaleX(1.05);
-  }
-}
-
-@keyframes championStageFloorGlow {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translate3d(-50%, 0, 0) scale(1);
-  }
-
-  50% {
-    opacity: 0.78;
-    transform: translate3d(-50%, 0, 0) scale(1.08);
   }
 }
 

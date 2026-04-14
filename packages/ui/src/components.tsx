@@ -37,9 +37,6 @@ const championThemes: Record<
     bar: string;
     tag: string;
     ring: string;
-    stageBeam: string;
-    stageSource: string;
-    stageFloor: string;
   }
 > = {
   orange: {
@@ -48,12 +45,7 @@ const championThemes: Record<
     halo: "from-amber-200/90 via-orange-300/70 to-orange-500/45",
     bar: "from-amber-200/90 via-orange-300/70 to-orange-500/60",
     tag: "border-amber-200/60 bg-amber-50/90 text-amber-700",
-    ring: "border-amber-200/75",
-    stageBeam:
-      "linear-gradient(180deg, rgba(219,234,254,0.66) 0%, rgba(125,211,252,0.26) 34%, rgba(255,255,255,0) 100%)",
-    stageSource:
-      "radial-gradient(circle, rgba(255,255,255,0.98) 0%, rgba(191,219,254,0.96) 26%, rgba(56,189,248,0.42) 58%, rgba(56,189,248,0) 78%)",
-    stageFloor: "radial-gradient(circle, rgba(125,211,252,0.24) 0%, rgba(255,255,255,0) 72%)"
+    ring: "border-amber-200/75"
   },
   violet: {
     accent: "text-violet-700",
@@ -61,12 +53,7 @@ const championThemes: Record<
     halo: "from-violet-200/90 via-fuchsia-300/65 to-indigo-500/40",
     bar: "from-violet-200/85 via-fuchsia-300/65 to-indigo-500/50",
     tag: "border-violet-200/60 bg-violet-50/90 text-violet-700",
-    ring: "border-violet-200/75",
-    stageBeam:
-      "linear-gradient(180deg, rgba(224,231,255,0.62) 0%, rgba(125,211,252,0.22) 34%, rgba(255,255,255,0) 100%)",
-    stageSource:
-      "radial-gradient(circle, rgba(255,255,255,0.98) 0%, rgba(196,181,253,0.92) 24%, rgba(96,165,250,0.34) 56%, rgba(96,165,250,0) 78%)",
-    stageFloor: "radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(255,255,255,0) 72%)"
+    ring: "border-violet-200/75"
   },
   emerald: {
     accent: "text-emerald-700",
@@ -74,12 +61,7 @@ const championThemes: Record<
     halo: "from-emerald-200/90 via-teal-300/65 to-cyan-500/40",
     bar: "from-emerald-200/85 via-teal-300/65 to-cyan-500/50",
     tag: "border-emerald-200/60 bg-emerald-50/90 text-emerald-700",
-    ring: "border-emerald-200/75",
-    stageBeam:
-      "linear-gradient(180deg, rgba(204,251,241,0.58) 0%, rgba(103,232,249,0.22) 34%, rgba(255,255,255,0) 100%)",
-    stageSource:
-      "radial-gradient(circle, rgba(255,255,255,0.98) 0%, rgba(167,243,208,0.92) 24%, rgba(34,211,238,0.34) 56%, rgba(34,211,238,0) 78%)",
-    stageFloor: "radial-gradient(circle, rgba(94,234,212,0.18) 0%, rgba(255,255,255,0) 72%)"
+    ring: "border-emerald-200/75"
   },
   ink: {
     accent: "text-slate-700 dark:text-slate-200",
@@ -87,12 +69,7 @@ const championThemes: Record<
     halo: "from-slate-300/90 via-slate-400/65 to-slate-600/40",
     bar: "from-slate-300/85 via-slate-400/65 to-slate-600/50",
     tag: "border-slate-300/60 bg-slate-50/90 text-slate-700",
-    ring: "border-slate-300/75",
-    stageBeam:
-      "linear-gradient(180deg, rgba(226,232,240,0.58) 0%, rgba(148,163,184,0.22) 34%, rgba(255,255,255,0) 100%)",
-    stageSource:
-      "radial-gradient(circle, rgba(255,255,255,0.98) 0%, rgba(203,213,225,0.92) 24%, rgba(100,116,139,0.34) 56%, rgba(100,116,139,0) 78%)",
-    stageFloor: "radial-gradient(circle, rgba(148,163,184,0.18) 0%, rgba(255,255,255,0) 72%)"
+    ring: "border-slate-300/75"
   }
 };
 
@@ -578,31 +555,6 @@ export function ChampionSpotlightCard(props: {
     <section className={cn("surface-hero relative overflow-hidden rounded-[10px] p-6 sm:p-7", props.className)}>
       <div className={cn("absolute -right-8 top-0 h-40 w-40 blur-3xl", theme.glow)} />
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.4),rgba(255,255,255,0)_35%,rgba(15,23,42,0.02)_70%)]" />
-      <div aria-hidden className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
-        <div
-          className="champion-stage-beam champion-stage-beam-left absolute -left-16 top-6 h-[360px] w-[400px] opacity-100 blur-[1.5px]"
-          style={{
-            background: theme.stageBeam,
-            clipPath: "polygon(14% 0%, 32% 0%, 100% 100%, 0% 100%)"
-          }}
-        />
-        <div
-          className="champion-stage-floor absolute bottom-6 left-1/2 h-32 w-[68%] -translate-x-1/2 rounded-full blur-3xl"
-          style={{ background: theme.stageFloor }}
-        />
-      </div>
-      <div aria-hidden className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
-        <div
-          className="champion-stage-fixture absolute left-4 top-3 h-14 w-14"
-        >
-          <div className="absolute left-1/2 top-0 h-3 w-10 -translate-x-1/2 rounded-full bg-slate-950/14" />
-          <div className="absolute left-1/2 top-2.5 h-5 w-9 -translate-x-1/2 rounded-[10px] border border-white/75 bg-white/78 shadow-[0_12px_26px_rgba(15,23,42,0.12)]" />
-          <div
-            className="champion-stage-source absolute left-1/2 top-6.5 h-7 w-7 -translate-x-1/2 rounded-full border border-white/85 shadow-[0_0_22px_rgba(255,255,255,0.96),0_0_60px_rgba(96,165,250,0.66)]"
-            style={{ background: theme.stageSource }}
-          />
-        </div>
-      </div>
       <div className="relative grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
         <div className="relative z-20">
           {props.kicker ? <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-300">{props.kicker}</p> : null}

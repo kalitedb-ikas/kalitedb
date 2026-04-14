@@ -12,6 +12,7 @@ import {
   reportPeriodSchema,
   representativeSchema,
   teamSchema,
+  userRoleAssignmentSchema,
   userSchema,
   type AgentMetric,
   type AuditMetric,
@@ -852,7 +853,11 @@ async function createFirebaseRepository(): Promise<Repository> {
     },
     async listUserRoles() {
       const snapshot = await db.collection("userRoles").orderBy("email", "asc").get();
-      return snapshot.docs.map((doc) => doc.data() as UserRoleAssignment).sort((left, right) => left.email.localeCompare(right.email));
+      return snapshot.docs
+        .map((doc) => userRoleAssignmentSchema.safeParse(doc.data()))
+        .filter((r): r is { success: true; data: UserRoleAssignment } => r.success)
+        .map((r) => r.data)
+        .sort((left, right) => left.email.localeCompare(right.email));
     },
     async upsertUserRole(input) {
       await db.collection("userRoles").doc(normalizeRoleEmail(input.email)).set(input);
