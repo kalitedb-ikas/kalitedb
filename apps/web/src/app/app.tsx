@@ -22,6 +22,7 @@ import { SalesEvaluationQuestionsPage } from "../pages/sales-evaluation-question
 import { SalesKpiPage } from "../pages/sales-kpi-page";
 import { SalesMeetingsPage } from "../pages/sales-meetings-page";
 import { SalesRepresentativesPage } from "../pages/sales-representatives-page";
+import { SalesSuccessIndexPage } from "../pages/sales-success-index-page";
 
 function LoadingScreen() {
   return (
@@ -82,6 +83,7 @@ function AppRoutes() {
         {/* Satış rotaları */}
         <Route element={<SalesDashboardPage />} path="/sales" />
         <Route element={<SalesKpiPage />} path="/sales/kpi" />
+        <Route element={<SalesSuccessIndexPage />} path="/sales/success-index" />
         <Route element={<SalesAuditPage />} path="/sales/audit" />
         <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
         <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
