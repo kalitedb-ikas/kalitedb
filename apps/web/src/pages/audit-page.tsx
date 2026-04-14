@@ -3,10 +3,9 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users } from "lucide-react";
-import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 
-import { PeriodSelect } from "../components/period-select";
+import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
 import { DataTable } from "../components/data-table";
 import {
@@ -19,6 +18,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
+import { computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { chart } from "../theme/colors";
 
 type AuditAgentRow = {
@@ -34,7 +34,13 @@ const columnHelper = createColumnHelper<AuditAgentRow>();
 
 export function AuditPage() {
   const auth = useAuth();
-  const [searchParams] = useSearchParams();
+  const now = new Date();
+  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+    const prevMonth = now.getMonth();
+    const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
+    const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
+    return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
+  });
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -42,13 +48,22 @@ export function AuditPage() {
     staleTime: 5 * 60 * 1000
   });
   const sortedPeriods = useMemo(
-    () => [...(periodsQuery.data ?? [])].sort((left, right) => left.month.localeCompare(right.month)),
+    () => [...(periodsQuery.data ?? [])].filter((p) => (p.department ?? "cs") === "cs").sort((left, right) => left.month.localeCompare(right.month)),
     [periodsQuery.data]
   );
-  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
+  const { yearPeriods: csYearPeriods } = useMemo(() => derivePeriodRangeSelectors(sortedPeriods, periodRange.year), [sortedPeriods, periodRange.year]);
+  const defaultPeriod = useMemo(() => {
+    const prevMonth = `${now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()}-${String(now.getMonth() === 0 ? 12 : now.getMonth()).padStart(2, "0")}`;
+    return csYearPeriods.find((p) => p.month === prevMonth) ?? selectDefaultReportPeriod(csYearPeriods);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [csYearPeriods]);
+  const monthlyPeriodId = csYearPeriods.some((p) => p.id === periodRange.monthPeriodId) ? periodRange.monthPeriodId : defaultPeriod?.id;
+  useEffect(() => { if (!periodRange.monthPeriodId && defaultPeriod?.id) setPeriodRange((prev) => ({ ...prev, monthPeriodId: defaultPeriod.id })); }, [defaultPeriod?.id, periodRange.monthPeriodId]);
+  const activePeriodIds = useMemo(() => computeActivePeriodIds(csYearPeriods, { ...periodRange, monthPeriodId: monthlyPeriodId }), [periodRange, monthlyPeriodId, csYearPeriods]);
+  const periodId = activePeriodIds.length > 0 ? activePeriodIds[activePeriodIds.length - 1] : undefined;
   const selectedPeriod = periodsQuery.data?.find((period) => period.id === periodId);
   const selectedYear = selectedPeriod?.month.slice(0, 4);
-  const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
+  const compareToPeriodId = undefined;
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
     queryKey: ["dashboard", auth.token, periodId, compareToPeriodId],
@@ -181,15 +196,15 @@ export function AuditPage() {
     };
   }, [currentAudits]);
 
-  /* ── CS dönemleri (yıla göre) ── */
-  const csYearPeriods = useMemo(
+  /* ── CS dönemleri (yıla göre — trend için) ── */
+  const trendYearPeriods = useMemo(
     () =>
       sortedPeriods.filter(
         (p) => (p.department ?? "cs") === "cs" && selectedYear && p.month.startsWith(`${selectedYear}-`)
       ),
     [sortedPeriods, selectedYear]
   );
-  const csYearPeriodIds = useMemo(() => csYearPeriods.map((p) => p.id), [csYearPeriods]);
+  const csYearPeriodIds = useMemo(() => trendYearPeriods.map((p) => p.id), [trendYearPeriods]);
 
   /* ── Toplu audit history ── */
   const auditHistoryBulkQuery = useQuery({
@@ -203,7 +218,7 @@ export function AuditPage() {
   const auditHistory = useMemo(() => {
     if (!auditHistoryMap || !selectedYear) return [];
 
-    const points = csYearPeriods.map((period) => {
+    const points = trendYearPeriods.map((period) => {
       const audits = auditHistoryMap[period.id] ?? [];
       const auditAverage = average(audits.filter((a) => !isAuditSummaryRow(a.agentName)).map((a) => a.auditScore));
       return {
@@ -220,15 +235,15 @@ export function AuditPage() {
       currentPeriodId: periodId,
       points
     });
-  }, [auditHistoryMap, csYearPeriods, periodId, selectedYear]);
+  }, [auditHistoryMap, trendYearPeriods, periodId, selectedYear]);
   const auditHistoryLoading = auditHistoryBulkQuery.isPending;
   const auditHistoryError = auditHistoryBulkQuery.isError;
 
   /* ── Önceki dönem karşılaştırma ── */
   const previousPeriod = useMemo(() => {
-    const idx = csYearPeriods.findIndex((p) => p.id === periodId);
-    return idx > 0 ? csYearPeriods[idx - 1] : undefined;
-  }, [csYearPeriods, periodId]);
+    const idx = trendYearPeriods.findIndex((p) => p.id === periodId);
+    return idx > 0 ? trendYearPeriods[idx - 1] : undefined;
+  }, [trendYearPeriods, periodId]);
   const previousAuditMetrics = previousPeriod && auditHistoryMap ? auditHistoryMap[previousPeriod.id] : undefined;
 
   const performanceShift = useMemo(() => {
@@ -304,7 +319,7 @@ export function AuditPage() {
     const agentMap = new Map<string, string>();
     const agentMonths = new Map<string, (number | null)[]>();
 
-    for (const period of csYearPeriods) {
+    for (const period of trendYearPeriods) {
       const monthIdx = Number(period.month.split("-")[1]) - 1;
       const audits = auditHistoryMap[period.id] ?? [];
 
@@ -325,7 +340,7 @@ export function AuditPage() {
         months: agentMonths.get(key) ?? Array(12).fill(null)
       }))
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
-  }, [auditHistoryMap, csYearPeriods, selectedYear]);
+  }, [auditHistoryMap, trendYearPeriods, selectedYear]);
 
   /* ── Aylık role-play pivot tablosu (toplam) ── */
   const columns: ColumnDef<AuditAgentRow, any>[] = [
@@ -346,7 +361,7 @@ export function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Audit" actions={<PeriodSelect />} />
+      <PageHeader title="Audit" actions={<PeriodRangeFilter onChange={setPeriodRange} periods={sortedPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />} />
 
       {snapshot ? (
         <>

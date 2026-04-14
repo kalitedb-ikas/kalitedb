@@ -1,14 +1,15 @@
 import { resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import { SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
+import { computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
-import { PeriodSelect } from "../components/period-select";
+import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { RepresentativeSelect } from "../components/representative-select";
 import { BadgePill, TimelineDisplay } from "../components/representative-detail-modal";
 import { useActiveRepresentativeKeys } from "../lib/use-active-representatives";
@@ -94,14 +95,31 @@ function resolveSuccessState(value: number | null | undefined) {
 export function RepresentativesPage() {
   const auth = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const now = new Date();
+  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+    const prevMonth = now.getMonth();
+    const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
+    const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
+    return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
+  });
   const datasetTypes = ["agent-metrics", "audit-metrics"] as const;
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
     queryFn: () => api.getPeriods(auth.token),
     staleTime: 5 * 60 * 1000
   });
-  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
-  const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
+  const csPeriods = useMemo(() => [...(periodsQuery.data ?? [])].filter((p) => (p.department ?? "cs") === "cs").sort((a, b) => a.month.localeCompare(b.month)), [periodsQuery.data]);
+  const { yearPeriods: csYearPeriods } = useMemo(() => derivePeriodRangeSelectors(csPeriods, periodRange.year), [csPeriods, periodRange.year]);
+  const defaultPeriod = useMemo(() => {
+    const prevMonth = `${now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()}-${String(now.getMonth() === 0 ? 12 : now.getMonth()).padStart(2, "0")}`;
+    return csYearPeriods.find((p) => p.month === prevMonth) ?? selectDefaultReportPeriod(csYearPeriods);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [csYearPeriods]);
+  const monthlyPeriodId = csYearPeriods.some((p) => p.id === periodRange.monthPeriodId) ? periodRange.monthPeriodId : defaultPeriod?.id;
+  useEffect(() => { if (!periodRange.monthPeriodId && defaultPeriod?.id) setPeriodRange((prev) => ({ ...prev, monthPeriodId: defaultPeriod.id })); }, [defaultPeriod?.id, periodRange.monthPeriodId]);
+  const activePeriodIds = useMemo(() => computeActivePeriodIds(csYearPeriods, { ...periodRange, monthPeriodId: monthlyPeriodId }), [periodRange, monthlyPeriodId, csYearPeriods]);
+  const periodId = activePeriodIds.length > 0 ? activePeriodIds[activePeriodIds.length - 1] : undefined;
+  const compareToPeriodId = undefined;
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
     queryKey: ["dashboard", auth.token, periodId, compareToPeriodId, datasetTypes.join(",")],
@@ -202,7 +220,7 @@ export function RepresentativesPage() {
         title="Temsilci bazlı rapor"
         actions={
           <div className="flex items-center gap-2">
-            <PeriodSelect />
+            <PeriodRangeFilter onChange={setPeriodRange} periods={csPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />
             <RepresentativeSelect
               options={representatives.map((item) => ({ key: item.agentKey, label: item.agentName }))}
               value={selectedRepresentative?.agentKey ?? ""}
