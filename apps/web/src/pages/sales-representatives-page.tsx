@@ -371,6 +371,77 @@ export function SalesRepresentativesPage() {
     }
   }, [isTopInAnyMetric, selectedRepresentative, fireConfetti]);
 
+  /* ── Metrik sıralamaları ve modal ── */
+  type MetricDef = { key: string; label: string; getValue: (a: SalesKpiAgent) => number | null | undefined; format: (v: number) => string };
+  const metricDefs: MetricDef[] = useMemo(() => [
+    { key: "salesAmount", label: "Satış tutarı", getValue: (a) => a.salesAmount, format: formatTryCurrency },
+    { key: "licenseCount", label: "Lisans adedi", getValue: (a) => a.licenseCount, format: (v) => formatNumber(v) },
+    { key: "perfScore", label: "Perf. değerlendirme", getValue: (a) => a.perfScore, format: (v) => formatNumber(v, 1) },
+    { key: "conversionRate", label: "Dönüşüm oranı", getValue: (a) => a.conversionRate, format: (v) => formatPercent(v) },
+    { key: "callAttempts", label: "Arama girişimi", getValue: (a) => a.callAttempts, format: (v) => formatNumber(v) },
+    { key: "talkDurationSeconds", label: "Konuşma süresi", getValue: (a) => a.talkDurationSeconds, format: formatHms },
+    { key: "avgLicensePrice", label: "Ort. lisans fiyatı", getValue: (a) => a.avgLicensePrice, format: formatTryCurrency },
+    { key: "scaleCount", label: "Scale 2+1", getValue: (a) => a.scaleCount, format: (v) => formatNumber(v) },
+    { key: "scalePlusCount", label: "Scale+ 2+1", getValue: (a) => a.scalePlusCount, format: (v) => formatNumber(v) },
+    { key: "scaleConversion", label: "Scale %", getValue: (a) => a.scaleConversion, format: (v) => formatPercent(v) },
+    { key: "scalePlusConversion", label: "Scale+ %", getValue: (a) => a.scalePlusConversion, format: (v) => formatPercent(v) },
+    { key: "totalConversion", label: "Toplam dönüşüm %", getValue: (a) => a.totalConversion, format: (v) => formatPercent(v) },
+  ], []);
+
+  const metricRankMap = useMemo(() => {
+    const map: Record<string, { rank: number; total: number } | null> = {};
+    if (!selectedRepresentative || kpiAgents.length < 2) return map;
+    const key = selectedRepresentative.agentKey;
+    for (const def of metricDefs) {
+      const valid = kpiAgents.filter((a) => def.getValue(a) != null);
+      if (valid.length < 2) { map[def.key] = null; continue; }
+      const sorted = [...valid].sort((a, b) => (def.getValue(b) as number) - (def.getValue(a) as number));
+      const idx = sorted.findIndex((a) => a.agentKey === key);
+      map[def.key] = idx >= 0 ? { rank: idx + 1, total: sorted.length } : null;
+    }
+    // Audit
+    const validAudit = auditMetrics.filter((a) => a.auditScore != null);
+    if (validAudit.length >= 2) {
+      const sorted = [...validAudit].sort((a, b) => (b.auditScore ?? 0) - (a.auditScore ?? 0));
+      const idx = sorted.findIndex((a) => a.agentKey === selectedRepresentative.agentKey);
+      map["auditScore"] = idx >= 0 ? { rank: idx + 1, total: sorted.length } : null;
+    }
+    return map;
+  }, [selectedRepresentative, kpiAgents, auditMetrics, metricDefs]);
+
+  const topMetricLabels = useMemo(() => {
+    const labels: string[] = [];
+    for (const def of metricDefs) {
+      if (metricRankMap[def.key]?.rank === 1) labels.push(def.label);
+    }
+    if (metricRankMap["auditScore"]?.rank === 1) labels.push("Audit skoru");
+    return labels;
+  }, [metricDefs, metricRankMap]);
+
+  const [rankingModalMetric, setRankingModalMetric] = useState<string | null>(null);
+
+  const rankingModalData = useMemo(() => {
+    if (!rankingModalMetric) return null;
+    if (rankingModalMetric === "auditScore") {
+      const valid = auditMetrics.filter((a) => a.auditScore != null);
+      return {
+        label: "Audit skoru",
+        rows: [...valid]
+          .sort((a, b) => (b.auditScore ?? 0) - (a.auditScore ?? 0))
+          .map((a, i) => ({ rank: i + 1, agentKey: a.agentKey, name: a.agentName, value: formatNumber(a.auditScore!, 1) }))
+      };
+    }
+    const def = metricDefs.find((d) => d.key === rankingModalMetric);
+    if (!def) return null;
+    const valid = kpiAgents.filter((a) => def.getValue(a) != null);
+    return {
+      label: def.label,
+      rows: [...valid]
+        .sort((a, b) => (def.getValue(b) as number) - (def.getValue(a) as number))
+        .map((a, i) => ({ rank: i + 1, agentKey: a.agentKey, name: a.agentName, value: def.format(def.getValue(a) as number) }))
+    };
+  }, [rankingModalMetric, kpiAgents, auditMetrics, metricDefs]);
+
   /* ── Grafik 1: Aylik Satis Trendi — coklu donem verisi ── */
   const last6Periods = useMemo(
     () =>
@@ -525,8 +596,14 @@ export function SalesRepresentativesPage() {
                   <div className="space-y-4">
                     <div>
                       <h2 className="font-display text-2xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100">{selectedName}</h2>
-                      {selectedRank === 1 && selectedKpi?.salesAmount != null ? (
-                        <p className={`mt-1 text-sm font-semibold ${selectedState.accentClass}`}>En yüksek performans</p>
+                      {topMetricLabels.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {topMetricLabels.map((label) => (
+                            <span key={label} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                              <span className="text-amber-500">&#9733;</span> {label} birincisi
+                            </span>
+                          ))}
+                        </div>
                       ) : null}
                       {selectedBadges.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
@@ -536,54 +613,24 @@ export function SalesRepresentativesPage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Perf. Değ.</p>
-                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
-                          {formatOrNa(selectedKpi?.perfScore, (v) => formatNumber(v, 1))}
-                        </p>
-                      </div>
-                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Satış Tutarı</p>
-                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
-                          {formatOrNa(selectedKpi?.salesAmount, formatTryCurrency)}
-                        </p>
-                      </div>
-                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Lisans</p>
-                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
-                          {formatOrNa(selectedKpi?.licenseCount, (v) => formatNumber(v))}
-                        </p>
-                      </div>
-                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Konuşma</p>
-                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
-                          {formatOrNa(selectedKpi?.talkDurationSeconds, formatHms)}
-                        </p>
-                      </div>
-                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Dönüşüm</p>
-                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
-                          {formatOrNa(selectedKpi?.conversionRate, (v) => formatPercent(v))}
-                        </p>
-                      </div>
-                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Scale 2+1</p>
-                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
-                          {formatOrNa(selectedKpi?.scaleCount, (v) => formatNumber(v))}
-                        </p>
-                      </div>
-                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Scale+ 2+1</p>
-                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
-                          {formatOrNa(selectedKpi?.scalePlusCount, (v) => formatNumber(v))}
-                        </p>
-                      </div>
-                      <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-600/40 dark:bg-slate-800/60">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Toplam %</p>
-                        <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">
-                          {formatOrNa(selectedKpi?.totalConversion, (v) => formatPercent(v))}
-                        </p>
-                      </div>
+                      {([
+                        { metricKey: "perfScore", label: "Perf. Değ.", value: formatOrNa(selectedKpi?.perfScore, (v) => formatNumber(v, 1)) },
+                        { metricKey: "salesAmount", label: "Satış Tutarı", value: formatOrNa(selectedKpi?.salesAmount, formatTryCurrency) },
+                        { metricKey: "licenseCount", label: "Lisans", value: formatOrNa(selectedKpi?.licenseCount, (v) => formatNumber(v)) },
+                        { metricKey: "talkDurationSeconds", label: "Konuşma", value: formatOrNa(selectedKpi?.talkDurationSeconds, formatHms) },
+                        { metricKey: "conversionRate", label: "Dönüşüm", value: formatOrNa(selectedKpi?.conversionRate, (v) => formatPercent(v)) },
+                        { metricKey: "scaleCount", label: "Scale 2+1", value: formatOrNa(selectedKpi?.scaleCount, (v) => formatNumber(v)) },
+                        { metricKey: "scalePlusCount", label: "Scale+ 2+1", value: formatOrNa(selectedKpi?.scalePlusCount, (v) => formatNumber(v)) },
+                        { metricKey: "totalConversion", label: "Toplam %", value: formatOrNa(selectedKpi?.totalConversion, (v) => formatPercent(v)) },
+                      ] as const).map((card) => (
+                        <RankedMetricCard
+                          key={card.metricKey}
+                          label={card.label}
+                          value={card.value}
+                          rank={metricRankMap[card.metricKey]}
+                          onClick={() => setRankingModalMetric(card.metricKey)}
+                        />
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -857,7 +904,62 @@ export function SalesRepresentativesPage() {
           <p className="text-sm text-slate-600 dark:text-slate-400">Seçilen dönemde gösterilecek temsilci verisi bulunamadı.</p>
         )}
       </SectionCard>
+
+      {rankingModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setRankingModalMetric(null)}>
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-600 dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{rankingModalData.label} sıralaması</h3>
+              <button className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300" onClick={() => setRankingModalMetric(null)} type="button">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <ul className="mt-4 max-h-80 space-y-1.5 overflow-y-auto">
+              {rankingModalData.rows.map((row) => (
+                <li
+                  key={row.agentKey}
+                  className={[
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm",
+                    row.agentKey === selectedRepresentative?.agentKey
+                      ? "bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/40 font-semibold text-slate-900 dark:text-slate-100"
+                      : "text-slate-700 dark:text-slate-300"
+                  ].join(" ")}
+                >
+                  <span className={[
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                    row.rank === 1 ? "bg-amber-400 text-white" : row.rank === 2 ? "bg-slate-300 dark:bg-slate-500 text-white" : row.rank === 3 ? "bg-amber-700 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                  ].join(" ")}>{row.rank}</span>
+                  <span className="flex-1 truncate">{row.name}</span>
+                  <span className="tabular-nums font-semibold">{row.value}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function RankedMetricCard(props: { label: string; value: string; rank: { rank: number; total: number } | null | undefined; onClick: () => void }) {
+  const r = props.rank;
+  return (
+    <button
+      className="group relative rounded-[10px] border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-left transition hover:border-slate-300 hover:shadow-sm dark:border-slate-600/40 dark:bg-slate-800/60 dark:hover:border-slate-500/60"
+      onClick={props.onClick}
+      type="button"
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{props.label}</p>
+        {r ? (
+          <span className={[
+            "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none",
+            r.rank === 1 ? "bg-amber-400 text-white" : r.rank === 2 ? "bg-slate-300 dark:bg-slate-500 text-white" : r.rank === 3 ? "bg-amber-700 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+          ].join(" ")}>#{r.rank}</span>
+        ) : null}
+      </div>
+      <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">{props.value}</p>
+    </button>
   );
 }
 
