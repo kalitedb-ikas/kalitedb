@@ -296,19 +296,14 @@ export function SalesRepresentativesPage() {
     () =>
       representatives
         .map((item) => {
-          const audit = auditMetrics.find((record) => record.agentKey === item.agentKey) ?? null;
           const kpi = kpiAgents.find((record) => record.agentKey === item.agentKey) ?? null;
           return {
             agentKey: item.agentKey,
-            successIndex: computeSalesSuccessIndex({
-              auditScore: audit?.auditScore,
-              perfScore: kpi?.perfScore,
-              conversionRate: kpi?.conversionRate
-            })
+            salesAmount: kpi?.salesAmount ?? null
           };
         })
-        .sort((left, right) => (right.successIndex ?? -1) - (left.successIndex ?? -1)),
-    [auditMetrics, kpiAgents, representatives]
+        .sort((left, right) => (right.salesAmount ?? -1) - (left.salesAmount ?? -1)),
+    [kpiAgents, representatives]
   );
 
   const selectedRank =
@@ -333,12 +328,13 @@ export function SalesRepresentativesPage() {
     if (
       selectedRank === 1 &&
       selectedRepresentative &&
+      selectedKpi?.salesAmount != null &&
       !confettiFiredRef.current.has(selectedRepresentative.agentKey)
     ) {
       confettiFiredRef.current.add(selectedRepresentative.agentKey);
       fireConfetti();
     }
-  }, [selectedRank, selectedRepresentative, fireConfetti]);
+  }, [selectedRank, selectedRepresentative, selectedKpi?.salesAmount, fireConfetti]);
 
   /* ── Grafik 1: Aylik Satis Trendi — coklu donem verisi ── */
   const last6Periods = useMemo(
@@ -494,7 +490,7 @@ export function SalesRepresentativesPage() {
                   <div className="space-y-4">
                     <div>
                       <h2 className="font-display text-2xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100">{selectedName}</h2>
-                      {selectedRank === 1 ? (
+                      {selectedRank === 1 && selectedKpi?.salesAmount != null ? (
                         <p className={`mt-1 text-sm font-semibold ${selectedState.accentClass}`}>En yüksek performans</p>
                       ) : null}
                       {selectedBadges.length > 0 && (
