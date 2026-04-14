@@ -2,7 +2,8 @@ import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared"
 import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import confetti from "canvas-confetti";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CartesianGrid,
@@ -314,6 +315,30 @@ export function SalesRepresentativesPage() {
     selectedRepresentative == null
       ? null
       : representativeRanking.findIndex((item) => item.agentKey === selectedRepresentative.agentKey) + 1 || null;
+
+  /* ── Confetti: #1 temsilci detayı açıldığında bir kereye mahsus patlar ── */
+  const confettiFiredRef = useRef<Set<string>>(new Set());
+
+  const fireConfetti = useCallback(() => {
+    const end = Date.now() + 2500;
+    const frame = () => {
+      confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0, y: 0.6 } });
+      confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1, y: 0.6 } });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  }, []);
+
+  useEffect(() => {
+    if (
+      selectedRank === 1 &&
+      selectedRepresentative &&
+      !confettiFiredRef.current.has(selectedRepresentative.agentKey)
+    ) {
+      confettiFiredRef.current.add(selectedRepresentative.agentKey);
+      fireConfetti();
+    }
+  }, [selectedRank, selectedRepresentative, fireConfetti]);
 
   /* ── Grafik 1: Aylik Satis Trendi — coklu donem verisi ── */
   const last6Periods = useMemo(
