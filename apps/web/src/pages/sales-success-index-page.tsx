@@ -399,7 +399,8 @@ export function SalesSuccessIndexPage() {
   const isLoading = periodsQuery.isPending || kpiQuery.isPending;
   const hasData = agents.length > 0;
 
-  const [showPodium, setShowPodium] = useState(false);
+  const [showPodium, setShowPodium] = useState(true);
+  const podiumConfettiFired = useRef(false);
   const top3 = useMemo(() => {
     const scored = [...rows].sort((a, b) => b.score - a.score);
     return scored.slice(0, 3);
@@ -408,12 +409,19 @@ export function SalesSuccessIndexPage() {
   const firePodiumConfetti = useCallback(() => {
     const end = Date.now() + 3000;
     const frame = () => {
-      confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, zIndex: 9999 });
-      confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, zIndex: 9999 });
+      confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0, y: 0.5 } });
+      confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1, y: 0.5 } });
       if (Date.now() < end) requestAnimationFrame(frame);
     };
     frame();
   }, []);
+
+  useEffect(() => {
+    if (showPodium && top3.length >= 3 && top3[0]!.score > 0 && !podiumConfettiFired.current) {
+      podiumConfettiFired.current = true;
+      setTimeout(firePodiumConfetti, 500);
+    }
+  }, [showPodium, top3, firePodiumConfetti]);
 
   const tdCls = "px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap";
   const tdCenterCls = "px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap text-center";
@@ -435,10 +443,10 @@ export function SalesSuccessIndexPage() {
         title="Başarı Endeksi"
         actions={
           <div className="flex items-center gap-2">
-            {hasData && top3.length >= 3 ? (
+            {hasData && !showPodium && top3.length >= 3 ? (
               <button
                 className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-gradient-to-r from-amber-50 to-amber-100 px-4 py-2 text-sm font-semibold text-amber-800 shadow-sm transition hover:shadow-md hover:from-amber-100 hover:to-amber-200 dark:border-amber-600 dark:from-amber-900/40 dark:to-amber-800/40 dark:text-amber-300 dark:hover:from-amber-900/60 dark:hover:to-amber-800/60"
-                onClick={() => { setShowPodium(true); setTimeout(firePodiumConfetti, 400); }}
+                onClick={() => { setShowPodium(true); podiumConfettiFired.current = false; }}
                 type="button"
               >
                 <Trophy size={15} /> Podyum
@@ -462,7 +470,7 @@ export function SalesSuccessIndexPage() {
           <p className="text-sm text-slate-600 dark:text-slate-400">Seçilen dönem için başarı endeksi verisi bulunamadı.</p>
         </SurfaceCard>
       ) : (
-        <SurfaceCard variant="default">
+        <SurfaceCard variant="default" className={showPodium && top3.length >= 3 && top3[0]!.score > 0 ? "pointer-events-none select-none blur-[2px] opacity-50 transition-all duration-500" : "transition-all duration-500"}>
           <div className="-m-5 overflow-x-auto sm:-m-6">
             <table className="min-w-full">
               <thead>
@@ -585,58 +593,29 @@ export function SalesSuccessIndexPage() {
         </SurfaceCard>
       )}
 
-      {/* ── Podyum Modal ── */}
-      {showPodium && top3.length >= 3 ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
-          onClick={() => setShowPodium(false)}
-        >
-          <div className="relative mx-4 w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
-            {/* Kapatma butonu */}
-            <button
-              className="absolute -top-2 right-0 z-10 rounded-full bg-white/90 p-2 text-slate-500 shadow-lg transition hover:bg-white hover:text-slate-800 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
-              onClick={() => setShowPodium(false)}
-              type="button"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+      {/* ── Podyum (inline, tablonun üstünde) ── */}
+      {showPodium && hasData && top3.length >= 3 && top3[0]!.score > 0 ? (
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/60 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-10 shadow-xl dark:border-slate-700/40">
+          {/* Kapatma butonu */}
+          <button
+            className="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white/60 transition hover:bg-white/20 hover:text-white"
+            onClick={() => setShowPodium(false)}
+            type="button"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
 
-            {/* Başlık */}
-            <div className="mb-8 text-center">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-400">{monthLabel}</p>
-              <h2 className="mt-1 font-display text-3xl font-bold tracking-tight text-white">Başarı Endeksi</h2>
-            </div>
+          {/* Başlık */}
+          <div className="mb-8 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-400/80">{monthLabel}</p>
+            <h2 className="mt-1 font-display text-2xl font-bold tracking-tight text-white">Başarı Endeksi Podyumu</h2>
+          </div>
 
-            {/* Podyum */}
-            <div className="flex items-end justify-center gap-4">
-              {/* 2. — Sol */}
-              <PodiumCard
-                rank={2}
-                name={top3[1]!.agentName}
-                score={top3[1]!.score}
-                photo={getRepresentativePhotoSrc(top3[1]!.agentName)}
-                height="h-44"
-                delay="animation-delay-200"
-              />
-              {/* 1. — Orta */}
-              <PodiumCard
-                rank={1}
-                name={top3[0]!.agentName}
-                score={top3[0]!.score}
-                photo={getRepresentativePhotoSrc(top3[0]!.agentName)}
-                height="h-56"
-                delay="animation-delay-0"
-              />
-              {/* 3. — Sağ */}
-              <PodiumCard
-                rank={3}
-                name={top3[2]!.agentName}
-                score={top3[2]!.score}
-                photo={getRepresentativePhotoSrc(top3[2]!.agentName)}
-                height="h-36"
-                delay="animation-delay-400"
-              />
-            </div>
+          {/* Podyum */}
+          <div className="flex items-end justify-center gap-3 sm:gap-5">
+            <PodiumCard rank={2} name={top3[1]!.agentName} score={top3[1]!.score} photo={getRepresentativePhotoSrc(top3[1]!.agentName)} height="h-36" />
+            <PodiumCard rank={1} name={top3[0]!.agentName} score={top3[0]!.score} photo={getRepresentativePhotoSrc(top3[0]!.agentName)} height="h-48" />
+            <PodiumCard rank={3} name={top3[2]!.agentName} score={top3[2]!.score} photo={getRepresentativePhotoSrc(top3[2]!.agentName)} height="h-28" />
           </div>
         </div>
       ) : null}
@@ -682,7 +661,6 @@ function PodiumCard(props: {
   score: number;
   photo: string | null;
   height: string;
-  delay: string;
 }) {
   const theme = podiumThemes[props.rank];
   const initials = props.name
