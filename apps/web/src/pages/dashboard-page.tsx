@@ -12,22 +12,28 @@ import {
 } from "@kalitedb/ui";
 import { resolveThresholdTone, selectDefaultReportPeriod } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { PeriodSelect } from "../components/period-select";
-import { useSearchParams } from "react-router-dom";
+import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatDelta, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
+import { computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { brand, chart } from "../theme/colors";
 
 const TREND_DATASET_TYPES = ["agent-metrics", "audit-metrics"] as const;
 
 export function DashboardPage() {
   const auth = useAuth();
-  const [searchParams] = useSearchParams();
+  const now = new Date();
+  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+    const prevMonth = now.getMonth();
+    const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
+    const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
+    return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
+  });
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -35,8 +41,38 @@ export function DashboardPage() {
     staleTime: 5 * 60 * 1000
   });
 
-  const periodId = searchParams.get("periodId") ?? selectDefaultReportPeriod(periodsQuery.data ?? [])?.id;
-  const compareToPeriodId = searchParams.get("compareToPeriodId") ?? undefined;
+  const csPeriods = useMemo(
+    () => [...(periodsQuery.data ?? [])].filter((p) => (p.department ?? "cs") === "cs").sort((a, b) => a.month.localeCompare(b.month)),
+    [periodsQuery.data]
+  );
+
+  const { yearPeriods: csYearPeriods } = useMemo(
+    () => derivePeriodRangeSelectors(csPeriods, periodRange.year),
+    [csPeriods, periodRange.year]
+  );
+
+  const defaultPeriod = useMemo(() => {
+    const prevMonth = `${now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()}-${String(now.getMonth() === 0 ? 12 : now.getMonth()).padStart(2, "0")}`;
+    return csYearPeriods.find((p) => p.month === prevMonth) ?? selectDefaultReportPeriod(csYearPeriods);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [csYearPeriods]);
+
+  const monthlyPeriodId = csYearPeriods.some((p) => p.id === periodRange.monthPeriodId) ? periodRange.monthPeriodId : defaultPeriod?.id;
+
+  useEffect(() => {
+    if (!periodRange.monthPeriodId && defaultPeriod?.id) {
+      setPeriodRange((prev) => ({ ...prev, monthPeriodId: defaultPeriod.id }));
+    }
+  }, [defaultPeriod?.id, periodRange.monthPeriodId]);
+
+  const activePeriodIds = useMemo(
+    () => computeActivePeriodIds(csYearPeriods, { ...periodRange, monthPeriodId: monthlyPeriodId }),
+    [periodRange, monthlyPeriodId, csYearPeriods]
+  );
+
+  // Dashboard tek dönem gösterir; çeyreklik/yıllıkta en güncel dönemi kullan
+  const periodId = activePeriodIds.length > 0 ? activePeriodIds[activePeriodIds.length - 1] : undefined;
+  const compareToPeriodId = undefined;
 
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
@@ -50,15 +86,7 @@ export function DashboardPage() {
   const selectedPeriod = periodsQuery.data?.find((period) => period.id === periodId);
   const selectedYear = selectedPeriod?.month.slice(0, 4);
 
-  const yearPeriods = useMemo(
-    () =>
-      selectedYear
-        ? (periodsQuery.data ?? [])
-            .filter((period) => period.month.startsWith(`${selectedYear}-`))
-            .sort((left, right) => left.month.localeCompare(right.month))
-        : [],
-    [periodsQuery.data, selectedYear]
-  );
+  const yearPeriods = csYearPeriods;
 
   const yearlyTrendQuery = useQuery({
     enabled: yearPeriods.length > 0,
@@ -108,7 +136,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader className="dash-section" title="Genel Bakış" actions={<PeriodSelect />} />
+      <PageHeader className="dash-section" title="Genel Bakış" actions={<PeriodRangeFilter onChange={setPeriodRange} periods={csPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />} />
 
       {snapshot ? (
         <>
