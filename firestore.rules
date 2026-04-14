@@ -187,6 +187,12 @@ service cloud.firestore {
       allow create, update, delete: if canManageReports() || (isQuality() && (hasDepartmentAccess('sales') || hasDepartmentAccess('cs')));
     }
 
+    // Başarı endeksi manuel girişleri
+    match /reportPeriods/{periodId}/successIndexEntries/{agentKey} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canEnterData() || canManageDepartmentData('sales');
+    }
+
     // İçe aktarma işleri
     match /importJobs/{jobId} {
       allow get, list: if canManageReports();

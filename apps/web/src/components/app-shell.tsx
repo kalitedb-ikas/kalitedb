@@ -45,6 +45,7 @@ const csNavigation: NavigationItem[] = [
 const salesNavigation: NavigationItem[] = [
   { label: "Genel Bakış", to: "/sales", icon: Gauge },
   { label: "KPI", to: "/sales/kpi", icon: Target },
+  { label: "Başarı Endeksi", to: "/sales/success-index", icon: Sparkles },
   { label: "Performans Değerlendirme", to: "/sales/audit", icon: ClipboardList },
   { label: "Değerlendirme Soruları", to: "/sales/evaluation-questions", icon: FileQuestion },
   { label: "Satış Toplantıları", to: "/sales/meetings", icon: Handshake },
