@@ -424,6 +424,16 @@ body {
 .dash-delay-3 { animation-delay: 0.20s; }
 .dash-delay-4 { animation-delay: 0.30s; }
 
+@keyframes podiumRise {
+  0% { opacity: 0; transform: translateY(80px) scale(0.9); }
+  60% { opacity: 1; transform: translateY(-8px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-podium-rise {
+  animation: podiumRise 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
 .trend-value-label {
   display: none;
   pointer-events: none;
