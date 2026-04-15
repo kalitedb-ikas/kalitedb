@@ -36,7 +36,7 @@ function LoadingScreen() {
 }
 
 function canAccessAdmin(currentUser: AuthenticatedUser | undefined) {
-  return Boolean(currentUser);
+  return Boolean(currentUser) && currentUser?.role !== "viewer";
 }
 
 function AppRoutes() {
