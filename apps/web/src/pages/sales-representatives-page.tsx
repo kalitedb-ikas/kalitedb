@@ -334,7 +334,10 @@ export function SalesRepresentativesPage() {
   );
 
   const topPerformerKey = representativeRanking[0]?.salesAmount != null ? representativeRanking[0].agentKey : null;
-  const selectedAgentKey = searchParams.get("agentKey") ?? topPerformerKey ?? representatives[0]?.agentKey;
+  const rawId = searchParams.get("id");
+  const legacyKey = searchParams.get("agentKey");
+  const decodedKey = rawId ? (() => { try { return atob(rawId); } catch { return null; } })() : null;
+  const selectedAgentKey = decodedKey ?? legacyKey ?? topPerformerKey ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
   const selectedAudit = auditMetrics.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
   const selectedKpi: SalesKpiAgent | null = kpiAgents.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
@@ -659,7 +662,8 @@ export function SalesRepresentativesPage() {
 
   const handleRepresentativeChange = (agentKey: string) => {
     const next = new URLSearchParams(searchParams);
-    next.set("agentKey", agentKey);
+    next.set("id", btoa(agentKey));
+    next.delete("agentKey");
     setSearchParams(next);
   };
 

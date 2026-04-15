@@ -163,7 +163,10 @@ export function RepresentativesPage() {
       }));
   }, [activeKeys, auditMetrics, repsQuery.data, snapshot]);
 
-  const selectedAgentKey = searchParams.get("agentKey") ?? representatives[0]?.agentKey;
+  const rawId = searchParams.get("id");
+  const legacyKey = searchParams.get("agentKey");
+  const decodedKey = rawId ? (() => { try { return atob(rawId); } catch { return null; } })() : null;
+  const selectedAgentKey = decodedKey ?? legacyKey ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
   const selectedAgent =
     snapshot?.datasets.agentMetrics.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
@@ -211,7 +214,8 @@ export function RepresentativesPage() {
 
   const handleRepresentativeChange = (agentKey: string) => {
     const next = new URLSearchParams(searchParams);
-    next.set("agentKey", agentKey);
+    next.set("id", btoa(agentKey));
+    next.delete("agentKey");
     setSearchParams(next);
   };
 
