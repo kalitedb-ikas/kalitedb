@@ -402,19 +402,19 @@ export function SalesComparePage() {
       >
         {/* Seçiciler: her tarafta temsilci + dönem */}
         <div className="mb-6 grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700/40 dark:bg-slate-800/30">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Sol</span>
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="space-y-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700/40 dark:bg-slate-800/30">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Sol</span>
               <RepresentativeSelect options={selectOptions} value={keyA} onChange={(k) => setKey("a", k)} placeholder="Temsilci seçin" />
-              <PeriodRangeFilter onChange={setPeriodRangeA} periods={salesPeriods} value={{ ...periodRangeA, monthPeriodId: sideA.periodId }} />
             </div>
+            <PeriodRangeFilter onChange={setPeriodRangeA} periods={salesPeriods} value={{ ...periodRangeA, monthPeriodId: sideA.periodId }} />
           </div>
-          <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700/40 dark:bg-slate-800/30">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Sağ</span>
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="space-y-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-700/40 dark:bg-slate-800/30">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Sağ</span>
               <RepresentativeSelect options={selectOptions} value={keyB} onChange={(k) => setKey("b", k)} placeholder="Temsilci seçin" />
-              <PeriodRangeFilter onChange={setPeriodRangeB} periods={salesPeriods} value={{ ...periodRangeB, monthPeriodId: sideB.periodId }} />
             </div>
+            <PeriodRangeFilter onChange={setPeriodRangeB} periods={salesPeriods} value={{ ...periodRangeB, monthPeriodId: sideB.periodId }} />
           </div>
         </div>
 
