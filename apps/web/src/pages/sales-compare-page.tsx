@@ -2,6 +2,7 @@ import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared"
 import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { SectionCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
+import { collection, getDocs } from "firebase/firestore";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -17,6 +18,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { useDarkMode } from "../lib/use-dark-mode";
 import { api } from "../lib/api";
+import { firebaseDb } from "../lib/firebase";
 import { formatNumber, formatPercent, parseTalkDurationLabelToSeconds } from "../lib/format";
 import { brand, chartTooltipLight, chartTooltipDark } from "../theme/colors";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -45,22 +47,83 @@ function formatHms(secs: number) {
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function computeSalesSuccessIndex(params: {
-  auditScore: number | null | undefined;
-  perfScore: number | null | undefined;
-  conversionRate: number | null | undefined;
-}) {
-  const metrics: number[] = [];
-  if (params.auditScore != null) metrics.push(params.auditScore);
-  if (params.perfScore != null) metrics.push(params.perfScore);
-  if (params.conversionRate != null) metrics.push(params.conversionRate);
-  return metrics.length === 0 ? null : metrics.reduce((s, v) => s + v, 0) / metrics.length;
+/* ── Başarı Endeksi hesaplaması (sales-success-index-page ile aynı) ── */
+
+const WEIGHTS = {
+  satisTutari: 0.425,
+  satisAdedi: 0.10,
+  audit: 0.10,
+  acv: 0.05,
+  hubspot: 0.10,
+  outbound: 0.05,
+  dokunulan: 0.05,
+  konusma: 0.05,
+  twoplus: 0.025,
+  premOn: 0.05,
+  domain: 0.025,
+} as const;
+
+function safeDiv(val: number, max: number): number {
+  return max === 0 ? 0 : val / max;
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
+type ManualEntry = { hubspot: number; outbound: number; premOn: number; domain: number };
+
+type SuccessRow = {
+  agentKey: string;
+  salesAmount: number;
+  licenseCount: number;
+  auditScore: number | null;
+  callAttempts: number;
+  talkDurationSeconds: number;
+  avgSalesAmount: number;
+  hubspot: number;
+  outbound: number;
+  total21: number;
+  twoplusRatio: number;
+  premOn: number;
+  domain: number;
+  score: number;
+};
+
+function computeScores(rows: SuccessRow[]): void {
+  const max = (fn: (r: SuccessRow) => number) => rows.reduce((m, r) => Math.max(m, fn(r)), 0);
+
+  const maxSatis = max((r) => r.salesAmount);
+  const maxAdedi = max((r) => r.licenseCount);
+  const maxAudit = max((r) => r.auditScore ?? 0);
+  const maxDokunulan = max((r) => r.callAttempts);
+  const maxKonusma = max((r) => r.talkDurationSeconds);
+  const maxAcv = max((r) => r.avgSalesAmount);
+  const maxOutbound = max((r) => r.outbound);
+  const maxPremOn = max((r) => r.premOn);
+  const maxDomain = max((r) => r.domain);
+
+  for (const r of rows) {
+    r.score =
+      safeDiv(r.salesAmount, maxSatis) * WEIGHTS.satisTutari +
+      safeDiv(r.licenseCount, maxAdedi) * WEIGHTS.satisAdedi +
+      safeDiv(r.auditScore ?? 0, maxAudit) * WEIGHTS.audit +
+      safeDiv(r.avgSalesAmount, maxAcv) * WEIGHTS.acv +
+      clamp(r.hubspot / 5.0, 0, 1) * WEIGHTS.hubspot +
+      safeDiv(r.callAttempts, maxDokunulan) * WEIGHTS.dokunulan +
+      safeDiv(r.talkDurationSeconds, maxKonusma) * WEIGHTS.konusma +
+      safeDiv(r.outbound, maxOutbound) * WEIGHTS.outbound +
+      clamp(r.twoplusRatio, 0, 1) * WEIGHTS.twoplus +
+      safeDiv(r.premOn, maxPremOn) * WEIGHTS.premOn +
+      safeDiv(r.domain, maxDomain) * WEIGHTS.domain;
+  }
 }
 
 function resolveSuccessState(value: number | null | undefined) {
   if (value == null) return { label: "Beklemede", cls: "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-400" };
-  if (value >= 85) return { label: "İyi", cls: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400" };
-  if (value >= 70) return { label: "İzlenmeli", cls: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-700/40 dark:bg-sky-900/30 dark:text-sky-400" };
+  // Score 0-1 aralığında (0.85 = %85)
+  if (value >= 0.85) return { label: "İyi", cls: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400" };
+  if (value >= 0.70) return { label: "İzlenmeli", cls: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-700/40 dark:bg-sky-900/30 dark:text-sky-400" };
   return { label: "Geliştirilmeli", cls: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400" };
 }
 
@@ -150,7 +213,57 @@ function useSalesSideData(
   const auditMetrics: AuditMetric[] = auditQuery.data ?? [];
   const kpiAgents: SalesKpiAgent[] = kpiQuery.data && "agents" in kpiQuery.data ? kpiQuery.data.agents : [];
 
-  return { kpiQuery, kpiAgents, auditMetrics, periodId, yearPeriods };
+  // Manuel veri (Firestore) — Başarı Endeksi sayfasıyla aynı kaynak
+  const manualQuery = useQuery({
+    enabled: Boolean(periodId),
+    queryKey: ["success-index-manual", periodId],
+    queryFn: async (): Promise<Record<string, ManualEntry>> => {
+      const db = firebaseDb;
+      if (!db || !periodId) return {};
+      const snap = await getDocs(collection(db, "reportPeriods", periodId, "successIndexEntries"));
+      const result: Record<string, ManualEntry> = {};
+      snap.forEach((d) => {
+        const data = d.data();
+        result[d.id] = { hubspot: data.hubspot ?? 0, outbound: data.outbound ?? 0, premOn: data.premOn ?? 0, domain: data.domain ?? 0 };
+      });
+      return result;
+    },
+    staleTime: 60 * 1000
+  });
+
+  const manualData = manualQuery.data ?? {};
+
+  // Score hesabı — tüm agent'lar için (relative normalizasyon gerekiyor)
+  const scoreMap = useMemo(() => {
+    const rows: SuccessRow[] = kpiAgents.map((agent) => {
+      const audit = auditMetrics.find((a) => a.agentKey === agent.agentKey);
+      const manual = manualData[agent.agentKey];
+      const total21 = (agent.scaleCount ?? 0) + (agent.scalePlusCount ?? 0);
+      const totalLicenseForRatio = agent.licenseCount || 1;
+      return {
+        agentKey: agent.agentKey,
+        salesAmount: agent.salesAmount,
+        licenseCount: agent.licenseCount,
+        auditScore: audit?.auditScore ?? null,
+        callAttempts: agent.callAttempts,
+        talkDurationSeconds: agent.talkDurationSeconds,
+        avgSalesAmount: agent.avgLicensePrice,
+        hubspot: manual?.hubspot ?? 0,
+        outbound: manual?.outbound ?? 0,
+        total21,
+        twoplusRatio: total21 / totalLicenseForRatio,
+        premOn: manual?.premOn ?? 0,
+        domain: manual?.domain ?? 0,
+        score: 0,
+      };
+    });
+    computeScores(rows);
+    const map = new Map<string, number>();
+    for (const r of rows) map.set(r.agentKey, r.score);
+    return map;
+  }, [kpiAgents, auditMetrics, manualData]);
+
+  return { kpiQuery, kpiAgents, auditMetrics, periodId, yearPeriods, scoreMap };
 }
 
 /* ── Sayfa ── */
@@ -225,8 +338,8 @@ export function SalesComparePage() {
   const repDataA = (repsQuery.data ?? []).find((r) => r.key === keyA);
   const repDataB = (repsQuery.data ?? []).find((r) => r.key === keyB);
 
-  const successA = computeSalesSuccessIndex({ auditScore: auditA?.auditScore, perfScore: kpiA?.perfScore, conversionRate: kpiA?.conversionRate });
-  const successB = computeSalesSuccessIndex({ auditScore: auditB?.auditScore, perfScore: kpiB?.perfScore, conversionRate: kpiB?.conversionRate });
+  const successA = sideA.scoreMap.get(keyA) ?? null;
+  const successB = sideB.scoreMap.get(keyB) ?? null;
   const stateA = resolveSuccessState(successA);
   const stateB = resolveSuccessState(successB);
 
@@ -375,7 +488,7 @@ export function SalesComparePage() {
               <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Performans Karşılaştırması</h3>
 
               <div className="space-y-1.5">
-                <CompareMetricRow label="Başarı Endeksi" leftValue={successA} rightValue={successB} format={(v) => formatNumber(v, 1)} />
+                <CompareMetricRow label="Başarı Endeksi" leftValue={successA != null ? successA * 100 : null} rightValue={successB != null ? successB * 100 : null} format={(v) => formatNumber(v, 1)} />
                 <CompareMetricRow label="Perf. Değerlendirme" leftValue={kpiA?.perfScore} rightValue={kpiB?.perfScore} format={(v) => formatNumber(v, 1)} />
                 <CompareMetricRow label="Satış Tutarı" leftValue={kpiA?.salesAmount} rightValue={kpiB?.salesAmount} format={formatTryCurrency} />
                 <CompareMetricRow label="Lisans" leftValue={kpiA?.licenseCount} rightValue={kpiB?.licenseCount} format={(v) => formatNumber(v)} />
@@ -438,7 +551,7 @@ function SalesRepCard(props: {
         <div className="shrink-0 text-right">
           <p className="text-xs text-slate-500 dark:text-slate-400">Başarı</p>
           <p className="text-xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
-            {successIndex != null ? formatNumber(successIndex, 1) : "N/A"}
+            {successIndex != null ? formatNumber(successIndex * 100, 1) : "N/A"}
           </p>
           <span className={`mt-0.5 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${state.cls}`}>
             {state.label}
