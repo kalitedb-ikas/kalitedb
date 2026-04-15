@@ -500,7 +500,7 @@ export function SalesRepresentativesPage() {
 
   const trendQuery = useQuery({
     enabled: last6Periods.length > 0 && Boolean(selectedAgentKey),
-    queryKey: ["sales-rep-trend", auth.token, selectedAgentKey, last6Periods.map((p) => p.id).join(",")],
+    queryKey: ["sales-rep-trend", auth.token, selectedAgentKey, last6Periods.map((p) => p.id).join(","), periodId],
     queryFn: async () => {
       const results = await Promise.all(
         last6Periods.map(async (period) => {
@@ -515,6 +515,12 @@ export function SalesRepresentativesPage() {
             talkDurationSeconds: agent?.talkDurationSeconds ?? null,
             callAttempts: agent?.callAttempts ?? null,
             perfScore: agent?.perfScore ?? null,
+            avgLicensePrice: agent?.avgLicensePrice ?? null,
+            scaleCount: agent?.scaleCount ?? null,
+            scalePlusCount: agent?.scalePlusCount ?? null,
+            scaleConversion: agent?.scaleConversion ?? null,
+            scalePlusConversion: agent?.scalePlusConversion ?? null,
+            totalConversion: agent?.totalConversion ?? null,
             isCurrent: period.id === periodId
           };
         })
@@ -526,7 +532,7 @@ export function SalesRepresentativesPage() {
 
   const auditTrendQuery = useQuery({
     enabled: last6Periods.length > 0 && Boolean(selectedAgentKey),
-    queryKey: ["sales-rep-audit-trend", auth.token, selectedAgentKey, last6Periods.map((p) => p.id).join(",")],
+    queryKey: ["sales-rep-audit-trend", auth.token, selectedAgentKey, last6Periods.map((p) => p.id).join(","), periodId],
     queryFn: async () => {
       const map = await api.getAuditMetricsForPeriods(auth.token, last6Periods.map((p) => p.id));
       return last6Periods.map((period) => {
@@ -562,12 +568,12 @@ export function SalesRepresentativesPage() {
         conversionRate: prev?.conversionRate ?? null,
         callAttempts: prev?.callAttempts ?? null,
         talkDurationSeconds: prev?.talkDurationSeconds ?? null,
-        scaleCount: null as number | null,
-        scalePlusCount: null as number | null,
-        scaleConversion: null as number | null,
-        scalePlusConversion: null as number | null,
-        totalConversion: null as number | null,
-        avgLicensePrice: null as number | null,
+        scaleCount: prev?.scaleCount ?? null,
+        scalePlusCount: prev?.scalePlusCount ?? null,
+        scaleConversion: prev?.scaleConversion ?? null,
+        scalePlusConversion: prev?.scalePlusConversion ?? null,
+        totalConversion: prev?.totalConversion ?? null,
+        avgLicensePrice: prev?.avgLicensePrice ?? null,
         auditScore: prevAudit?.auditScore ?? null,
       } as Record<string, number | null>;
     }
