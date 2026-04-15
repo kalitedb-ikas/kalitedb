@@ -75,6 +75,7 @@ type SuccessRow = {
   outbound: number;
   total21: number;
   twoplusRatio: number;
+  totalConversion: number;
   premOn: number;
   domain: number;
   score: number;
@@ -325,6 +326,7 @@ export function SalesSuccessIndexPage() {
         outbound: manual?.outbound ?? 0,
         total21,
         twoplusRatio: total21 / totalLicenseForRatio,
+        totalConversion: agent.totalConversion ?? 0,
         premOn: manual?.premOn ?? 0,
         domain: manual?.domain ?? 0,
         score: 0,
@@ -365,6 +367,7 @@ export function SalesSuccessIndexPage() {
       outbound: avg((r) => r.outbound),
       total21: avg((r) => r.total21),
       twoplusRatio: avg((r) => r.twoplusRatio),
+      totalConversion: avg((r) => r.totalConversion),
       premOn: avg((r) => r.premOn),
       domain: avg((r) => r.domain),
       score: avg((r) => r.score),
@@ -542,7 +545,7 @@ export function SalesSuccessIndexPage() {
                         format={(v) => formatNumber(v)}
                       />
                     </td>
-                    <td className={tdCenterCls}>{formatNumber(row.twoplusRatio * 100, 0)}%</td>
+                    <td className={tdCenterCls}>{formatNumber(row.totalConversion, 0)}%</td>
                     <td className={tdCenterCls}>
                       <EditableCell
                         value={row.premOn}
@@ -581,7 +584,7 @@ export function SalesSuccessIndexPage() {
                     <td className={summaryTdCls}>{formatCurrency(Math.round(averages.avgSalesAmount))}</td>
                     <td className={summaryTdCls}>{formatNumber(averages.hubspot, 3)}</td>
                     <td className={summaryTdCls}>{formatNumber(Math.round(averages.outbound))}</td>
-                    <td className={summaryTdCls}>{formatNumber(averages.twoplusRatio * 100, 0)}%</td>
+                    <td className={summaryTdCls}>{formatNumber(averages.totalConversion, 0)}%</td>
                     <td className={summaryTdCls}>{formatNumber(Math.round(averages.premOn))}</td>
                     <td className={summaryTdCls}>{formatNumber(Math.round(averages.domain))}</td>
                     <td className={summaryTdCls}>{formatNumber(averages.score * 100, 1)}</td>
@@ -599,7 +602,7 @@ export function SalesSuccessIndexPage() {
                   <td className={summaryTdCls} />
                   <td className={summaryTdCls} />
                   <td className={summaryTdCls} />
-                  <td className={summaryTdCls}>{totals.licenseCount > 0 ? `${formatNumber(totals.total21 / totals.licenseCount * 100, 0)}%` : "-"}</td>
+                  <td className={summaryTdCls}>{formatNumber(rows.reduce((s, r) => s + r.totalConversion, 0) / (rows.length || 1), 0)}%</td>
                   <td className={summaryTdCls} />
                   <td className={summaryTdCls} />
                   <td className={summaryTdCls} />
