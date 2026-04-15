@@ -23,6 +23,8 @@ import { SalesKpiPage } from "../pages/sales-kpi-page";
 import { SalesMeetingsPage } from "../pages/sales-meetings-page";
 import { SalesRepresentativesPage } from "../pages/sales-representatives-page";
 import { SalesSuccessIndexPage } from "../pages/sales-success-index-page";
+import { CsComparePage } from "../pages/cs-compare-page";
+import { SalesComparePage } from "../pages/sales-compare-page";
 
 function LoadingScreen() {
   return (
@@ -63,6 +65,7 @@ function AppRoutes() {
         <Route element={<QuestionsPage />} path="/cs/questions" />
         <Route element={<CsatPage />} path="/cs/csat" />
         <Route element={<RepresentativesPage />} path="/cs/representatives" />
+        <Route element={<CsComparePage />} path="/cs/compare" />
 
         {/* Kalite rotaları */}
         <Route element={<Navigate replace to="/quality/qt" />} path="/quality" />
@@ -88,6 +91,7 @@ function AppRoutes() {
         <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
         <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
         <Route element={<SalesRepresentativesPage />} path="/sales/representatives" />
+        <Route element={<SalesComparePage />} path="/sales/compare" />
         <Route element={<SalesCalendarPage currentUser={currentUser} />} path="/sales/calendar" />
         <Route
           element={
