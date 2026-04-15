@@ -25,6 +25,7 @@ import { SalesRepresentativesPage } from "../pages/sales-representatives-page";
 import { SalesSuccessIndexPage } from "../pages/sales-success-index-page";
 import { CsComparePage } from "../pages/cs-compare-page";
 import { SalesComparePage } from "../pages/sales-compare-page";
+import { SalesCompanyComparePage } from "../pages/sales-company-compare-page";
 
 function LoadingScreen() {
   return (
@@ -91,6 +92,7 @@ function AppRoutes() {
         <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
         <Route element={<SalesRepresentativesPage />} path="/sales/representatives" />
         <Route element={<SalesComparePage />} path="/sales/compare" />
+        <Route element={<SalesCompanyComparePage />} path="/sales/kpi/compare" />
         <Route element={<SalesCalendarPage currentUser={currentUser} />} path="/sales/calendar" />
         <Route
           element={
