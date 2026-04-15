@@ -136,7 +136,6 @@ export function QtPage() {
     return `${selectedYear} (Yıllık)`;
   }, [viewMode, activePeriod, selectedYear, selectedQuarter]);
 
-  const canEditManualEntry = Boolean(meQuery.data);
 
   // Çoklu period için paralel fetch — her active period için ayrı query
   const qtEntriesQueries = useQueries({
@@ -279,16 +278,6 @@ export function QtPage() {
         </div>
       </ExecutiveChartCard>
 
-      {canEditManualEntry ? (
-        <ExecutiveChartCard title="QT veri girişi">
-          <div className="rounded-[10px] border border-slate-200 bg-slate-50/80 px-5 py-5">
-            <p className="text-sm font-semibold text-slate-900">Manuel giriş alanı taşındı</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              QT verileri artık <span className="font-semibold">Yönetim &gt; QT</span> alanından giriliyor. Ayı seçip aynı ekrandan manuel kayıt yapabilirsiniz.
-            </p>
-          </div>
-        </ExecutiveChartCard>
-      ) : null}
     </div>
   );
 }
