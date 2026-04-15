@@ -93,7 +93,7 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
 
   const agents: SalesKpiAgent[] = Array.from(agentMap.values()).map(({ sums, count }) => ({
     ...sums,
-    conversionRate: sums.conversionRate / count,
+    conversionRate: sums.callAttempts > 0 ? (sums.licenseCount / sums.callAttempts) * 100 : 0,
     avgLicensePrice: sums.licenseCount > 0 ? sums.salesAmount / sums.licenseCount : 0,
     perfScore: sums.perfScore !== null ? (sums.perfScore as number) / count : null,
     scaleConversion: (sums.scaleConversion ?? 0) / count,
