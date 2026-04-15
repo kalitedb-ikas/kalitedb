@@ -12,226 +12,115 @@ service cloud.firestore {
       return request.auth.token.email;
     }
 
-    // Birincil rolü döndürür: önce custom claim, sonra users koleksiyonu,
-    // son olarak geriye dönük uyumluluk için userRoles koleksiyonu.
-    function primaryRole() {
-      return !isAuthed()
-        ? null
-        : request.auth.token.role != null
-          ? request.auth.token.role
-          : exists(/databases/$(database)/documents/users/$(userEmail()))
-            ? get(/databases/$(database)/documents/users/$(userEmail())).data.role
-            : exists(/databases/$(database)/documents/userRoles/$(userEmail()))
-              ? get(/databases/$(database)/documents/userRoles/$(userEmail())).data.role
-              : null;
-    }
-
-    // ─── Rol kontrolleri ─────────────────────────────────────────────────────
-
-    function isAdmin() {
-      return primaryRole() == 'admin';
-    }
-
-    function isManager() {
-      return primaryRole() == 'manager';
-    }
-
-    function isTeamLeader() {
-      return primaryRole() == 'team_leader' || primaryRole() == 'team';
-    }
-
-    function isQuality() {
-      return primaryRole() == 'quality' || primaryRole() == 'qt';
-    }
-
-    function isManagerOrAbove() {
-      return isAdmin() || isManager() || primaryRole() == 'ceo';
-    }
-
-    function isTeamLeaderOrAbove() {
-      return isManagerOrAbove() || isTeamLeader();
-    }
-
-    // Rapor yönetimi yapabilir (oluşturma, güncelleme, silme)
-    function canManageReports() {
-      return isAdmin() || isManager() || isTeamLeader();
-    }
-
-    // Veri girişi yapabilir (kalite ekibi dahil)
-    function canEnterData() {
-      return canManageReports() || isQuality();
-    }
-
-    // ─── Departman erişim kontrolü ──────────────────────────────────────────
-
-    // Kullanıcının belirli bir departmana erişimi olup olmadığını kontrol eder.
-    // userRoles dokümanındaki "departments" array alanını okur.
-    function hasDepartmentAccess(dept) {
-      return isAdmin() || (
-        isAuthed() &&
-        exists(/databases/$(database)/documents/userRoles/$(userEmail())) &&
-        'departments' in get(/databases/$(database)/documents/userRoles/$(userEmail())).data &&
-        dept in get(/databases/$(database)/documents/userRoles/$(userEmail())).data.departments
-      );
-    }
-
-    // Belirli bir departman verisini yönetebilir (kalite ekibi dahil)
-    function canManageDepartmentData(dept) {
-      return canManageReports() || (isQuality() && hasDepartmentAccess(dept));
-    }
-
     // ─── Koleksiyon kuralları ────────────────────────────────────────────────
+    // Tüm rollere admin yetkisi verildi — giriş yapan herkes okuyabilir/yazabilir.
 
     // Dönem üst dokümanı
     match /reportPeriods/{periodId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if isAuthed();
     }
 
     // Agent metrikleri
     match /reportPeriods/{periodId}/agentMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if isAuthed();
     }
 
     // Audit metrikleri
     match /reportPeriods/{periodId}/auditMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canEnterData();
+      allow create, update, delete: if isAuthed();
     }
 
     // Soru performansı
     match /reportPeriods/{periodId}/questionPerformance/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if isAuthed();
     }
 
     // QT metrikleri
     match /reportPeriods/{periodId}/qtMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports();
+      allow create, update, delete: if isAuthed();
     }
 
     // Role-play metrikleri (satış)
     match /reportPeriods/{periodId}/roleplayMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageDepartmentData('sales');
+      allow create, update, delete: if isAuthed();
     }
 
     // Değerlendirme soruları (satış)
     match /reportPeriods/{periodId}/evaluationQuestions/{questionId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageDepartmentData('sales');
+      allow create, update, delete: if isAuthed();
     }
 
     // QT manuel girişleri
     match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
       allow get, list: if isAuthed();
-      allow create: if canManageReports() || canCreateOwnQtEntry(userKey);
-      allow update: if canManageReports() || canUpdateOwnQtEntry(userKey);
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAuthed();
     }
 
     // Eşik konfigürasyonları
     match /thresholdConfigs/{metricId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAuthed();
     }
 
-    // Eski kullanıcı rolleri (geriye dönük uyumluluk — yeni kod users koleksiyonunu kullanır)
+    // Eski kullanıcı rolleri (geriye dönük uyumluluk)
     match /userRoles/{emailKey} {
-      allow get: if isAdmin() || (isAuthed() && userEmail() == emailKey);
-      allow list: if isAdmin();
-      // Kendi rolünü oluşturabilir (bootstrap: ilk kullanıcıların admin olabilmesi için)
-      allow create: if isAdmin() || (isAuthed() && userEmail() == emailKey);
-      allow update, delete: if isAdmin();
+      allow get, list: if isAuthed();
+      allow create, update, delete: if isAuthed();
     }
 
     // Yeni kullanıcı dokümanları
     match /users/{emailKey} {
-      allow get: if isAdmin() || (isAuthed() && userEmail() == emailKey);
-      allow list: if isTeamLeaderOrAbove();
-      allow create, update: if canCreateOrUpdateUser();
-      allow delete: if isAdmin();
+      allow get, list: if isAuthed();
+      allow create, update, delete: if isAuthed();
     }
 
     // Takımlar
     match /teams/{teamId} {
       allow get, list: if isAuthed();
-      allow create: if isManagerOrAbove();
-      allow update: if isManagerOrAbove() || isOwnTeamLeader(teamId);
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAuthed();
     }
 
     // Satış KPI verileri
     match /reportPeriods/{periodId}/salesKpiData/{docId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageDepartmentData('sales');
+      allow create, update, delete: if isAuthed();
     }
 
     // Satış toplantıları
     match /reportPeriods/{periodId}/salesMeetings/{meetingId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageDepartmentData('sales');
+      allow create, update, delete: if isAuthed();
     }
 
     // Temsilci yönetimi
     match /representatives/{repKey} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports() || (isQuality() && (hasDepartmentAccess('sales') || hasDepartmentAccess('cs')));
+      allow create, update, delete: if isAuthed();
     }
 
     // Eğitim takvimi etkinlikleri
     match /trainingEvents/{eventId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canManageReports() || (isQuality() && (hasDepartmentAccess('sales') || hasDepartmentAccess('cs')));
+      allow create, update, delete: if isAuthed();
     }
 
     // Başarı endeksi manuel girişleri
     match /reportPeriods/{periodId}/successIndexEntries/{agentKey} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if canEnterData() || canManageDepartmentData('sales');
+      allow create, update, delete: if isAuthed();
     }
 
     // İçe aktarma işleri
     match /importJobs/{jobId} {
-      allow get, list: if canManageReports();
-      allow create, update, delete: if canManageReports();
-    }
-
-    // ─── Yardımcı fonksiyonlar ───────────────────────────────────────────────
-
-    function canCreateOwnQtEntry(userKey) {
-      return isAuthed() &&
-        isQuality() &&
-        request.resource.data.userKey == userKey &&
-        (request.auth.uid == userKey || userEmail() == request.resource.data.userEmail);
-    }
-
-    function canUpdateOwnQtEntry(userKey) {
-      return isAuthed() &&
-        isQuality() &&
-        resource.data.userKey == userKey &&
-        request.resource.data.userKey == resource.data.userKey &&
-        request.resource.data.userEmail == resource.data.userEmail &&
-        (request.auth.uid == userKey || userEmail() == resource.data.userEmail);
-    }
-
-    // Kullanıcı oluşturma/güncelleme yetki kontrolü
-    function canCreateOrUpdateUser() {
-      return isAdmin() ||
-        isManager() ||
-        (isTeamLeader() && (
-          request.resource.data.role == 'representative' ||
-          request.resource.data.role == 'quality'
-        ));
-    }
-
-    // Takım liderinin kendi takımı olup olmadığını kontrol eder
-    function isOwnTeamLeader(teamId) {
-      return isTeamLeader() &&
-        exists(/databases/$(database)/documents/teams/$(teamId)) &&
-        get(/databases/$(database)/documents/teams/$(teamId)).data.leaderEmail == userEmail();
+      allow get, list: if isAuthed();
+      allow create, update, delete: if isAuthed();
     }
   }
 }
