@@ -139,9 +139,10 @@ export function SalesAdminPage() {
   });
 
   const updateRepresentativeMutation = useMutation({
-    mutationFn: (input: { key: string; displayName?: string; badges?: string[]; timeline?: Array<Record<string, unknown>> }) => {
+    mutationFn: (input: { key: string; displayName?: string; department?: string; badges?: string[]; timeline?: Array<Record<string, unknown>> }) => {
       const body: Record<string, unknown> = {};
       if (input.displayName != null) body.displayName = input.displayName;
+      if (input.department != null) body.department = input.department;
       if (input.badges != null) body.badges = input.badges;
       if (input.timeline != null) body.timeline = input.timeline;
       return api.updateRepresentative(auth.token, input.key, body as any);
@@ -153,8 +154,8 @@ export function SalesAdminPage() {
   });
 
   const createRepresentativeMutation = useMutation({
-    mutationFn: (input: { displayName: string; department: "cs" | "sales" | "quality" }) =>
-      api.createRepresentative(auth.token, input),
+    mutationFn: (input: { displayName: string; department: string }) =>
+      api.createRepresentative(auth.token, input as any),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["representatives"] });
       await queryClient.invalidateQueries({ queryKey: ["all-sales-agents"] });

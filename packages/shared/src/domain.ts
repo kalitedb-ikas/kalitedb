@@ -3,7 +3,7 @@ import { z } from "zod";
 export const reportStatusSchema = z.enum(["draft", "published"]);
 export const datasetTypeSchema = z.enum(["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"]);
 export const thresholdDirectionSchema = z.enum(["higher_is_better", "lower_is_better"]);
-export const departmentSchema = z.enum(["cs", "sales", "quality"]);
+export const departmentSchema = z.enum(["cs", "sales", "quality", "partner"]);
 export const managerLevelSchema = z.enum(["senior", "mid", "junior"]);
 export const roleSchema = z.enum([
   // Yeni roller

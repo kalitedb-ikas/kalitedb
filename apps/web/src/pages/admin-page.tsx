@@ -48,7 +48,7 @@ import {
 const roleSchema = z.object({
   email: z.string().email(),
   role: z.enum(["admin", "manager", "team_leader", "quality", "representative", "viewer", "team", "ceo", "qt"]),
-  departments: z.array(z.enum(["cs", "sales", "quality"]))
+  departments: z.array(z.enum(["cs", "sales", "quality", "partner"]))
 });
 
 const roleOptions = [
@@ -315,8 +315,8 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const createRepresentativeMutation = useMutation({
-    mutationFn: (input: { displayName: string; department: "cs" | "sales" | "quality" }) =>
-      api.createRepresentative(auth.token, input),
+    mutationFn: (input: { displayName: string; department: string }) =>
+      api.createRepresentative(auth.token, input as any),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["representatives"] });
       setShowCreateRepModal(false);
