@@ -364,6 +364,7 @@ export function SalesSuccessIndexPage() {
       hubspot: avg((r) => r.hubspot),
       outbound: avg((r) => r.outbound),
       total21: avg((r) => r.total21),
+      twoplusRatio: avg((r) => r.twoplusRatio),
       premOn: avg((r) => r.premOn),
       domain: avg((r) => r.domain),
       score: avg((r) => r.score),
@@ -541,7 +542,7 @@ export function SalesSuccessIndexPage() {
                         format={(v) => formatNumber(v)}
                       />
                     </td>
-                    <td className={tdCenterCls}>{formatNumber(row.total21)}</td>
+                    <td className={tdCenterCls}>{formatNumber(row.twoplusRatio * 100, 0)}%</td>
                     <td className={tdCenterCls}>
                       <EditableCell
                         value={row.premOn}
@@ -580,7 +581,7 @@ export function SalesSuccessIndexPage() {
                     <td className={summaryTdCls}>{formatCurrency(Math.round(averages.avgSalesAmount))}</td>
                     <td className={summaryTdCls}>{formatNumber(averages.hubspot, 3)}</td>
                     <td className={summaryTdCls}>{formatNumber(Math.round(averages.outbound))}</td>
-                    <td className={summaryTdCls}>{formatNumber(Math.round(averages.total21))}</td>
+                    <td className={summaryTdCls}>{formatNumber(averages.twoplusRatio * 100, 0)}%</td>
                     <td className={summaryTdCls}>{formatNumber(Math.round(averages.premOn))}</td>
                     <td className={summaryTdCls}>{formatNumber(Math.round(averages.domain))}</td>
                     <td className={summaryTdCls}>{formatNumber(averages.score * 100, 1)}</td>
@@ -598,7 +599,7 @@ export function SalesSuccessIndexPage() {
                   <td className={summaryTdCls} />
                   <td className={summaryTdCls} />
                   <td className={summaryTdCls} />
-                  <td className={summaryTdCls}>{formatNumber(totals.total21)}</td>
+                  <td className={summaryTdCls}>{totals.licenseCount > 0 ? `${formatNumber(totals.total21 / totals.licenseCount * 100, 0)}%` : "-"}</td>
                   <td className={summaryTdCls} />
                   <td className={summaryTdCls} />
                   <td className={summaryTdCls} />
