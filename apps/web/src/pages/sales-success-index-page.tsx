@@ -313,7 +313,9 @@ export function SalesSuccessIndexPage() {
     const result: SuccessRow[] = agents.map((agent) => {
       const audit = auditMetrics.find((a) => a.agentKey === agent.agentKey);
       const manual = manualData[agent.agentKey];
-      const manualTwoplus = manual?.twoplus ?? 0;
+      const total21 = (agent.scaleCount ?? 0) + (agent.scalePlusCount ?? 0);
+      const totalLicenseForRatio = agent.licenseCount || 1;
+      const twoplusRatio = total21 / totalLicenseForRatio;
       return {
         agentKey: agent.agentKey,
         agentName: agent.agentName,
@@ -325,9 +327,9 @@ export function SalesSuccessIndexPage() {
         avgSalesAmount: agent.avgLicensePrice,
         hubspot: manual?.hubspot ?? 0,
         outbound: manual?.outbound ?? 0,
-        total21: 0,
-        twoplusRatio: manualTwoplus / 100,
-        totalConversion: manualTwoplus,
+        total21,
+        twoplusRatio,
+        totalConversion: twoplusRatio * 100,
         premOn: manual?.premOn ?? 0,
         domain: manual?.domain ?? 0,
         score: 0,
@@ -546,13 +548,7 @@ export function SalesSuccessIndexPage() {
                         format={(v) => formatNumber(v)}
                       />
                     </td>
-                    <td className={tdCenterCls}>
-                      <EditableCell
-                        value={row.totalConversion}
-                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, twoplus: 0, premOn: 0, domain: 0 }, twoplus: v })}
-                        format={(v) => `${formatNumber(v, 0)}%`}
-                      />
-                    </td>
+                    <td className={tdCenterCls}>{formatNumber(row.totalConversion, 0)}%</td>
                     <td className={tdCenterCls}>
                       <EditableCell
                         value={row.premOn}
