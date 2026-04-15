@@ -547,6 +547,7 @@ export function SalesAuditPage() {
               summaryMode="total"
               title="IS Role-Play Adet"
               emptyNote="Role-play verileri henüz girilmemiş. Yönetim panelinden giriş yapabilirsiniz."
+              colorScale="count"
             />
 
             <MonthlyTable
@@ -554,6 +555,7 @@ export function SalesAuditPage() {
               summaryMode="total"
               title="RevOPS"
               emptyNote="RevOPS verileri henüz girilmemiş. Yönetim panelinden giriş yapabilirsiniz."
+              colorScale="count"
             />
           </div>
         </>
