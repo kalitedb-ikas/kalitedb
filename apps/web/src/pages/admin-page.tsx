@@ -47,7 +47,7 @@ import {
 
 const roleSchema = z.object({
   email: z.string().email(),
-  role: z.enum(["admin", "manager", "team_leader", "quality", "representative", "team", "ceo", "qt"]),
+  role: z.enum(["admin", "manager", "team_leader", "quality", "representative", "viewer", "team", "ceo", "qt"]),
   departments: z.array(z.enum(["cs", "sales", "quality"]))
 });
 
@@ -57,6 +57,7 @@ const roleOptions = [
   { value: "team_leader", label: "Takım Lideri" },
   { value: "quality", label: "Kalite" },
   { value: "representative", label: "Temsilci" },
+  { value: "viewer", label: "Görüntüleyici" },
   { value: "team", label: "Ekip (eski)" },
   { value: "ceo", label: "CEO (eski)" },
   { value: "qt", label: "QT (eski)" }

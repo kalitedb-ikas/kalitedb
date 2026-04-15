@@ -33,13 +33,15 @@ type NavigationItem = {
   roles?: AuthenticatedUser["role"][];
 };
 
+const nonViewerRoles: AuthenticatedUser["role"][] = ["admin", "manager", "team_leader", "quality", "representative", "team", "ceo", "qt"];
+
 const csNavigation: NavigationItem[] = [
   { label: "Genel Bakış", to: "/cs", icon: Gauge },
   { label: "Audit", to: "/cs/audit", icon: ClipboardList },
   { label: "Sorular", to: "/cs/questions", icon: Sparkles },
   { label: "CSAT", to: "/cs/csat", icon: MessageCircle },
   { label: "Temsilciler", to: "/cs/representatives", icon: Users },
-  { label: "Yönetim", to: "/admin", icon: Settings }
+  { label: "Yönetim", to: "/admin", icon: Settings, roles: nonViewerRoles }
 ];
 
 const salesNavigation: NavigationItem[] = [
@@ -51,12 +53,12 @@ const salesNavigation: NavigationItem[] = [
   { label: "Toplantılar", to: "/sales/meetings", icon: Handshake },
   { label: "Temsilciler", to: "/sales/representatives", icon: Users },
   { label: "Takvim", to: "/sales/calendar", icon: CalendarDays },
-  { label: "Yönetim", to: "/sales/admin", icon: Settings }
+  { label: "Yönetim", to: "/sales/admin", icon: Settings, roles: nonViewerRoles }
 ];
 
 const qualityNavigation: NavigationItem[] = [
   { label: "QT", to: "/quality/qt", icon: BarChart3 },
-  { label: "Yönetim", to: "/quality/admin", icon: Settings }
+  { label: "Yönetim", to: "/quality/admin", icon: Settings, roles: nonViewerRoles }
 ];
 
 function roleLabel(role: AuthenticatedUser["role"] | undefined) {
@@ -64,6 +66,7 @@ function roleLabel(role: AuthenticatedUser["role"] | undefined) {
   if (role === "team") return "Operasyon";
   if (role === "ceo") return "Yönetici";
   if (role === "qt") return "QT";
+  if (role === "viewer") return "Görüntüleyici";
   return "KaliteDB";
 }
 

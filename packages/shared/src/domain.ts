@@ -12,6 +12,7 @@ export const roleSchema = z.enum([
   "team_leader",
   "quality",
   "representative",
+  "viewer",
   // Eski roller (geriye dönük uyumluluk)
   "team",
   "ceo",
