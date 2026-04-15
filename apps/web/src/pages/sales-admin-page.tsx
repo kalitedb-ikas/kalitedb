@@ -475,6 +475,7 @@ export function SalesAdminPage() {
   /* ── Audit kaydetme ── */
   const saveAuditMutation = useMutation({
     mutationFn: async () => {
+      if (!firebaseDb) throw new Error("Firebase bağlantısı yok.");
       const validRows = auditRows.filter((row) => row.agentName.trim());
       if (validRows.length === 0) {
         throw new Error("En az bir temsilci satırı doldurun.");
@@ -493,26 +494,19 @@ export function SalesAdminPage() {
         setSelectedPeriodId(periodId);
       }
 
-      const header = "Temsilci,Audit skoru";
-      const normalizeScore = (s: string) => {
-        const cleaned = s.trim().replace(/\s/g, "").replace(",", ".");
-        if (!cleaned) return "";
-        const num = Number(cleaned);
-        return Number.isFinite(num) ? String(num) : cleaned;
-      };
-      const lines = validRows.map((row) => {
-        const name = row.agentName.trim().includes(",")
-          ? `"${row.agentName.trim()}"`
-          : row.agentName.trim();
-        return [name, normalizeScore(row.auditScore)].join(",");
-      });
-      const csvFile = new File([[header, ...lines].join("\n")], "audit.csv", { type: "text/csv" });
-      const result = await api.importDataset(auth.token, periodId, "audit-metrics", csvFile, true);
-      if (!result.committed) {
-        const errorMessages = result.errors.map((e) => e.message).join(", ");
-        throw new Error(errorMessages || "Veri kaydedilemedi.");
+      for (const row of validRows) {
+        const agentKey = normalizeKey(row.agentName.trim());
+        const scoreStr = row.auditScore.trim().replace(/\s/g, "").replace(",", ".");
+        const score = scoreStr ? Number(scoreStr) : null;
+        await setDoc(doc(firebaseDb, "reportPeriods", periodId, "auditMetrics", agentKey), {
+          id: agentKey,
+          period: activePeriodMonth,
+          agentKey,
+          agentName: row.agentName.trim(),
+          auditScore: Number.isFinite(score) ? score : null,
+          previousAuditAccuracy: null
+        });
       }
-      return result;
     },
     onSuccess: async () => {
       auditLoadedPeriodRef.current = undefined;
