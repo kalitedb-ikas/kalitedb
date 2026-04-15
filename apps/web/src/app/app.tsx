@@ -108,8 +108,15 @@ function AppRoutes() {
           path="/sales/admin"
         />
 
-        {/* İşlem Geçmişi */}
-        <Route element={<AuditLogPage />} path="/audit-log" />
+        {/* İşlem Geçmişi — sadece zafer.coban@ikas.com */}
+        <Route
+          element={
+            currentUser?.email === "zafer.coban@ikas.com"
+              ? <AuditLogPage />
+              : <Navigate replace to="/" />
+          }
+          path="/audit-log"
+        />
 
         {/* Yönetim */}
         <Route
