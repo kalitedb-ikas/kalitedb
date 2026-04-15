@@ -4,7 +4,8 @@ import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
 import { collection, doc, getDocs, setDoc } from "firebase/firestore";
-import { Trophy } from "lucide-react";
+import { TrendingUp, Trophy } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -450,6 +451,13 @@ export function SalesSuccessIndexPage() {
               periods={salesPeriods}
               value={{ ...periodRange, monthPeriodId: monthlyPeriodId }}
             />
+            <Link
+              to="/sales/ramp"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
+            >
+              <TrendingUp size={14} />
+              RAMP
+            </Link>
           </div>
         }
       />
