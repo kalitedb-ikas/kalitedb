@@ -362,9 +362,6 @@ export function SalesComparePage() {
     const talkTargetSeconds =
       targets?.talkDurationTargetSeconds ?? parseTalkDurationLabelToSeconds(targets?.talkDurationLabel ?? "");
 
-    const nameLeft = repA?.agentName ?? "Sol";
-    const nameRight = repB?.agentName ?? "Sağ";
-
     const metrics = [
       { metric: "Performans", a: kpiA?.perfScore, b: kpiB?.perfScore, target: targets?.perfScore },
       { metric: "Satış", a: kpiA?.salesAmount, b: kpiB?.salesAmount, target: perPersonSalesTarget },
@@ -376,10 +373,10 @@ export function SalesComparePage() {
 
     return metrics.map((m) => ({
       metric: m.metric,
-      [nameLeft]: norm(m.a, m.target),
-      [nameRight]: norm(m.b, m.target)
+      left: norm(m.a, m.target),
+      right: norm(m.b, m.target)
     }));
-  }, [kpiA, kpiB, sideA.kpiQuery.data?.targets, sideA.kpiAgents.length, sideB.kpiAgents.length, repA, repB]);
+  }, [kpiA, kpiB, sideA.kpiQuery.data?.targets, sideA.kpiAgents.length, sideB.kpiAgents.length]);
 
   const nameA = repA?.agentName ?? "Sol";
   const nameB = repB?.agentName ?? "Sağ";
@@ -444,7 +441,7 @@ export function SalesComparePage() {
                       />
                       <Radar
                         name={nameA}
-                        dataKey={nameA}
+                        dataKey="left"
                         stroke={brand.primary}
                         fill={brand.primary}
                         fillOpacity={0.15}
@@ -452,7 +449,7 @@ export function SalesComparePage() {
                       />
                       <Radar
                         name={nameB}
-                        dataKey={nameB}
+                        dataKey="right"
                         stroke={brand.accent}
                         fill={brand.accent}
                         fillOpacity={0.15}
