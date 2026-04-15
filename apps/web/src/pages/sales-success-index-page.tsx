@@ -6,6 +6,7 @@ import confetti from "canvas-confetti";
 import { collection, doc, getDocs, setDoc } from "firebase/firestore";
 import { Trophy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -601,7 +602,7 @@ export function SalesSuccessIndexPage() {
       )}
 
       {/* ── Full-screen podyum modal (ilk açılışta) ── */}
-      {podiumModalOpen && hasData && podiumReady ? (
+      {podiumModalOpen && hasData && podiumReady ? createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={() => setPodiumModalOpen(false)}>
           <div className="relative mx-4 w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
             <button
@@ -623,7 +624,8 @@ export function SalesSuccessIndexPage() {
               <PodiumCard rank={3} name={top3[2]!.agentName} score={top3[2]!.score} photo={getRepresentativePhotoSrc(top3[2]!.agentName)} height="h-36" />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );
