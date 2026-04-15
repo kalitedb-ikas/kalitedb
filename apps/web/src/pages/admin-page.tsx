@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   getTemplateContent,
+  parseDatasetCsv,
   type AgentMetric,
   type AuditMetric,
   type DatasetType,
@@ -10,6 +11,7 @@ import {
   type Representative,
   type UserRoleAssignment
 } from "@kalitedb/shared";
+import { collection, doc, getDocs, setDoc, writeBatch } from "firebase/firestore";
 import { SurfaceCard } from "@kalitedb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -39,6 +41,7 @@ import { RecordEditor } from "../components/record-editor";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
 import { useAuth } from "../lib/auth";
 import { api, type AuthenticatedUser } from "../lib/api";
+import { firebaseDb } from "../lib/firebase";
 import {
   formatAuditScore,
   formatNumber,
@@ -250,14 +253,39 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     }
   });
 
+  const datasetCollectionName = (dt: DatasetType) =>
+    dt === "agent-metrics" ? "agentMetrics" : dt === "audit-metrics" ? "auditMetrics" : dt === "question-performance" ? "questionPerformance" : "qtMetrics";
+
   const importMutation = useMutation({
     mutationFn: async (input: { datasetType: VisibleDatasetType; commit: boolean }) => {
       const file = selectedFiles[input.datasetType];
-      if (!file || !selectedPeriodId) {
+      if (!file || !selectedPeriodId || !firebaseDb) {
         throw new Error("Dönem ve dosya seçin.");
       }
 
-      return api.importDataset(auth.token, selectedPeriodId, input.datasetType, file, input.commit);
+      const text = await file.text();
+      const preview = parseDatasetCsv({ datasetType: input.datasetType, csvText: text } as any);
+      if (preview.errors.length > 0 && preview.validRows.length === 0) {
+        throw new Error(preview.errors.map((e) => e.message).join(", "));
+      }
+
+      if (input.commit) {
+        const colName = datasetCollectionName(input.datasetType);
+        // Mevcut dokümanları sil
+        const existing = await getDocs(collection(firebaseDb, "reportPeriods", selectedPeriodId, colName));
+        if (!existing.empty) {
+          const batch = writeBatch(firebaseDb);
+          existing.docs.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+        // Yeni verileri yaz
+        for (const row of preview.validRows) {
+          const record = row as { id: string };
+          await setDoc(doc(firebaseDb, "reportPeriods", selectedPeriodId, colName, record.id), record);
+        }
+      }
+
+      return { errors: preview.errors, rowCount: preview.rowCount, previewRows: preview.validRows, committed: input.commit };
     },
     onSuccess: async (_, variables) => {
       setLastImportDatasetType(variables.datasetType);
@@ -268,11 +296,17 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
   const resetDatasetMutation = useMutation({
     mutationFn: async (datasetType: VisibleDatasetType) => {
-      if (!selectedPeriodId) {
+      if (!selectedPeriodId || !firebaseDb) {
         throw new Error("Önce dönem seçin.");
       }
 
-      return api.resetDataset(auth.token, selectedPeriodId, datasetType);
+      const colName = datasetCollectionName(datasetType);
+      const existing = await getDocs(collection(firebaseDb, "reportPeriods", selectedPeriodId, colName));
+      if (!existing.empty) {
+        const batch = writeBatch(firebaseDb);
+        existing.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
     },
     onSuccess: async () => {
       setSelectedRecordId("");
