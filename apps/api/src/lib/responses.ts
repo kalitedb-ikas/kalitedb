@@ -17,9 +17,6 @@ function resolveAllowedOrigin(): string {
   const configuredOrigin = process.env.APP_WEB_ORIGIN?.trim();
 
   if (configuredOrigin && configuredOrigin !== "") {
-    if (configuredOrigin.includes("localhost") || configuredOrigin.includes("127.0.0.1")) {
-      return "*";
-    }
     return configuredOrigin;
   }
 
@@ -27,7 +24,7 @@ function resolveAllowedOrigin(): string {
     throw new Error("APP_WEB_ORIGIN must be set in production.");
   }
 
-  return "*";
+  return "http://localhost:5173";
 }
 
 export function getCorsHeaders() {

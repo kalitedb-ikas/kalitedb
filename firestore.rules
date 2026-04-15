@@ -8,12 +8,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function userEmail() {
-      return request.auth.token.email;
+    function isAdmin() {
+      return isAuthed() && request.auth.token.role == 'admin';
     }
 
     // ─── Koleksiyon kuralları ────────────────────────────────────────────────
     // Tüm rollere admin yetkisi verildi — giriş yapan herkes okuyabilir/yazabilir.
+    // Yalnızca userRoles ve users koleksiyonları admin ile sınırlandırıldı
+    // (privilege escalation engeli).
 
     // Dönem üst dokümanı
     match /reportPeriods/{periodId} {
@@ -69,16 +71,16 @@ service cloud.firestore {
       allow create, update, delete: if isAuthed();
     }
 
-    // Eski kullanıcı rolleri (geriye dönük uyumluluk)
+    // Eski kullanıcı rolleri — sadece admin yazabilir (privilege escalation engeli)
     match /userRoles/{emailKey} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isAdmin();
     }
 
-    // Yeni kullanıcı dokümanları
+    // Yeni kullanıcı dokümanları — sadece admin yazabilir
     match /users/{emailKey} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isAdmin();
     }
 
     // Takımlar

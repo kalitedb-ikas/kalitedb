@@ -1,6 +1,6 @@
 import { buildDashboardSnapshot, datasetTypeSchema, selectDefaultReportPeriod } from "@kalitedb/shared";
 
-import { getOptionalAuth } from "@/src/lib/auth";
+import { requireAuth } from "@/src/lib/auth";
 import { getRepository } from "@/src/lib/repository";
 import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
 
@@ -20,7 +20,7 @@ function parseDatasetTypes(value: string | null) {
 
 export async function GET(request: Request) {
   try {
-    await getOptionalAuth(request as never, ["admin", "team", "ceo", "qt"]);
+    await requireAuth(request as never);
     const repository = await getRepository();
     const periods = await repository.listReportPeriods();
     const visiblePeriods = periods;
