@@ -1,5 +1,6 @@
 import type {
   AuditMetric,
+  Department,
   Representative,
   Role,
   RoleplayMetric,
@@ -333,7 +334,7 @@ async function populateRepresentativesFromFirebase(): Promise<{ created: number;
 
   // Tüm dönemlerden agent isimlerini topla
   const periodsSnap = await getDocs(collection(firebaseDb, "reportPeriods"));
-  const agentMap = new Map<string, { name: string; department: "cs" | "sales" | "quality" }>();
+  const agentMap = new Map<string, { name: string; department: Department }>();
 
   for (const periodDoc of periodsSnap.docs) {
     const periodData = periodDoc.data();
@@ -399,7 +400,7 @@ async function deriveRepresentativesFromFallback(): Promise<Representative[]> {
   const fallback = await loadPublicFallback();
   if (!fallback) return [];
 
-  const agentMap = new Map<string, { name: string; department: "cs" | "sales" | "quality" }>();
+  const agentMap = new Map<string, { name: string; department: Department }>();
   const now = new Date().toISOString();
 
   for (const [periodId, dashboard] of Object.entries(fallback.dashboards)) {
@@ -1583,7 +1584,7 @@ export const api = {
       return getRolesFromFirebase();
     });
   },
-  createRole(token: string | null, body: { uid?: string; email: string; role: Role; departments?: ("cs" | "sales" | "quality")[] }) {
+  createRole(token: string | null, body: { uid?: string; email: string; role: Role; departments?: Department[] }) {
     return request<UserRoleAssignment>("/api/users/roles", {
       token,
       method: "POST",
@@ -2037,7 +2038,7 @@ export const api = {
   },
   async createRepresentative(
     token: string | null,
-    body: { displayName: string; department: "cs" | "sales" | "quality" }
+    body: { displayName: string; department: Department }
   ): Promise<Representative> {
     const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
     if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {

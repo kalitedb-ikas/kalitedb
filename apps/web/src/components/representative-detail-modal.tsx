@@ -1,4 +1,4 @@
-import type { Representative, TimelineEvent } from "@kalitedb/shared";
+import type { Department, Representative, TimelineEvent } from "@kalitedb/shared";
 import { BarChart3, Crown, Headphones, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
@@ -57,7 +57,7 @@ export function TimelineDisplay(props: { events: TimelineEvent[] }) {
 
 type SaveData = {
   displayName?: string;
-  department?: "cs" | "sales" | "quality";
+  department?: Department;
   badges: string[];
   timeline: TimelineEvent[];
 };
@@ -65,7 +65,7 @@ type SaveData = {
 type Props = {
   representative?: Representative;
   mode?: "create" | "edit";
-  defaultDepartment?: "cs" | "sales" | "quality";
+  defaultDepartment?: Department;
   onSave: (data: SaveData) => void;
   onClose: () => void;
   isSaving: boolean;
@@ -74,7 +74,7 @@ type Props = {
 export function RepresentativeDetailModal({ representative, mode = "edit", defaultDepartment = "cs", onSave, onClose, isSaving }: Props) {
   const isCreate = mode === "create";
   const [displayName, setDisplayName] = useState(representative?.displayName ?? "");
-  const [department, setDepartment] = useState<"cs" | "sales" | "quality">(representative?.department ?? defaultDepartment);
+  const [department, setDepartment] = useState<Department>((representative?.department as Department) ?? defaultDepartment);
   const [badges, setBadges] = useState<string[]>(representative?.badges ?? []);
   const [timeline, setTimeline] = useState<TimelineEvent[]>(representative?.timeline ?? []);
 
@@ -115,7 +115,7 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
   const handleSave = () => {
     onSave({
       ...(isCreate || displayName !== representative?.displayName ? { displayName } : {}),
-      ...(isCreate ? { department } : {}),
+      department,
       badges,
       timeline
     });
@@ -162,7 +162,7 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
             {representative && !isCreate && (
               <div className="mt-1 flex items-center gap-2">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor}`}>{statusLabel}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{representative.department === "sales" ? "Satış" : "CS"}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{representative.department === "sales" ? "Satış" : representative.department === "quality" ? "Kalite" : representative.department === "partner" ? "Partner" : "CS"}</span>
               </div>
             )}
           </div>
@@ -179,19 +179,19 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
               value={displayName}
             />
           </div>
-          {isCreate && (
-            <div>
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Departman *</label>
-              <select
-                className="mt-1 h-9 w-full rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-[#2f6b7a]/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
-                onChange={(e) => setDepartment(e.target.value as "cs" | "sales")}
-                value={department}
-              >
-                <option value="cs">CS</option>
-                <option value="sales">Satış</option>
-              </select>
-            </div>
-          )}
+          <div>
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Departman{isCreate && " *"}</label>
+            <select
+              className="mt-1 h-9 w-full rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-[#2f6b7a]/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+              onChange={(e) => setDepartment(e.target.value as Department)}
+              value={department}
+            >
+              <option value="cs">CS</option>
+              <option value="sales">Satış</option>
+              <option value="quality">Kalite</option>
+              <option value="partner">Partner</option>
+            </select>
+          </div>
         </div>
 
         {/* ── Badge'ler ── */}
