@@ -26,6 +26,7 @@ import { SalesSuccessIndexPage } from "../pages/sales-success-index-page";
 import { CsComparePage } from "../pages/cs-compare-page";
 import { SalesComparePage } from "../pages/sales-compare-page";
 import { SalesCompanyComparePage } from "../pages/sales-company-compare-page";
+import { AuditLogPage } from "../pages/audit-log-page";
 
 function LoadingScreen() {
   return (
@@ -106,6 +107,9 @@ function AppRoutes() {
           }
           path="/sales/admin"
         />
+
+        {/* İşlem Geçmişi */}
+        <Route element={<AuditLogPage />} path="/audit-log" />
 
         {/* Yönetim */}
         <Route

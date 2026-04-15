@@ -6,6 +6,7 @@ import {
   FileQuestion,
   Gauge,
   Handshake,
+  History,
   LogOut,
   Menu,
   MessageCircle,
@@ -41,6 +42,7 @@ const csNavigation: NavigationItem[] = [
   { label: "Sorular", to: "/cs/questions", icon: Sparkles },
   { label: "CSAT", to: "/cs/csat", icon: MessageCircle },
   { label: "Temsilciler", to: "/cs/representatives", icon: Users },
+  { label: "İşlem Geçmişi", to: "/audit-log", icon: History, roles: nonViewerRoles },
   { label: "Yönetim", to: "/admin", icon: Settings, roles: nonViewerRoles }
 ];
 
@@ -53,6 +55,7 @@ const salesNavigation: NavigationItem[] = [
   { label: "Toplantılar", to: "/sales/meetings", icon: Handshake },
   { label: "Temsilciler", to: "/sales/representatives", icon: Users },
   { label: "Takvim", to: "/sales/calendar", icon: CalendarDays },
+  { label: "İşlem Geçmişi", to: "/audit-log", icon: History, roles: nonViewerRoles },
   { label: "Yönetim", to: "/sales/admin", icon: Settings, roles: nonViewerRoles }
 ];
 

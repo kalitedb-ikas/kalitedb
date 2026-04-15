@@ -124,5 +124,12 @@ service cloud.firestore {
       allow get, list: if isAuthed();
       allow create, update, delete: if isAuthed();
     }
+
+    // Audit logları — herkes yazabilir (loglama), sadece admin silebilir
+    match /auditLogs/{logId} {
+      allow get, list: if isAuthed();
+      allow create: if isAuthed();
+      allow update, delete: if isAdmin();
+    }
   }
 }

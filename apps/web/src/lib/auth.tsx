@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 
 import { firebaseAuth, isFirebaseConfigured } from "./firebase";
+import { logAudit } from "./audit-log";
 
 type AuthContextValue = {
   user: User | null;
@@ -71,11 +72,20 @@ export function AuthProvider(props: { children: ReactNode }) {
     getRedirectResult(firebaseAuth).catch(() => {});
 
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
+      const wasLoggedOut = !user;
       setUser(nextUser);
       if (nextUser) {
         const freshToken = await nextUser.getIdToken();
         setToken(freshToken);
         startRefreshTimer(nextUser);
+        if (wasLoggedOut) {
+          void logAudit({
+            action: "login",
+            resource: "session",
+            userEmail: nextUser.email ?? "",
+            userName: nextUser.displayName ?? undefined
+          });
+        }
       } else {
         setToken(null);
         clearRefreshTimer();
@@ -123,6 +133,14 @@ export function AuthProvider(props: { children: ReactNode }) {
         clearRefreshTimer();
       },
       async logout() {
+        if (user?.email) {
+          void logAudit({
+            action: "logout",
+            resource: "session",
+            userEmail: user.email,
+            userName: user.displayName ?? undefined
+          });
+        }
         window.localStorage.removeItem(DEV_TOKEN_KEY);
         setDevToken(null);
         clearRefreshTimer();

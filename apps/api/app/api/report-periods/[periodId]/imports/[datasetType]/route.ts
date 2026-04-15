@@ -6,6 +6,7 @@ import {
 } from "@kalitedb/shared";
 
 import { requireAuth } from "@/src/lib/auth";
+import { logAudit } from "@/src/lib/audit-log";
 import { MAX_UPLOAD_BYTES } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository";
 import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
@@ -105,6 +106,7 @@ export async function POST(
     } catch {
       // Import job kaydı başarısız olursa da veri zaten yazıldı
     }
+    void logAudit(user, "import", datasetType, periodId, { rowCount: preview.rowCount, fileName: storagePath });
 
     // İçe aktarılan verideki yeni temsilcileri otomatik kaydet
     if (datasetType === "agent-metrics" || datasetType === "audit-metrics") {
