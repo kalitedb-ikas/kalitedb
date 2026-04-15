@@ -129,6 +129,7 @@ function computeScores(rows: SuccessRow[]): void {
 type ManualEntry = {
   hubspot: number;
   outbound: number;
+  twoplus: number;
   premOn: number;
   domain: number;
 };
@@ -280,6 +281,7 @@ export function SalesSuccessIndexPage() {
         result[d.id] = {
           hubspot: data.hubspot ?? 0,
           outbound: data.outbound ?? 0,
+          twoplus: data.twoplus ?? 0,
           premOn: data.premOn ?? 0,
           domain: data.domain ?? 0,
         };
@@ -311,8 +313,7 @@ export function SalesSuccessIndexPage() {
     const result: SuccessRow[] = agents.map((agent) => {
       const audit = auditMetrics.find((a) => a.agentKey === agent.agentKey);
       const manual = manualData[agent.agentKey];
-      const total21 = (agent.scaleCount ?? 0) + (agent.scalePlusCount ?? 0);
-      const totalLicenseForRatio = agent.licenseCount || 1;
+      const manualTwoplus = manual?.twoplus ?? 0;
       return {
         agentKey: agent.agentKey,
         agentName: agent.agentName,
@@ -324,9 +325,9 @@ export function SalesSuccessIndexPage() {
         avgSalesAmount: agent.avgLicensePrice,
         hubspot: manual?.hubspot ?? 0,
         outbound: manual?.outbound ?? 0,
-        total21,
-        twoplusRatio: total21 / totalLicenseForRatio,
-        totalConversion: agent.totalConversion ?? 0,
+        total21: 0,
+        twoplusRatio: manualTwoplus / 100,
+        totalConversion: manualTwoplus,
         premOn: manual?.premOn ?? 0,
         domain: manual?.domain ?? 0,
         score: 0,
@@ -534,29 +535,35 @@ export function SalesSuccessIndexPage() {
                     <td className={tdCenterCls}>
                       <EditableCell
                         value={row.hubspot}
-                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, premOn: 0, domain: 0 }, hubspot: v })}
+                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, twoplus: 0, premOn: 0, domain: 0 }, hubspot: v })}
                         format={(v) => formatNumber(v, 3)}
                       />
                     </td>
                     <td className={tdCenterCls}>
                       <EditableCell
                         value={row.outbound}
-                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, premOn: 0, domain: 0 }, outbound: v })}
+                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, twoplus: 0, premOn: 0, domain: 0 }, outbound: v })}
                         format={(v) => formatNumber(v)}
                       />
                     </td>
-                    <td className={tdCenterCls}>{formatNumber(row.totalConversion, 0)}%</td>
+                    <td className={tdCenterCls}>
+                      <EditableCell
+                        value={row.totalConversion}
+                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, twoplus: 0, premOn: 0, domain: 0 }, twoplus: v })}
+                        format={(v) => `${formatNumber(v, 0)}%`}
+                      />
+                    </td>
                     <td className={tdCenterCls}>
                       <EditableCell
                         value={row.premOn}
-                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, premOn: 0, domain: 0 }, premOn: v })}
+                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, twoplus: 0, premOn: 0, domain: 0 }, premOn: v })}
                         format={(v) => formatNumber(v)}
                       />
                     </td>
                     <td className={tdCenterCls}>
                       <EditableCell
                         value={row.domain}
-                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, premOn: 0, domain: 0 }, domain: v })}
+                        onSave={(v) => saveManualEntry(row.agentKey, { ...manualData[row.agentKey] ?? { hubspot: 0, outbound: 0, twoplus: 0, premOn: 0, domain: 0 }, domain: v })}
                         format={(v) => formatNumber(v)}
                       />
                     </td>

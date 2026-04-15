@@ -3121,8 +3121,6 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
       });
       // Temsilci verilerini kaydet
       for (const row of rows) {
-        const hasData = row.pipeline || row.growAmount || row.scaleAmount || row.scalePlusAmount;
-        if (!hasData) continue;
         await setDoc(doc(firebaseDb, "reportPeriods", selectedPeriodId, "rampEntries", row.agentKey), {
           agentKey: row.agentKey,
           pipeline: Number(row.pipeline) || 0,
@@ -3176,7 +3174,9 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
 
       {/* Temsilci Verileri */}
       <SurfaceCard title="Temsilci RAMP Verileri" description="Pipeline ve paket bazlı satış tutarlarını girin." variant="default">
-        {!loaded ? (
+        {!selectedPeriodId ? (
+          <p className="text-sm text-slate-500">Önce sol panelden ay ve yıl seçerek bir dönem oluşturun.</p>
+        ) : !loaded ? (
           <p className="text-sm text-slate-500">Yükleniyor...</p>
         ) : rows.length === 0 ? (
           <p className="text-sm text-slate-500">Seçili dönemde KPI verisi bulunamadı. Önce KPI verilerini yükleyin.</p>
