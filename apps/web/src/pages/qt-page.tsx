@@ -136,7 +136,7 @@ export function QtPage() {
     return `${selectedYear} (Yıllık)`;
   }, [viewMode, activePeriod, selectedYear, selectedQuarter]);
 
-  const canEditManualEntry = meQuery.data?.role === "qt";
+  const canEditManualEntry = Boolean(meQuery.data);
 
   // Çoklu period için paralel fetch — her active period için ayrı query
   const qtEntriesQueries = useQueries({
