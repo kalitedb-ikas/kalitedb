@@ -1,8 +1,9 @@
 import { resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import { SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
+import { GitCompareArrows } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -226,6 +227,13 @@ export function RepresentativesPage() {
               value={selectedRepresentative?.agentKey ?? ""}
               onChange={handleRepresentativeChange}
             />
+            <Link
+              to={`/cs/compare${selectedRepresentative ? `?a=${selectedRepresentative.agentKey}` : ""}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
+            >
+              <GitCompareArrows size={14} />
+              <span className="hidden sm:inline">Karşılaştır</span>
+            </Link>
           </div>
         }
       >
