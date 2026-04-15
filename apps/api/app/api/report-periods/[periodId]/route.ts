@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { sanitizeEditedRecord } from "@/src/lib/edit-record";
 import { requireAuth } from "@/src/lib/auth";
+import { logAudit } from "@/src/lib/audit-log";
 import { getRepository } from "@/src/lib/repository";
 import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
 
@@ -82,7 +83,7 @@ export async function PATCH(
   context: { params: Promise<{ periodId: string }> }
 ) {
   try {
-    await requireAuth(request as never, ["admin", "team", "manager", "team_leader"]);
+    const user = await requireAuth(request as never, ["admin", "team", "manager", "team_leader"]);
     const body = patchSchema.parse(await request.json());
     const { periodId } = await context.params;
     const repository = await getRepository();
@@ -99,6 +100,7 @@ export async function PATCH(
 
       await repository.replaceDataset(periodId, body.datasetType, []);
       await repository.updateReportPeriod(periodId, {});
+      void logAudit(user, "delete", "dataset", periodId, { datasetType: body.datasetType, action: "reset" });
 
       return jsonResponse({
         periodId,
@@ -109,6 +111,7 @@ export async function PATCH(
 
     if (body.action === "delete-record" && body.datasetType && body.recordId) {
       await repository.deleteDatasetRecord(periodId, body.datasetType, body.recordId);
+      void logAudit(user, "delete", body.datasetType, body.recordId, { periodId });
       return jsonResponse({ deleted: true });
     }
 
