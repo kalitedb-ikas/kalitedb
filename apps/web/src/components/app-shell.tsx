@@ -46,12 +46,12 @@ const csNavigation: NavigationItem[] = [
 
 const salesNavigation: NavigationItem[] = [
   { label: "Genel Bakış", to: "/sales", icon: Gauge },
-  { label: "KPI", to: "/sales/kpi", icon: Target },
-  { label: "Başarı Endeksi", to: "/sales/success-index", icon: Sparkles },
   { label: "Performans", to: "/sales/audit", icon: ClipboardList },
   { label: "Sorular", to: "/sales/evaluation-questions", icon: FileQuestion },
-  { label: "Toplantılar", to: "/sales/meetings", icon: Handshake },
+  { label: "KPI", to: "/sales/kpi", icon: Target },
   { label: "Temsilciler", to: "/sales/representatives", icon: Users },
+  { label: "Toplantılar", to: "/sales/meetings", icon: Handshake },
+  { label: "Başarı Endeksi", to: "/sales/success-index", icon: Sparkles },
   { label: "Takvim", to: "/sales/calendar", icon: CalendarDays },
   { label: "Yönetim", to: "/sales/admin", icon: Settings, roles: nonViewerRoles }
 ];
