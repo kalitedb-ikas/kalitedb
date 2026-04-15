@@ -113,6 +113,12 @@ service cloud.firestore {
       allow create, update, delete: if isAuthed();
     }
 
+    // RAMP endeksi girişleri ve hedefleri
+    match /reportPeriods/{periodId}/rampEntries/{docId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if isAuthed();
+    }
+
     // Başarı endeksi manuel girişleri
     match /reportPeriods/{periodId}/successIndexEntries/{agentKey} {
       allow get, list: if isAuthed();

@@ -12,6 +12,7 @@ import {
   Settings,
   Sparkles,
   Target,
+  TrendingUp,
   Users,
   X
 } from "lucide-react";
@@ -48,6 +49,7 @@ const salesNavigation: NavigationItem[] = [
   { label: "Genel Bakış", to: "/sales", icon: Gauge },
   { label: "KPI", to: "/sales/kpi", icon: Target },
   { label: "Başarı Endeksi", to: "/sales/success-index", icon: Sparkles },
+  { label: "RAMP", to: "/sales/ramp", icon: TrendingUp },
   { label: "Performans", to: "/sales/audit", icon: ClipboardList },
   { label: "Sorular", to: "/sales/evaluation-questions", icon: FileQuestion },
   { label: "Toplantılar", to: "/sales/meetings", icon: Handshake },

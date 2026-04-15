@@ -27,6 +27,7 @@ import { CsComparePage } from "../pages/cs-compare-page";
 import { SalesComparePage } from "../pages/sales-compare-page";
 import { SalesCompanyComparePage } from "../pages/sales-company-compare-page";
 import { AuditLogPage } from "../pages/audit-log-page";
+import { SalesRampPage } from "../pages/sales-ramp-page";
 
 function LoadingScreen() {
   return (
@@ -88,6 +89,7 @@ function AppRoutes() {
         <Route element={<SalesDashboardPage />} path="/sales" />
         <Route element={<SalesKpiPage />} path="/sales/kpi" />
         <Route element={<SalesSuccessIndexPage />} path="/sales/success-index" />
+        <Route element={<SalesRampPage />} path="/sales/ramp" />
         <Route element={<SalesAuditPage />} path="/sales/audit" />
         <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
         <Route element={<SalesMeetingsPage />} path="/sales/meetings" />

@@ -486,3 +486,25 @@ export const DEFAULT_THRESHOLDS: Record<KpiMetricKey, ThresholdConfig> = {
     unit: "number"
   }
 };
+
+/* ── RAMP Scoring ── */
+
+export const rampEntrySchema = z.object({
+  agentKey: z.string(),
+  pipeline: z.number().default(0),
+  growAmount: z.number().default(0),
+  scaleAmount: z.number().default(0),
+  scalePlusAmount: z.number().default(0),
+  updatedAt: z.string().datetime()
+});
+
+export const rampTargetsSchema = z.object({
+  touchesTarget: z.number().default(1500),
+  talkTimeTargetSeconds: z.number().default(144000),
+  wsaTarget: z.number().default(200000),
+  pipelineCoverage: z.number().default(3),
+  updatedAt: z.string().datetime()
+});
+
+export type RampEntry = z.infer<typeof rampEntrySchema>;
+export type RampTargets = z.infer<typeof rampTargetsSchema>;

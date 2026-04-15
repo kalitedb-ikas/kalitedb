@@ -2,6 +2,7 @@ import type {
   AuditMetric,
   LicenseSummary,
   QtManualEntry,
+  RampEntry,
   ReportPeriod,
   SalesKpiAgent,
   SalesKpiData
@@ -318,6 +319,39 @@ export function aggregateQtManualEntries(entries: QtManualEntry[][]): QtManualEn
   }
 
   return result;
+}
+
+/* ── RAMP entries aggregation ── */
+
+export function aggregateRampEntries(entries: RampEntry[][]): RampEntry[] {
+  const flat = entries.flat();
+  if (flat.length === 0) return [];
+
+  const grouped = new Map<string, { pipeline: number; growAmount: number; scaleAmount: number; scalePlusAmount: number; updatedAt: string }>();
+
+  for (const entry of flat) {
+    const existing = grouped.get(entry.agentKey);
+    if (existing) {
+      existing.pipeline += entry.pipeline;
+      existing.growAmount += entry.growAmount;
+      existing.scaleAmount += entry.scaleAmount;
+      existing.scalePlusAmount += entry.scalePlusAmount;
+      if (entry.updatedAt > existing.updatedAt) existing.updatedAt = entry.updatedAt;
+    } else {
+      grouped.set(entry.agentKey, {
+        pipeline: entry.pipeline,
+        growAmount: entry.growAmount,
+        scaleAmount: entry.scaleAmount,
+        scalePlusAmount: entry.scalePlusAmount,
+        updatedAt: entry.updatedAt
+      });
+    }
+  }
+
+  return Array.from(grouped.entries()).map(([agentKey, g]) => ({
+    agentKey,
+    ...g
+  }));
 }
 
 /* ── Period range helpers ── */

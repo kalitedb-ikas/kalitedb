@@ -3,19 +3,22 @@ import { normalizeKey } from "@kalitedb/shared";
 import type { Representative, SalesMeeting, SalesKpiData } from "@kalitedb/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, FileQuestion, Handshake, LogOut, MessageSquare, MessageSquarePlus, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, Upload, Users, X } from "lucide-react";
+import { ClipboardCheck, FileQuestion, Handshake, LogOut, MessageSquare, MessageSquarePlus, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, Users, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { collection, doc, getDocs, setDoc } from "firebase/firestore";
+
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
+import { firebaseDb } from "../lib/firebase";
 import { parseTalkDurationLabelToSeconds } from "../lib/format";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
 
 
-type AdminSection = "audit" | "roleplay" | "evaluation" | "meetings" | "kpi" | "representatives";
+type AdminSection = "audit" | "roleplay" | "evaluation" | "meetings" | "kpi" | "representatives" | "ramp";
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
   const value = String(index + 1).padStart(2, "0");
@@ -1270,6 +1273,12 @@ export function SalesAdminPage() {
                 label="Temsilciler"
                 onClick={() => setActiveSection("representatives")}
               />
+              <SidebarButton
+                active={activeSection === "ramp"}
+                icon={<TrendingUp size={15} />}
+                label="RAMP Girişi"
+                onClick={() => setActiveSection("ramp")}
+              />
             </div>
           </div>
 
@@ -1306,7 +1315,7 @@ export function SalesAdminPage() {
         <main className="min-w-0 space-y-4">
           <section className="rounded-[10px] border border-slate-200/90 bg-white px-8 py-6 shadow-[0_12px_34px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-800">
             <div className="flex flex-wrap items-center gap-2">
-              <HeaderPill>{activeSection === "audit" ? "Audit girişi" : activeSection === "roleplay" ? "Role-Play girişi" : activeSection === "evaluation" ? "Değerlendirme soruları" : activeSection === "kpi" ? "KPI verileri" : activeSection === "representatives" ? "Temsilciler" : "Satış toplantıları"}</HeaderPill>
+              <HeaderPill>{activeSection === "audit" ? "Audit girişi" : activeSection === "roleplay" ? "Role-Play girişi" : activeSection === "evaluation" ? "Değerlendirme soruları" : activeSection === "kpi" ? "KPI verileri" : activeSection === "representatives" ? "Temsilciler" : activeSection === "ramp" ? "RAMP Girişi" : "Satış toplantıları"}</HeaderPill>
               <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
               <HeaderPill tone="success">Manuel Giriş</HeaderPill>
               <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
@@ -1453,6 +1462,8 @@ export function SalesAdminPage() {
                 />
               ) : null}
             </div>
+          ) : activeSection === "ramp" ? (
+            <RampSection selectedPeriodId={selectedPeriodId} activePeriodMonth={activePeriodMonth} kpiAgents={(kpiDataQuery.data as any)?.agents ?? []} />
           ) : (
             <MeetingsSection
               activePeriodMonth={activePeriodMonth}
@@ -3035,6 +3046,177 @@ function MiniInput(props: { label: string; value: string; onChange: (v: string) 
         type={isNumeric ? "text" : (props.type ?? "text")}
         value={props.value}
       />
+    </div>
+  );
+}
+
+/* ── RAMP Giriş Bölümü ── */
+
+type RampRowData = { agentKey: string; agentName: string; pipeline: string; growAmount: string; scaleAmount: string; scalePlusAmount: string };
+
+function RampSection(props: { selectedPeriodId: string; activePeriodMonth: string; kpiAgents: Array<{ agentKey: string; agentName: string }> }) {
+  const { selectedPeriodId, kpiAgents } = props;
+  const [rows, setRows] = useState<RampRowData[]>([]);
+  const [targets, setTargets] = useState({ touchesTarget: "1500", talkTimeTargetSeconds: "144000", wsaTarget: "200000", pipelineCoverage: "3" });
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!firebaseDb || !selectedPeriodId) return;
+    setLoaded(false);
+    const load = async () => {
+      const snap = await getDocs(collection(firebaseDb!, "reportPeriods", selectedPeriodId, "rampEntries"));
+      const existing = new Map<string, { pipeline: number; growAmount: number; scaleAmount: number; scalePlusAmount: number }>();
+      snap.forEach((d) => {
+        if (d.id === "__targets__") {
+          const t = d.data();
+          setTargets({
+            touchesTarget: String(t.touchesTarget ?? 1500),
+            talkTimeTargetSeconds: String(t.talkTimeTargetSeconds ?? 144000),
+            wsaTarget: String(t.wsaTarget ?? 200000),
+            pipelineCoverage: String(t.pipelineCoverage ?? 3)
+          });
+        } else {
+          const data = d.data();
+          existing.set(d.id, { pipeline: data.pipeline ?? 0, growAmount: data.growAmount ?? 0, scaleAmount: data.scaleAmount ?? 0, scalePlusAmount: data.scalePlusAmount ?? 0 });
+        }
+      });
+      const merged: RampRowData[] = kpiAgents.map((a) => {
+        const e = existing.get(a.agentKey);
+        return {
+          agentKey: a.agentKey,
+          agentName: a.agentName,
+          pipeline: String(e?.pipeline ?? ""),
+          growAmount: String(e?.growAmount ?? ""),
+          scaleAmount: String(e?.scaleAmount ?? ""),
+          scalePlusAmount: String(e?.scalePlusAmount ?? "")
+        };
+      });
+      setRows(merged);
+      setLoaded(true);
+    };
+    void load();
+  }, [selectedPeriodId, kpiAgents]);
+
+  const updateRow = (agentKey: string, field: keyof RampRowData, value: string) => {
+    setRows((prev) => prev.map((r) => r.agentKey === agentKey ? { ...r, [field]: value } : r));
+    setSaveSuccess(false);
+  };
+
+  const handleSave = async () => {
+    if (!firebaseDb || !selectedPeriodId) return;
+    setSaving(true);
+    setSaveSuccess(false);
+    const now = new Date().toISOString();
+    try {
+      // Hedefleri kaydet
+      await setDoc(doc(firebaseDb, "reportPeriods", selectedPeriodId, "rampEntries", "__targets__"), {
+        touchesTarget: Number(targets.touchesTarget) || 1500,
+        talkTimeTargetSeconds: Number(targets.talkTimeTargetSeconds) || 144000,
+        wsaTarget: Number(targets.wsaTarget) || 200000,
+        pipelineCoverage: Number(targets.pipelineCoverage) || 3,
+        updatedAt: now
+      });
+      // Temsilci verilerini kaydet
+      for (const row of rows) {
+        const hasData = row.pipeline || row.growAmount || row.scaleAmount || row.scalePlusAmount;
+        if (!hasData) continue;
+        await setDoc(doc(firebaseDb, "reportPeriods", selectedPeriodId, "rampEntries", row.agentKey), {
+          agentKey: row.agentKey,
+          pipeline: Number(row.pipeline) || 0,
+          growAmount: Number(row.growAmount) || 0,
+          scaleAmount: Number(row.scaleAmount) || 0,
+          scalePlusAmount: Number(row.scalePlusAmount) || 0,
+          updatedAt: now
+        });
+      }
+      setSaveSuccess(true);
+    } catch (err) {
+      console.error("RAMP kayıt hatası:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cellCls = "px-3 py-2 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap";
+  const inputCls = "w-full rounded border border-slate-200 dark:border-slate-600 bg-transparent px-2 py-1.5 text-sm text-right tabular-nums focus:border-sky-400 focus:outline-none";
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <HeaderPill><TrendingUp size={12} className="mr-1 inline-block" />RAMP</HeaderPill>
+        <h2 className="font-display text-xl font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100">RAMP Veri Girişi</h2>
+      </div>
+
+      {saveSuccess ? <SuccessBanner message="RAMP verileri başarıyla kaydedildi." /> : null}
+
+      {/* Hedefler */}
+      <SurfaceCard title="RAMP Hedefleri" description="Varsayılan hedefleri dönem bazında ayarlayabilirsiniz." variant="default">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-500">Dokunma Hedefi</label>
+            <input className={inputCls} value={targets.touchesTarget} onChange={(e) => setTargets((p) => ({ ...p, touchesTarget: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-500">Konuşma Hedefi (sn)</label>
+            <input className={inputCls} value={targets.talkTimeTargetSeconds} onChange={(e) => setTargets((p) => ({ ...p, talkTimeTargetSeconds: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-500">WSA Hedefi (TRY)</label>
+            <input className={inputCls} value={targets.wsaTarget} onChange={(e) => setTargets((p) => ({ ...p, wsaTarget: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-500">Pipeline Katsayısı</label>
+            <input className={inputCls} value={targets.pipelineCoverage} onChange={(e) => setTargets((p) => ({ ...p, pipelineCoverage: e.target.value }))} />
+          </div>
+        </div>
+      </SurfaceCard>
+
+      {/* Temsilci Verileri */}
+      <SurfaceCard title="Temsilci RAMP Verileri" description="Pipeline ve paket bazlı satış tutarlarını girin." variant="default">
+        {!loaded ? (
+          <p className="text-sm text-slate-500">Yükleniyor...</p>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-slate-500">Seçili dönemde KPI verisi bulunamadı. Önce KPI verilerini yükleyin.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-700/50">
+                  <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Temsilci</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Pipeline (TRY)</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Grow (TRY)</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Scale (TRY)</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Scale+ (TRY)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, idx) => (
+                  <tr key={row.agentKey} className={idx % 2 === 0 ? "bg-white dark:bg-slate-800/30" : "bg-slate-50/50 dark:bg-slate-800/50"}>
+                    <td className={`${cellCls} font-medium`}>{row.agentName}</td>
+                    <td className={cellCls}><input className={inputCls} value={row.pipeline} onChange={(e) => updateRow(row.agentKey, "pipeline", e.target.value)} placeholder="0" /></td>
+                    <td className={cellCls}><input className={inputCls} value={row.growAmount} onChange={(e) => updateRow(row.agentKey, "growAmount", e.target.value)} placeholder="0" /></td>
+                    <td className={cellCls}><input className={inputCls} value={row.scaleAmount} onChange={(e) => updateRow(row.agentKey, "scaleAmount", e.target.value)} placeholder="0" /></td>
+                    <td className={cellCls}><input className={inputCls} value={row.scalePlusAmount} onChange={(e) => updateRow(row.agentKey, "scalePlusAmount", e.target.value)} placeholder="0" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="mt-4 flex justify-end">
+          <button
+            className="inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+            disabled={saving || rows.length === 0}
+            onClick={() => void handleSave()}
+            type="button"
+          >
+            <Save size={15} />
+            {saving ? "Kaydediliyor..." : "Kaydet"}
+          </button>
+        </div>
+      </SurfaceCard>
     </div>
   );
 }
