@@ -169,7 +169,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const auth = useAuth();
   const queryClient = useQueryClient();
   const now = new Date();
-  const isAdminUser = props.currentUserRole === "admin";
+  const isAdminUser = true;
   const [selectedSection, setSelectedSection] = useState<AdminSection>("periods");
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));

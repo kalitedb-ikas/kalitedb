@@ -35,8 +35,7 @@ function LoadingScreen() {
 }
 
 function canAccessAdmin(currentUser: AuthenticatedUser | undefined) {
-  if (!currentUser) return false;
-  return ["admin", "manager", "team_leader", "team", "qt", "quality"].includes(currentUser.role);
+  return Boolean(currentUser);
 }
 
 function AppRoutes() {

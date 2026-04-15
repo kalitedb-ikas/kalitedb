@@ -39,7 +39,7 @@ const csNavigation: NavigationItem[] = [
   { label: "Sorular", to: "/cs/questions", icon: Sparkles },
   { label: "CSAT", to: "/cs/csat", icon: MessageCircle },
   { label: "Temsilciler", to: "/cs/representatives", icon: Users },
-  { label: "Yönetim", to: "/admin", icon: Settings, roles: ["admin", "manager", "team_leader"] }
+  { label: "Yönetim", to: "/admin", icon: Settings }
 ];
 
 const salesNavigation: NavigationItem[] = [
@@ -51,12 +51,12 @@ const salesNavigation: NavigationItem[] = [
   { label: "Toplantılar", to: "/sales/meetings", icon: Handshake },
   { label: "Temsilciler", to: "/sales/representatives", icon: Users },
   { label: "Takvim", to: "/sales/calendar", icon: CalendarDays },
-  { label: "Yönetim", to: "/sales/admin", icon: Settings, roles: ["admin", "manager", "team_leader"] }
+  { label: "Yönetim", to: "/sales/admin", icon: Settings }
 ];
 
 const qualityNavigation: NavigationItem[] = [
   { label: "QT", to: "/quality/qt", icon: BarChart3 },
-  { label: "Yönetim", to: "/quality/admin", icon: Settings, roles: ["admin", "manager", "qt", "quality"] }
+  { label: "Yönetim", to: "/quality/admin", icon: Settings }
 ];
 
 function roleLabel(role: AuthenticatedUser["role"] | undefined) {
@@ -150,12 +150,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
     return items.filter((item) => !item.roles || item.roles.includes(currentUser.role));
   }, [activeDepartment, props.currentUser]);
 
-  // Kalite sekmesi yalnızca yöneticilere açık (admin, manager, team_leader, quality, qt, ceo)
-  const canSeeQualityTab = useMemo(() => {
-    const role = props.currentUser?.role;
-    if (!role) return false;
-    return ["admin", "manager", "team_leader", "quality", "qt", "ceo"].includes(role);
-  }, [props.currentUser]);
+  const canSeeQualityTab = Boolean(props.currentUser);
 
   const currentNavigationItem = getCurrentNavigationItem(location.pathname, activeNavigation);
 

@@ -456,7 +456,7 @@ export function SalesCalendarPage(props: { currentUser?: AuthenticatedUser | und
   const auth = useAuth();
   const queryClient = useQueryClient();
   const currentUser = props.currentUser;
-  const canEdit = Boolean(currentUser && ["admin", "manager", "team_leader", "team"].includes(currentUser.role));
+  const canEdit = Boolean(currentUser);
 
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
