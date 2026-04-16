@@ -264,7 +264,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       }
 
       const text = await file.text();
-      const preview = parseDatasetCsv({ datasetType: input.datasetType, csvText: text } as any);
+      const preview = parseDatasetCsv({ datasetType: input.datasetType, text, expectedPeriod: `${selectedYear}-${selectedMonthValue}` });
       if (preview.errors.length > 0 && preview.validRows.length === 0) {
         throw new Error(preview.errors.map((e) => e.message).join(", "));
       }
