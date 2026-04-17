@@ -120,7 +120,7 @@ export function CsatPage() {
 
   const yearPeriodIds = useMemo(() => yearPeriods.map((p) => p.id), [yearPeriods]);
   const agentMetricsBulkQuery = useQuery({
-    enabled: yearPeriodIds.length > 0 && periodRange.viewMode !== "aylik",
+    enabled: yearPeriodIds.length > 0,
     queryKey: ["cs-agent-metrics-bulk", auth.token, yearPeriodIds],
     queryFn: () => api.getAgentMetricsForPeriods(auth.token, yearPeriodIds),
     staleTime: 5 * 60 * 1000
@@ -202,7 +202,22 @@ export function CsatPage() {
     return { ...rebuilt, summary: aggregatedSnapshotCsatAdjusted.summary };
   }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys]);
 
-  const yearlyTrend = yearlyTrendQuery.data ?? [];
+  const rawYearlyTrend = yearlyTrendQuery.data ?? [];
+  // Yıllık trend grafiği CSAT serisi: Premium Onboarding'i hariç tut (aylık nokta bazında
+  // yeniden hesapla ki Mart gibi onların yüksek skor aldığı aylar ortalamayı şişirmesin).
+  const yearlyTrend = useMemo(() => {
+    if (premiumOnboardingKeys.size === 0) return rawYearlyTrend;
+    const agentMap = agentMetricsBulkQuery.data;
+    if (!agentMap) return rawYearlyTrend;
+    return rawYearlyTrend.map((point) => {
+      const agents = agentMap[point.periodId];
+      if (!agents) return point;
+      const csatValues = agents
+        .filter((a) => !premiumOnboardingKeys.has(a.agentKey))
+        .map((a) => a.callEvaluationAverage);
+      return { ...point, csat: average(csatValues) };
+    });
+  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys]);
   const rows = useMemo(() => {
     if (!snapshot) return [];
 
