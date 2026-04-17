@@ -465,7 +465,7 @@ export function SalesPerformancePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Satış Performans"
+        title="Satış Audit"
         actions={
           <PeriodRangeFilter
             onChange={setPeriodRange}
