@@ -160,30 +160,44 @@ export function CsatPage() {
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
+  // "Premium Onboarding" etiketli temsilcilerin CSAT puanları ortalamaya dahil edilmez
+  const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
+  const aggregatedSnapshotCsatAdjusted = useMemo(() => {
+    if (!aggregatedSnapshot) return undefined;
+    if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
+    const csatValues = aggregatedSnapshot.datasets.agentMetrics
+      .filter((a) => !premiumOnboardingKeys.has(a.agentKey))
+      .map((a) => a.callEvaluationAverage);
+    return {
+      ...aggregatedSnapshot,
+      summary: { ...aggregatedSnapshot.summary, csatAverage: average(csatValues) }
+    };
+  }, [aggregatedSnapshot, premiumOnboardingKeys]);
+
   // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
   // ama özet (summary / ortalama / toplam) hesaplarında korunur.
   const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
   const snapshot = useMemo(() => {
-    if (!aggregatedSnapshot) return undefined;
-    if (hiddenAgentKeys.size === 0) return aggregatedSnapshot;
+    if (!aggregatedSnapshotCsatAdjusted) return undefined;
+    if (hiddenAgentKeys.size === 0) return aggregatedSnapshotCsatAdjusted;
 
-    const filteredAgents = aggregatedSnapshot.datasets.agentMetrics.filter(
+    const filteredAgents = aggregatedSnapshotCsatAdjusted.datasets.agentMetrics.filter(
       (a) => !hiddenAgentKeys.has(a.agentKey)
     );
-    const filteredAudits = aggregatedSnapshot.datasets.auditMetrics.filter(
+    const filteredAudits = aggregatedSnapshotCsatAdjusted.datasets.auditMetrics.filter(
       (a) => !hiddenAgentKeys.has(a.agentKey)
     );
     const rebuilt = buildDashboardSnapshot({
-      period: aggregatedSnapshot.period,
+      period: aggregatedSnapshotCsatAdjusted.period,
       datasets: {
-        ...aggregatedSnapshot.datasets,
+        ...aggregatedSnapshotCsatAdjusted.datasets,
         agentMetrics: filteredAgents,
         auditMetrics: filteredAudits
       },
-      thresholds: aggregatedSnapshot.thresholds
+      thresholds: aggregatedSnapshotCsatAdjusted.thresholds
     });
-    return { ...rebuilt, summary: aggregatedSnapshot.summary };
-  }, [aggregatedSnapshot, hiddenAgentKeys]);
+    return { ...rebuilt, summary: aggregatedSnapshotCsatAdjusted.summary };
+  }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys]);
 
   const yearlyTrend = yearlyTrendQuery.data ?? [];
   const rows = useMemo(() => {
@@ -363,7 +377,7 @@ export function CsatPage() {
       avgTalkDurationSeconds: formatSeconds(average(enriched.map((r) => r.avgTalkDurationSeconds))),
       localCloseRate: formatPercent(average(enriched.map((r) => r.localCloseRate))),
       missedCalls: formatNumber(Math.round(sum(enriched.map((r) => r.missedCalls)) / enriched.length)),
-      callEvaluationAverage: formatNumber(average(enriched.map((r) => r.callEvaluationAverage)), 3),
+      callEvaluationAverage: formatNumber(average(enriched.filter((r) => !premiumOnboardingKeys.has(r.agentKey)).map((r) => r.callEvaluationAverage)), 3),
       evaluationCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluationCount)) / enriched.length))
     };
     const totalRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
@@ -383,7 +397,7 @@ export function CsatPage() {
       evaluationCount: formatNumber(sum(enriched.map((r) => r.evaluationCount)))
     };
     return [avgRow, totalRow];
-  }, [aggregatedSnapshot]);
+  }, [aggregatedSnapshot, premiumOnboardingKeys]);
 
   return (
     <div className="space-y-6">
