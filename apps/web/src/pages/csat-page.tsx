@@ -1,4 +1,13 @@
-import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, sum, type AgentMetric } from "@kalitedb/shared";
+import {
+  average,
+  buildDashboardSnapshot,
+  resolveThresholdTone,
+  selectAuditMetrics,
+  selectDefaultReportPeriod,
+  sum,
+  type AgentMetric,
+  type AuditMetric
+} from "@kalitedb/shared";
 import {
   ChampionSpotlightCard,
   ExecutiveChartCard,
@@ -18,7 +27,7 @@ import { DataTable } from "../components/data-table";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds } from "../lib/format";
-import { computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { brand } from "../theme/colors";
 
@@ -108,7 +117,48 @@ export function CsatPage() {
     staleTime: 5 * 60 * 1000
   });
 
-  const snapshot = dashboardQuery.data;
+  const yearPeriodIds = useMemo(() => yearPeriods.map((p) => p.id), [yearPeriods]);
+  const agentMetricsBulkQuery = useQuery({
+    enabled: yearPeriodIds.length > 0 && periodRange.viewMode !== "aylik",
+    queryKey: ["cs-agent-metrics-bulk", auth.token, yearPeriodIds],
+    queryFn: () => api.getAgentMetricsForPeriods(auth.token, yearPeriodIds),
+    staleTime: 5 * 60 * 1000
+  });
+  const auditMetricsBulkQuery = useQuery({
+    enabled: yearPeriodIds.length > 0 && periodRange.viewMode !== "aylik",
+    queryKey: ["cs-audit-metrics-bulk", auth.token, yearPeriodIds],
+    queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
+    staleTime: 5 * 60 * 1000
+  });
+
+  const baseSnapshot = dashboardQuery.data;
+  const snapshot = useMemo(() => {
+    if (!baseSnapshot) return undefined;
+    if (periodRange.viewMode === "aylik") return baseSnapshot;
+    if (activePeriodIds.length === 0) return baseSnapshot;
+
+    const agentMap = agentMetricsBulkQuery.data;
+    const auditMap = auditMetricsBulkQuery.data;
+    if (!agentMap || !auditMap) return baseSnapshot;
+
+    const agentPerPeriod = activePeriodIds.map((pid) => agentMap[pid] ?? []);
+    const auditPerPeriod = activePeriodIds.map((pid) => auditMap[pid] ?? []);
+    const aggregatedAgents: AgentMetric[] = aggregateAgentMetrics(agentPerPeriod);
+    const aggregatedAudits: AuditMetric[] = aggregateAuditMetrics(auditPerPeriod);
+
+    const aggregatedPeriod = { ...baseSnapshot.period, manualTotalCallCount: null, manualTotalChatMailCount: null, manualTotalTicketClosedCount: null };
+    return buildDashboardSnapshot({
+      period: aggregatedPeriod,
+      datasets: {
+        agentMetrics: aggregatedAgents,
+        auditMetrics: aggregatedAudits,
+        questionPerformance: baseSnapshot.datasets.questionPerformance,
+        qtMetrics: baseSnapshot.datasets.qtMetrics
+      },
+      thresholds: baseSnapshot.thresholds
+    });
+  }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
+
   const yearlyTrend = yearlyTrendQuery.data ?? [];
   const rows = useMemo(() => {
     if (!snapshot) return [];

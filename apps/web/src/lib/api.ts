@@ -1,4 +1,5 @@
 import type {
+  AgentMetric,
   AuditMetric,
   Department,
   Representative,
@@ -1491,6 +1492,33 @@ export const api = {
       method: "PATCH",
       body
     });
+  },
+  async getAgentMetricsForPeriods(token: string | null, periodIds: string[]): Promise<Record<string, AgentMetric[]>> {
+    if (canUseFirebaseReadMode() && (firebaseAuth?.currentUser || (await waitForFirebaseAuth()))) {
+      try {
+        const entries = await Promise.all(
+          periodIds.map(async (periodId) => {
+            const datasets = await getPeriodDatasetsFromFirebase(periodId, ["agent-metrics"]);
+            return [periodId, datasets.agentMetrics] as const;
+          })
+        );
+        return Object.fromEntries(entries);
+      } catch {
+        // Firebase başarısız olursa API'ye düş
+      }
+    }
+
+    const entries = await Promise.all(
+      periodIds.map(async (periodId) => {
+        try {
+          const snapshot = await api.getDashboard(token, periodId, undefined, { datasetTypes: ["agent-metrics"] });
+          return [periodId, snapshot.datasets.agentMetrics] as const;
+        } catch {
+          return [periodId, [] as AgentMetric[]] as const;
+        }
+      })
+    );
+    return Object.fromEntries(entries);
   },
   async getAuditMetricsForPeriods(token: string | null, periodIds: string[]): Promise<Record<string, AuditMetric[]>> {
     // Firebase doğrudan okuma (en hızlı yol)
