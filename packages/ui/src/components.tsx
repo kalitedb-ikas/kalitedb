@@ -319,9 +319,9 @@ const podiumRankStyles: Record<number, { badge: string; row: string; value: stri
     value: "text-slate-700 dark:text-slate-300"
   },
   2: {
-    badge: "border-orange-200/70 bg-gradient-to-br from-orange-50 to-amber-50/60 text-orange-700/80 shadow-[0_2px_6px_rgba(249,115,22,0.1)] dark:border-orange-700/40 dark:from-orange-900/30 dark:to-amber-900/20 dark:text-orange-400",
-    row: "border-orange-200/40 bg-gradient-to-r from-orange-50/30 via-white/90 to-white/90 shadow-[0_10px_25px_rgba(15,23,42,0.04)] dark:border-orange-800/20 dark:from-orange-900/10 dark:via-slate-800/60 dark:to-slate-800/60",
-    value: "text-orange-700/80 dark:text-orange-400"
+    badge: "border-amber-700/50 bg-gradient-to-br from-amber-100 to-orange-200/70 text-amber-900 shadow-[0_2px_6px_rgba(180,83,9,0.18)] dark:border-amber-800/60 dark:from-amber-950/60 dark:to-orange-950/50 dark:text-amber-300",
+    row: "border-amber-700/25 bg-gradient-to-r from-amber-100/40 via-white/90 to-white/90 shadow-[0_10px_25px_rgba(180,83,9,0.06)] dark:border-amber-900/30 dark:from-amber-950/20 dark:via-slate-800/60 dark:to-slate-800/60",
+    value: "text-amber-900 dark:text-amber-300"
   }
 };
 
