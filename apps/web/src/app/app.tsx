@@ -15,7 +15,7 @@ import { QualityAdminPage } from "../pages/quality-admin-page";
 import { QuestionsPage } from "../pages/questions-page";
 import { RepresentativesPage } from "../pages/representatives-page";
 import { SalesAdminPage } from "../pages/sales-admin-page";
-import { SalesAuditPage } from "../pages/sales-audit-page";
+import { SalesPerformancePage } from "../pages/sales-performance-page";
 import { SalesCalendarPage } from "../pages/sales-calendar-page";
 import { SalesDashboardPage } from "../pages/sales-dashboard-page";
 import { SalesEvaluationQuestionsPage } from "../pages/sales-evaluation-questions-page";
@@ -90,7 +90,8 @@ function AppRoutes() {
         <Route element={<SalesKpiPage />} path="/sales/kpi" />
         <Route element={<SalesSuccessIndexPage />} path="/sales/success-index" />
         <Route element={<SalesRampPage />} path="/sales/ramp" />
-        <Route element={<SalesAuditPage />} path="/sales/audit" />
+        <Route element={<SalesPerformancePage />} path="/sales/performance" />
+        <Route element={<Navigate replace to="/sales/performance" />} path="/sales/audit" />
         <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
         <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
         <Route element={<SalesRepresentativesPage />} path="/sales/representatives" />
