@@ -1,43 +1,74 @@
 import { ChampionSpotlightCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
-import type { AuditMetric } from "@kalitedb/shared";
-import { ShieldCheck, TrendingDown, TrendingUp, Users, X } from "lucide-react";
+import { selectDefaultReportPeriod } from "@kalitedb/shared";
+import type { SalesKpiAgent, SalesKpiData } from "@kalitedb/shared";
+import { Target, TrendingDown, TrendingUp, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import {
-  aggregateAuditMetrics,
+  aggregateMultiPeriodKpi,
   computeActivePeriodIds,
-  derivePeriodRangeSelectors,
-  getQuarterPeriodIds
+  derivePeriodRangeSelectors
 } from "../lib/period-aggregation";
 import { DataTable } from "../components/data-table";
-import {
-  AuditTableBadge,
-  MonthlyTable,
-  buildAgentAvatar,
-  isAuditSummaryRow,
-  type MonthlyAgentRow
-} from "../components/audit-shared";
+import { MonthlyTable, buildAgentAvatar, type MonthlyAgentRow } from "../components/audit-shared";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
-import { formatAuditScore, formatNumber } from "../lib/format";
+import { formatNumber, formatPercent } from "../lib/format";
 import { chart } from "../theme/colors";
 
-type AuditAgentRow = {
+type PerformanceAgentRow = {
   id: string;
   agentKey: string;
   agentName: string;
   listIndex: number;
-  auditScoreDisplay: number | null;
+  perfScoreDisplay: number | null;
+  salesAmountDisplay: number;
+  licenseCountDisplay: number;
+  conversionRateDisplay: number;
 };
 
-const columnHelper = createColumnHelper<AuditAgentRow>();
+const columnHelper = createColumnHelper<PerformanceAgentRow>();
 
-export function SalesAuditPage() {
+function formatPerfScore(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  return formatNumber(value, Number.isInteger(value) ? 0 : 2);
+}
+
+function formatCurrency(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  return `${formatNumber(value)} TRY`;
+}
+
+function PerformanceBadge(props: { value: number | null | undefined }) {
+  if (props.value === null || props.value === undefined) {
+    return <span className="text-slate-400">-</span>;
+  }
+
+  const toneClass =
+    props.value < 70
+      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400"
+      : props.value < 85
+        ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
+        : "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-600/40 dark:bg-emerald-900/40 dark:text-emerald-300";
+
+  return (
+    <span className={`inline-flex min-w-24 justify-center rounded-full border px-3 py-1.5 text-sm font-semibold ${toneClass}`}>
+      {formatPerfScore(props.value)}
+    </span>
+  );
+}
+
+function average(values: (number | null | undefined)[]): number | null {
+  const nums = values.filter((v): v is number => typeof v === "number");
+  if (nums.length === 0) return null;
+  return nums.reduce((s, v) => s + v, 0) / nums.length;
+}
+
+export function SalesPerformancePage() {
   const auth = useAuth();
   const now = new Date();
   const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
@@ -86,28 +117,24 @@ export function SalesAuditPage() {
     }
   }, [defaultPeriod?.id, periodRange.monthPeriodId]);
 
-  /* ── Seçili dönem için tam dashboard ─��� */
-  const dashboardQuery = useQuery({
-    enabled: Boolean(periodId),
-    queryKey: ["dashboard", auth.token, periodId, undefined],
-    queryFn: () => api.getDashboard(auth.token, periodId, undefined),
-    placeholderData: keepPreviousData,
-    staleTime: 5 * 60 * 1000
+  /* ── Yıl boyu sales KPI (her ay için tekil sorgu) ── */
+  const salesKpiQueries = useQueries({
+    queries: yearPeriods.map((period) => ({
+      queryKey: ["sales-kpi", auth.token, period.id],
+      queryFn: () => api.getSalesKpiData(auth.token, period.id),
+      staleTime: 5 * 60 * 1000
+    }))
   });
-  const snapshot = dashboardQuery.data;
 
-  const auditThreshold = snapshot?.thresholds.auditScore;
-  const currentAudits = useMemo(() => (snapshot ? selectAuditMetrics(snapshot.datasets) : []), [snapshot]);
+  const salesKpiByPeriodId = useMemo<Map<string, SalesKpiData | null>>(() => {
+    const map = new Map<string, SalesKpiData | null>();
+    yearPeriods.forEach((period, idx) => {
+      map.set(period.id, salesKpiQueries[idx]?.data ?? null);
+    });
+    return map;
+  }, [yearPeriods, salesKpiQueries]);
 
-  /* ── Toplu audit history (yıl boyu, çoklu dönem toplulaştırması için) ── */
-  const yearPeriodIds = useMemo(() => yearPeriods.map((p) => p.id), [yearPeriods]);
-  const auditHistoryBulkQuery = useQuery({
-    enabled: yearPeriodIds.length > 0,
-    queryKey: ["audit-history-bulk", auth.token, yearPeriodIds],
-    queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
-    staleTime: 5 * 60 * 1000
-  });
-  const auditHistoryMap = auditHistoryBulkQuery.data;
+  const isKpiLoading = salesKpiQueries.some((q) => q.isPending);
 
   /* ── ViewMode'a göre aktif dönem ID'leri ── */
   const activePeriodIds = useMemo(
@@ -119,30 +146,24 @@ export function SalesAuditPage() {
     [yearPeriods, periodRange, periodId]
   );
 
-  /* ── ViewMode'a göre toplulaştırılmış audit metrikleri ──
-   * aylık  → seçili dönemin audit'leri (tek dönem)
-   * çeyreklik → seçili çeyreğin 3 ayının audit puanı ortalamaları (agent bazında)
-   * yıllık → yılın tüm ayları için audit puanı ortalamaları (agent bazında)
+  /* ── ViewMode'a göre toplulaştırılmış temsilci listesi ──
+   * aylık  → seçili dönemin kayıtları
+   * çeyreklik → çeyreğin 3 ayı için temsilci bazında toplulaştırma
+   * yıllık → yılın tüm ayları için temsilci bazında toplulaştırma
    */
-  const aggregatedAudits = useMemo<AuditMetric[]>(() => {
-    // Aylık modda mevcut dashboard snapshot yeterli
-    if (periodRange.viewMode === "aylik") {
-      return currentAudits.filter((a) => !isAuditSummaryRow(a.agentName));
-    }
-    // Çoklu dönemde bulk audit history gerekir
-    if (!auditHistoryMap || activePeriodIds.length === 0) return [];
-    const metricsPerPeriod = activePeriodIds.map((pid) =>
-      (auditHistoryMap[pid] ?? []).filter((m) => !isAuditSummaryRow(m.agentName))
-    );
-    return aggregateAuditMetrics(metricsPerPeriod);
-  }, [periodRange.viewMode, currentAudits, auditHistoryMap, activePeriodIds]);
+  const aggregatedAgents = useMemo<SalesKpiAgent[]>(() => {
+    if (activePeriodIds.length === 0) return [];
+    const datasets = activePeriodIds.map((pid) => salesKpiByPeriodId.get(pid) ?? null);
+    const { agents } = aggregateMultiPeriodKpi(datasets);
+    return agents;
+  }, [activePeriodIds, salesKpiByPeriodId]);
 
-  /* ── Detay tablo satırları (viewMode-aware) ── */
-  const agents = useMemo<AuditAgentRow[]>(() => {
-    if (aggregatedAudits.length === 0) return [];
-    const sorted = [...aggregatedAudits].sort((a, b) => {
-      const as_ = a.auditScore;
-      const bs_ = b.auditScore;
+  /* ── Detay tablo satırları ── */
+  const agents = useMemo<PerformanceAgentRow[]>(() => {
+    if (aggregatedAgents.length === 0) return [];
+    const sorted = [...aggregatedAgents].sort((a, b) => {
+      const as_ = a.perfScore;
+      const bs_ = b.perfScore;
       if (as_ === null && bs_ === null) return a.agentName.localeCompare(b.agentName, "tr");
       if (as_ === null) return 1;
       if (bs_ === null) return -1;
@@ -150,84 +171,84 @@ export function SalesAuditPage() {
       return a.agentName.localeCompare(b.agentName, "tr");
     });
     return sorted.map((a, i) => ({
-      id: a.id,
+      id: a.agentKey,
       agentKey: a.agentKey,
       agentName: a.agentName,
       listIndex: i + 1,
-      auditScoreDisplay: a.auditScore
+      perfScoreDisplay: a.perfScore,
+      salesAmountDisplay: a.salesAmount,
+      licenseCountDisplay: a.licenseCount,
+      conversionRateDisplay: a.conversionRate
     }));
-  }, [aggregatedAudits]);
+  }, [aggregatedAgents]);
 
-  /* ── Takım audit ortalaması (viewMode-aware) ── */
-  const teamAuditAverage = useMemo(
-    () => average(aggregatedAudits.map((a) => a.auditScore)),
-    [aggregatedAudits]
+  /* ── Takım performans ortalaması ── */
+  const teamPerfAverage = useMemo(
+    () => average(aggregatedAgents.map((a) => a.perfScore)),
+    [aggregatedAgents]
   );
 
   const evaluatedAgentCount = useMemo(
-    () => aggregatedAudits.filter((a) => a.auditScore !== null).length,
-    [aggregatedAudits]
+    () => aggregatedAgents.filter((a) => a.perfScore !== null).length,
+    [aggregatedAgents]
   );
 
-  /* ── Şampiyon & en düşük (viewMode-aware) ── */
-  const auditLeaders = useMemo(() => {
-    const scored = aggregatedAudits.filter(
-      (a): a is typeof a & { auditScore: number } => a.auditScore !== null
+  /* ── Şampiyon & en düşük ── */
+  const perfLeaders = useMemo(() => {
+    const scored = aggregatedAgents.filter(
+      (a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null
     );
     if (scored.length === 0) return [];
-    const topScore = Math.max(...scored.map((a) => a.auditScore));
+    const topScore = Math.max(...scored.map((a) => a.perfScore));
     return scored
-      .filter((a) => a.auditScore === topScore)
+      .filter((a) => a.perfScore === topScore)
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"))
       .map((a, i) => ({ name: a.agentName, imageAlt: a.agentName, imageSrc: buildAgentAvatar(a.agentName, i) }));
-  }, [aggregatedAudits]);
-  const auditLeaderNames = auditLeaders.map((l) => l.name).join(", ");
+  }, [aggregatedAgents]);
+  const perfLeaderNames = perfLeaders.map((l) => l.name).join(", ");
 
-  const topAuditScore = useMemo(() => {
-    const scored = aggregatedAudits
-      .map((a) => a.auditScore)
+  const topPerfScore = useMemo(() => {
+    const scored = aggregatedAgents
+      .map((a) => a.perfScore)
       .filter((v): v is number => v !== null);
     return scored.length > 0 ? Math.max(...scored) : null;
-  }, [aggregatedAudits]);
+  }, [aggregatedAgents]);
 
-  const lowestAuditGroup = useMemo(() => {
-    const scored = aggregatedAudits.filter(
-      (a): a is typeof a & { auditScore: number } => a.auditScore !== null
+  const lowestPerfGroup = useMemo(() => {
+    const scored = aggregatedAgents.filter(
+      (a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null
     );
     if (scored.length === 0) return null;
-    const lowestScore = Math.min(...scored.map((a) => a.auditScore));
+    const lowestScore = Math.min(...scored.map((a) => a.perfScore));
     const leaders = scored
-      .filter((a) => a.auditScore === lowestScore)
+      .filter((a) => a.perfScore === lowestScore)
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
     return { names: leaders.map((a) => a.agentName).join(", "), score: lowestScore };
-  }, [aggregatedAudits]);
+  }, [aggregatedAgents]);
 
-  /* ── Audit lider tablosu (viewMode-aware, top 5) ── */
-  const auditLeaderboardItems = useMemo(() => {
-    return aggregatedAudits
-      .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
-      .sort((a, b) => b.auditScore - a.auditScore || a.agentName.localeCompare(b.agentName, "tr"))
+  /* ── Lider tablosu (top 5) ── */
+  const perfLeaderboardItems = useMemo(() => {
+    return aggregatedAgents
+      .filter((a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null)
+      .sort((a, b) => b.perfScore - a.perfScore || a.agentName.localeCompare(b.agentName, "tr"))
       .slice(0, 5)
-      .map((a) => ({ id: a.id, label: a.agentName, value: formatAuditScore(a.auditScore) }));
-  }, [aggregatedAudits]);
+      .map((a) => ({ id: a.agentKey, label: a.agentName, value: formatPerfScore(a.perfScore) }));
+  }, [aggregatedAgents]);
 
-  /* ── Yıl trend grafiği ── */
-  const auditHistory = useMemo(() => {
-    if (!auditHistoryMap) return [];
-
+  /* ── Yıl trend grafiği (aylık takım ortalaması) ── */
+  const perfHistory = useMemo(() => {
     const points = yearPeriods.map((period) => {
-      const audits = auditHistoryMap[period.id] ?? [];
-      const auditAverage = average(audits.filter((a) => !isAuditSummaryRow(a.agentName)).map((a) => a.auditScore));
-      return { periodId: period.id, period: period.month, title: period.title, audit: auditAverage, csat: null };
+      const data = salesKpiByPeriodId.get(period.id);
+      const teamAvg = data ? average(data.agents.map((a) => a.perfScore)) : null;
+      return { periodId: period.id, period: period.month, title: period.title, audit: teamAvg, csat: null };
     });
-
     return buildYearTrendPoints({ year: selectedYear, currentPeriodId: periodId, points });
-  }, [auditHistoryMap, yearPeriods, selectedYear, periodId]);
+  }, [yearPeriods, salesKpiByPeriodId, selectedYear, periodId]);
 
-  /* ── Performans değişimi (viewMode-aware) ──
-   * aylık  → önceki ay vs şimdiki ay
-   * çeyreklik → önceki çeyrek ortalaması vs şimdiki çeyrek ortalaması
-   * yıllık → karşılaştırma yok (tek dönem)
+  /* ── Performans değişimi (önceki dönemle delta) ──
+   * aylık  → önceki ay
+   * çeyreklik → önceki çeyrek ortalaması
+   * yıllık → yok
    */
   const previousPeriodIds = useMemo<string[]>(() => {
     if (periodRange.viewMode === "aylik") {
@@ -238,36 +259,42 @@ export function SalesAuditPage() {
     if (periodRange.viewMode === "ceyreklik") {
       const prevQuarter = (periodRange.quarter ?? 1) - 1;
       if (prevQuarter < 1) return [];
-      return getQuarterPeriodIds(yearPeriods, prevQuarter);
+      const startMonth = (prevQuarter - 1) * 3 + 1;
+      const endMonth = startMonth + 2;
+      return yearPeriods
+        .filter((p) => {
+          const m = Number(p.month.split("-")[1]);
+          return m >= startMonth && m <= endMonth;
+        })
+        .map((p) => p.id);
     }
     return [];
   }, [periodRange.viewMode, periodRange.quarter, periodId, yearPeriods]);
 
-  const previousAggregatedAudits = useMemo<AuditMetric[] | null>(() => {
-    if (previousPeriodIds.length === 0 || !auditHistoryMap) return null;
-    const metricsPerPeriod = previousPeriodIds.map((pid) =>
-      (auditHistoryMap[pid] ?? []).filter((m) => !isAuditSummaryRow(m.agentName))
-    );
-    return aggregateAuditMetrics(metricsPerPeriod);
-  }, [previousPeriodIds, auditHistoryMap]);
+  const previousAggregatedAgents = useMemo<SalesKpiAgent[] | null>(() => {
+    if (previousPeriodIds.length === 0) return null;
+    const datasets = previousPeriodIds.map((pid) => salesKpiByPeriodId.get(pid) ?? null);
+    const { agents: prevAgents } = aggregateMultiPeriodKpi(datasets);
+    return prevAgents;
+  }, [previousPeriodIds, salesKpiByPeriodId]);
 
   const performanceShiftTitlePrefix =
     periodRange.viewMode === "ceyreklik" ? "Çeyreklik" : "Aylık";
 
   const performanceShift = useMemo(() => {
-    if (!previousAggregatedAudits) return null;
+    if (!previousAggregatedAgents) return null;
 
     const prevMap = new Map(
-      previousAggregatedAudits
-        .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
-        .map((a) => [a.agentKey, a.auditScore])
+      previousAggregatedAgents
+        .filter((a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null)
+        .map((a) => [a.agentKey, a.perfScore])
     );
 
-    const changes = aggregatedAudits
-      .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
+    const changes = aggregatedAgents
+      .filter((a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null)
       .map((a) => {
         const prev = prevMap.get(a.agentKey);
-        return prev !== undefined ? { label: a.agentName, delta: Number((a.auditScore - prev).toFixed(2)) } : null;
+        return prev !== undefined ? { label: a.agentName, delta: Number((a.perfScore - prev).toFixed(2)) } : null;
       })
       .filter((item): item is { label: string; delta: number } => item !== null);
 
@@ -290,7 +317,7 @@ export function SalesAuditPage() {
       names: changes.map((c) => c.label).sort((a, b) => a.localeCompare(b, "tr")).join(", "),
       delta: 0
     };
-  }, [aggregatedAudits, previousAggregatedAudits, performanceShiftTitlePrefix]);
+  }, [aggregatedAgents, previousAggregatedAgents, performanceShiftTitlePrefix]);
 
   /* ── Roleplay verileri (her ay için) ── */
   const roleplayQueries = useQueries({
@@ -301,28 +328,26 @@ export function SalesAuditPage() {
     }))
   });
 
-  /* ── Aylık audit pivot (ortalama) ── */
-  const auditMonthlyData = useMemo<MonthlyAgentRow[]>(() => {
-    if (!auditHistoryMap) return [];
-
+  /* ── Aylık performans pivot (ortalama değil, dönemsel tek değer) ── */
+  const perfMonthlyData = useMemo<MonthlyAgentRow[]>(() => {
     const agentMap = new Map<string, string>();
     const agentMonths = new Map<string, (number | null)[]>();
 
     for (const period of yearPeriods) {
       const monthIdx = Number(period.month.split("-")[1]) - 1;
-      const audits = auditHistoryMap[period.id] ?? [];
-      for (const audit of audits) {
-        if (isAuditSummaryRow(audit.agentName)) continue;
-        agentMap.set(audit.agentKey, audit.agentName);
-        if (!agentMonths.has(audit.agentKey)) agentMonths.set(audit.agentKey, Array(12).fill(null));
-        agentMonths.get(audit.agentKey)![monthIdx] = audit.auditScore;
+      const data = salesKpiByPeriodId.get(period.id);
+      if (!data) continue;
+      for (const entry of data.agents) {
+        agentMap.set(entry.agentKey, entry.agentName);
+        if (!agentMonths.has(entry.agentKey)) agentMonths.set(entry.agentKey, Array(12).fill(null));
+        agentMonths.get(entry.agentKey)![monthIdx] = entry.perfScore;
       }
     }
 
     return Array.from(agentMap.entries())
       .map(([key, name]) => ({ agentKey: key, agentName: name, months: agentMonths.get(key) ?? Array(12).fill(null) }))
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
-  }, [auditHistoryMap, yearPeriods]);
+  }, [salesKpiByPeriodId, yearPeriods]);
 
   /* ── Aylık role-play pivot (toplam) ── */
   const rolePlayData = useMemo<MonthlyAgentRow[]>(() => {
@@ -410,24 +435,37 @@ export function SalesAuditPage() {
     }
   });
 
-  const isLoading = periodsQuery.isPending || dashboardQuery.isPending;
+  const isLoading = periodsQuery.isPending || isKpiLoading;
+  const hasAnyData = aggregatedAgents.length > 0;
 
-  const columns: ColumnDef<AuditAgentRow, any>[] = [
+  const columns: ColumnDef<PerformanceAgentRow, any>[] = [
     columnHelper.accessor("listIndex", {
       header: "#",
       cell: (info) => <span className="font-medium text-slate-500 dark:text-slate-400">{info.getValue()}</span>
     }),
     columnHelper.accessor("agentName", { header: "Temsilci" }),
-    columnHelper.accessor("auditScoreDisplay", {
-      header: "Audit skoru",
-      cell: (info) => <AuditTableBadge value={info.getValue()} />
+    columnHelper.accessor("perfScoreDisplay", {
+      header: "Performans puanı",
+      cell: (info) => <PerformanceBadge value={info.getValue()} />
+    }),
+    columnHelper.accessor("salesAmountDisplay", {
+      header: "Satış tutarı",
+      cell: (info) => <span className="tabular-nums">{formatCurrency(info.getValue())}</span>
+    }),
+    columnHelper.accessor("licenseCountDisplay", {
+      header: "Lisans",
+      cell: (info) => <span className="tabular-nums">{formatNumber(info.getValue())}</span>
+    }),
+    columnHelper.accessor("conversionRateDisplay", {
+      header: "Dönüşüm",
+      cell: (info) => <span className="tabular-nums">{formatPercent(info.getValue())}</span>
     })
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Satış Audit"
+        title="Satış Performans"
         actions={
           <PeriodRangeFilter
             onChange={setPeriodRange}
@@ -441,20 +479,20 @@ export function SalesAuditPage() {
         <SurfaceCard title="Yükleniyor..." variant="default">
           <p className="text-sm text-slate-600 dark:text-slate-400">Veriler yükleniyor...</p>
         </SurfaceCard>
-      ) : !snapshot ? (
+      ) : !hasAnyData ? (
         <SurfaceCard title="Henüz veri yok" variant="default">
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {selectedYear} yılı için satış departmanına ait dönem verisi bulunamadı.
+            {selectedYear} yılı için satış performans verisi bulunamadı.
           </p>
         </SurfaceCard>
       ) : (
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             <StatCard
-              icon={<ShieldCheck size={18} />}
-              label="Takım audit ortalaması"
-              tone={auditThreshold ? resolveThresholdTone(teamAuditAverage, auditThreshold) : "neutral"}
-              value={formatAuditScore(teamAuditAverage)}
+              icon={<Target size={18} />}
+              label="Takım performans ortalaması"
+              tone="neutral"
+              value={formatPerfScore(teamPerfAverage)}
             />
             <StatCard
               icon={<Users size={18} />}
@@ -466,14 +504,14 @@ export function SalesAuditPage() {
 
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <ChampionSpotlightCard
-              kicker={auditLeaders.length > 1 ? "Öne çıkan temsilciler" : "Öne çıkan temsilci"}
-              metricLabel={auditLeaders.length > 1 ? "Lider temsilciler" : "Lider temsilci"}
-              name={auditLeaderNames || "Takip ediliyor"}
-              people={auditLeaders}
-              score={formatAuditScore(topAuditScore)}
+              kicker={perfLeaders.length > 1 ? "Öne çıkan temsilciler" : "Öne çıkan temsilci"}
+              metricLabel={perfLeaders.length > 1 ? "Lider temsilciler" : "Lider temsilci"}
+              name={perfLeaderNames || "Takip ediliyor"}
+              people={perfLeaders}
+              score={formatPerfScore(topPerfScore)}
               showPodium={false}
               theme="ink"
-              title="En yüksek audit skoru"
+              title="En yüksek performans puanı"
             />
 
             <div className="grid gap-4">
@@ -484,40 +522,37 @@ export function SalesAuditPage() {
                 value={performanceShift?.names ?? "Henüz yok"}
               />
               <InsightTile
-                description={formatAuditScore(lowestAuditGroup?.score)}
+                description={formatPerfScore(lowestPerfGroup?.score)}
                 icon={<TrendingDown size={16} />}
-                title="En düşük audit"
-                value={lowestAuditGroup?.names ?? "Henüz yok"}
+                title="En düşük performans"
+                value={lowestPerfGroup?.names ?? "Henüz yok"}
               />
-
             </div>
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
             <TrendLineCard
               color={chart.barDefault}
-              data={auditHistory}
+              data={perfHistory}
               emptyMessage={
-                auditHistoryBulkQuery.isPending
-                  ? "Yıllık audit verisi yükleniyor..."
-                  : auditHistoryBulkQuery.isError
-                    ? "Audit verisi alınamadı."
-                    : "Bu yıl için audit verisi bulunamadı."
+                isKpiLoading
+                  ? "Yıllık performans verisi yükleniyor..."
+                  : "Bu yıl için performans verisi bulunamadı."
               }
               metricKey="audit"
-              title="Audit"
-              valueFormatter={(value) => formatAuditScore(value)}
+              title="Performans"
+              valueFormatter={(value) => formatPerfScore(value)}
               yDomain={[0, 100]}
             />
 
             <Leaderboard
-              items={auditLeaderboardItems}
-              title="Audit lider tablosu"
+              items={perfLeaderboardItems}
+              title="Performans lider tablosu"
             />
           </div>
 
           <SurfaceCard
-            title="Detay tablo görünümü"
+            title="Temsilci detay tablosu"
             variant="default"
             headerClassName="bg-emerald-800 border-emerald-700 dark:bg-emerald-900"
             titleClassName="text-white"
@@ -526,15 +561,15 @@ export function SalesAuditPage() {
               columns={columns}
               data={agents}
               density="comfortable"
-              emptyState="Seçilen dönemde gösterilecek audit kaydı bulunamadı."
+              emptyState="Seçilen dönemde gösterilecek performans kaydı bulunamadı."
             />
           </SurfaceCard>
 
           <MonthlyTable
-            data={auditMonthlyData}
+            data={perfMonthlyData}
             summaryMode="average"
-            title="Aylık Audit Skorları"
-            valueFormatter={(v) => formatAuditScore(v)}
+            title="Aylık Performans Puanları"
+            valueFormatter={(v) => formatPerfScore(v)}
           />
 
           <div className="grid gap-6 xl:grid-cols-2">
