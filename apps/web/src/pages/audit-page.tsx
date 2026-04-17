@@ -1,7 +1,15 @@
 import { ChampionSpotlightCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import {
+  average,
+  buildDashboardSnapshot,
+  resolveThresholdTone,
+  selectAuditMetrics,
+  selectDefaultReportPeriod,
+  type AgentMetric,
+  type AuditMetric
+} from "@kalitedb/shared";
 import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
@@ -18,7 +26,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
-import { computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { chart } from "../theme/colors";
 
 type AuditAgentRow = {
@@ -72,7 +80,46 @@ export function AuditPage() {
     staleTime: 5 * 60 * 1000
   });
 
-  const snapshot = dashboardQuery.data;
+  const baseSnapshot = dashboardQuery.data;
+  const yearPeriodIds = useMemo(() => csYearPeriods.map((p) => p.id), [csYearPeriods]);
+  const agentMetricsBulkQuery = useQuery({
+    enabled: yearPeriodIds.length > 0 && periodRange.viewMode !== "aylik",
+    queryKey: ["cs-agent-metrics-bulk", auth.token, yearPeriodIds],
+    queryFn: () => api.getAgentMetricsForPeriods(auth.token, yearPeriodIds),
+    staleTime: 5 * 60 * 1000
+  });
+  const auditMetricsBulkQuery = useQuery({
+    enabled: yearPeriodIds.length > 0 && periodRange.viewMode !== "aylik",
+    queryKey: ["cs-audit-metrics-bulk", auth.token, yearPeriodIds],
+    queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
+    staleTime: 5 * 60 * 1000
+  });
+  const snapshot = useMemo(() => {
+    if (!baseSnapshot) return undefined;
+    if (periodRange.viewMode === "aylik") return baseSnapshot;
+    if (activePeriodIds.length === 0) return baseSnapshot;
+
+    const agentMap = agentMetricsBulkQuery.data;
+    const auditMap = auditMetricsBulkQuery.data;
+    if (!agentMap || !auditMap) return baseSnapshot;
+
+    const agentPerPeriod = activePeriodIds.map((pid) => agentMap[pid] ?? []);
+    const auditPerPeriod = activePeriodIds.map((pid) => auditMap[pid] ?? []);
+    const aggregatedAgents: AgentMetric[] = aggregateAgentMetrics(agentPerPeriod);
+    const aggregatedAudits: AuditMetric[] = aggregateAuditMetrics(auditPerPeriod);
+
+    const aggregatedPeriod = { ...baseSnapshot.period, manualTotalCallCount: null, manualTotalChatMailCount: null, manualTotalTicketClosedCount: null };
+    return buildDashboardSnapshot({
+      period: aggregatedPeriod,
+      datasets: {
+        agentMetrics: aggregatedAgents,
+        auditMetrics: aggregatedAudits,
+        questionPerformance: baseSnapshot.datasets.questionPerformance,
+        qtMetrics: baseSnapshot.datasets.qtMetrics
+      },
+      thresholds: baseSnapshot.thresholds
+    });
+  }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";

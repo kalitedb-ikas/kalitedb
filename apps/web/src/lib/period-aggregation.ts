@@ -1,4 +1,5 @@
 import type {
+  AgentMetric,
   AuditMetric,
   LicenseSummary,
   QtManualEntry,
@@ -156,6 +157,156 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
   }
 
   return { agents, licenseSummary, targets };
+}
+
+/* ── Agent metrics aggregation (cs-csat için, çeyreklik/yıllık) ── */
+
+export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
+  const flat = metrics.flat();
+  if (flat.length === 0) return [];
+
+  const grouped = new Map<
+    string,
+    {
+      id: string;
+      period: string;
+      agentName: string;
+      totalCallCount: number;
+      totalChatMailCount: number;
+      totalTicketClosedCount: number;
+      totalConversationCount: number;
+      missedCallsSum: number;
+      missedCallsHasValue: boolean;
+      evaluationCountSum: number;
+      evaluationCountHasValue: boolean;
+      talkDurationSum: number;
+      talkDurationCount: number;
+      localCloseRateSum: number;
+      localCloseRateCount: number;
+      weightedCsatSum: number;
+      csatWeightSum: number;
+      csatFallbackSum: number;
+      csatFallbackCount: number;
+      auditScoreSum: number;
+      auditScoreCount: number;
+      prevAuditSum: number;
+      prevAuditCount: number;
+    }
+  >();
+
+  for (const m of flat) {
+    const existing = grouped.get(m.agentKey);
+    if (existing) {
+      existing.id = m.id;
+      existing.period = m.period;
+      existing.agentName = m.agentName;
+      existing.totalCallCount += m.totalCallCount;
+      existing.totalChatMailCount += m.totalChatMailCount;
+      existing.totalTicketClosedCount += m.totalTicketClosedCount;
+      existing.totalConversationCount += m.totalConversationCount;
+      if (m.missedCalls !== null) {
+        existing.missedCallsSum += m.missedCalls;
+        existing.missedCallsHasValue = true;
+      }
+      if (m.evaluationCount !== null) {
+        existing.evaluationCountSum += m.evaluationCount;
+        existing.evaluationCountHasValue = true;
+      }
+      if (m.avgTalkDurationSeconds !== null) {
+        existing.talkDurationSum += m.avgTalkDurationSeconds;
+        existing.talkDurationCount += 1;
+      }
+      if (m.localCloseRate !== null) {
+        existing.localCloseRateSum += m.localCloseRate;
+        existing.localCloseRateCount += 1;
+      }
+      if (m.callEvaluationAverage !== null) {
+        if (m.evaluationCount !== null && m.evaluationCount > 0) {
+          existing.weightedCsatSum += m.callEvaluationAverage * m.evaluationCount;
+          existing.csatWeightSum += m.evaluationCount;
+        } else {
+          existing.csatFallbackSum += m.callEvaluationAverage;
+          existing.csatFallbackCount += 1;
+        }
+      }
+      if (m.auditScore !== null) {
+        existing.auditScoreSum += m.auditScore;
+        existing.auditScoreCount += 1;
+      }
+      if (m.previousAuditAccuracy !== null) {
+        existing.prevAuditSum += m.previousAuditAccuracy;
+        existing.prevAuditCount += 1;
+      }
+    } else {
+      grouped.set(m.agentKey, {
+        id: m.id,
+        period: m.period,
+        agentName: m.agentName,
+        totalCallCount: m.totalCallCount,
+        totalChatMailCount: m.totalChatMailCount,
+        totalTicketClosedCount: m.totalTicketClosedCount,
+        totalConversationCount: m.totalConversationCount,
+        missedCallsSum: m.missedCalls ?? 0,
+        missedCallsHasValue: m.missedCalls !== null,
+        evaluationCountSum: m.evaluationCount ?? 0,
+        evaluationCountHasValue: m.evaluationCount !== null,
+        talkDurationSum: m.avgTalkDurationSeconds ?? 0,
+        talkDurationCount: m.avgTalkDurationSeconds !== null ? 1 : 0,
+        localCloseRateSum: m.localCloseRate ?? 0,
+        localCloseRateCount: m.localCloseRate !== null ? 1 : 0,
+        weightedCsatSum:
+          m.callEvaluationAverage !== null && m.evaluationCount !== null && m.evaluationCount > 0
+            ? m.callEvaluationAverage * m.evaluationCount
+            : 0,
+        csatWeightSum:
+          m.callEvaluationAverage !== null && m.evaluationCount !== null && m.evaluationCount > 0
+            ? m.evaluationCount
+            : 0,
+        csatFallbackSum:
+          m.callEvaluationAverage !== null && (m.evaluationCount === null || m.evaluationCount === 0)
+            ? m.callEvaluationAverage
+            : 0,
+        csatFallbackCount:
+          m.callEvaluationAverage !== null && (m.evaluationCount === null || m.evaluationCount === 0)
+            ? 1
+            : 0,
+        auditScoreSum: m.auditScore ?? 0,
+        auditScoreCount: m.auditScore !== null ? 1 : 0,
+        prevAuditSum: m.previousAuditAccuracy ?? 0,
+        prevAuditCount: m.previousAuditAccuracy !== null ? 1 : 0
+      });
+    }
+  }
+
+  const result: AgentMetric[] = [];
+  for (const [agentKey, g] of grouped.entries()) {
+    let csat: number | null = null;
+    if (g.csatWeightSum > 0) {
+      csat = g.weightedCsatSum / g.csatWeightSum;
+    } else if (g.csatFallbackCount > 0) {
+      csat = g.csatFallbackSum / g.csatFallbackCount;
+    }
+    result.push({
+      id: g.id,
+      period: g.period,
+      agentKey,
+      agentName: g.agentName,
+      auditScore: g.auditScoreCount > 0 ? g.auditScoreSum / g.auditScoreCount : null,
+      previousAuditAccuracy: g.prevAuditCount > 0 ? g.prevAuditSum / g.prevAuditCount : null,
+      totalCallCount: g.totalCallCount,
+      totalChatMailCount: g.totalChatMailCount,
+      totalTicketClosedCount: g.totalTicketClosedCount,
+      totalConversationCount: g.totalConversationCount,
+      avgTalkDurationSeconds:
+        g.talkDurationCount > 0 ? Math.round(g.talkDurationSum / g.talkDurationCount) : null,
+      localCloseRate: g.localCloseRateCount > 0 ? g.localCloseRateSum / g.localCloseRateCount : null,
+      missedCalls: g.missedCallsHasValue ? g.missedCallsSum : null,
+      callEvaluationAverage: csat,
+      evaluationCount: g.evaluationCountHasValue ? g.evaluationCountSum : null
+    });
+  }
+
+  return result;
 }
 
 /* ── Audit metrics aggregation (sales-audit için) ── */
