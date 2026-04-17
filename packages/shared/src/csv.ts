@@ -50,7 +50,7 @@ const HEADER_ALIASES: Record<DatasetType, Record<string, string[]>> = {
     agent_name: ["mt", "temsilci", "agentname"],
     total_call_count: ["toplamcagriadedi", "totalcallcount"],
     total_chat_mail_count: ["toplamchatmailadedi", "toplamchatepostaadedi", "totalchatmailcount"],
-    total_ticket_closed_count: ["toplamticketkapatmaadedi", "totalticketclosedcount"],
+    total_ticket_closed_count: ["toplamticketkapatmaadedi", "toplamticketadedi", "totalticketclosedcount"],
     totalConversationCount: ["toplamgorusmeadedi", "totalconversationcount"],
     avg_talk_duration_seconds: ["ortalamakonusmasuresi", "avgtalkdurationseconds"],
     local_close_rate: ["lokalkapatmaorani", "localcloserate"],
