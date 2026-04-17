@@ -10,7 +10,13 @@ import {
   StatCard,
   SurfaceCard
 } from "@kalitedb/ui";
-import { resolveThresholdTone, selectDefaultReportPeriod } from "@kalitedb/shared";
+import {
+  buildDashboardSnapshot,
+  resolveThresholdTone,
+  selectDefaultReportPeriod,
+  type AgentMetric,
+  type AuditMetric
+} from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
@@ -20,7 +26,7 @@ import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-ca
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatDelta, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
-import { computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { brand, chart } from "../theme/colors";
 
 const TREND_DATASET_TYPES = ["agent-metrics", "audit-metrics"] as const;
@@ -82,11 +88,50 @@ export function DashboardPage() {
     staleTime: 5 * 60 * 1000
   });
 
-  const snapshot = dashboardQuery.data;
+  const baseSnapshot = dashboardQuery.data;
   const selectedPeriod = periodsQuery.data?.find((period) => period.id === periodId);
   const selectedYear = selectedPeriod?.month.slice(0, 4);
 
   const yearPeriods = csYearPeriods;
+  const yearPeriodIds = useMemo(() => yearPeriods.map((p) => p.id), [yearPeriods]);
+  const agentMetricsBulkQuery = useQuery({
+    enabled: yearPeriodIds.length > 0 && periodRange.viewMode !== "aylik",
+    queryKey: ["cs-agent-metrics-bulk", auth.token, yearPeriodIds],
+    queryFn: () => api.getAgentMetricsForPeriods(auth.token, yearPeriodIds),
+    staleTime: 5 * 60 * 1000
+  });
+  const auditMetricsBulkQuery = useQuery({
+    enabled: yearPeriodIds.length > 0 && periodRange.viewMode !== "aylik",
+    queryKey: ["cs-audit-metrics-bulk", auth.token, yearPeriodIds],
+    queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
+    staleTime: 5 * 60 * 1000
+  });
+  const snapshot = useMemo(() => {
+    if (!baseSnapshot) return undefined;
+    if (periodRange.viewMode === "aylik") return baseSnapshot;
+    if (activePeriodIds.length === 0) return baseSnapshot;
+
+    const agentMap = agentMetricsBulkQuery.data;
+    const auditMap = auditMetricsBulkQuery.data;
+    if (!agentMap || !auditMap) return baseSnapshot;
+
+    const agentPerPeriod = activePeriodIds.map((pid) => agentMap[pid] ?? []);
+    const auditPerPeriod = activePeriodIds.map((pid) => auditMap[pid] ?? []);
+    const aggregatedAgents: AgentMetric[] = aggregateAgentMetrics(agentPerPeriod);
+    const aggregatedAudits: AuditMetric[] = aggregateAuditMetrics(auditPerPeriod);
+
+    const aggregatedPeriod = { ...baseSnapshot.period, manualTotalCallCount: null, manualTotalChatMailCount: null, manualTotalTicketClosedCount: null };
+    return buildDashboardSnapshot({
+      period: aggregatedPeriod,
+      datasets: {
+        agentMetrics: aggregatedAgents,
+        auditMetrics: aggregatedAudits,
+        questionPerformance: baseSnapshot.datasets.questionPerformance,
+        qtMetrics: baseSnapshot.datasets.qtMetrics
+      },
+      thresholds: baseSnapshot.thresholds
+    });
+  }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
   const yearlyTrendQuery = useQuery({
     enabled: yearPeriods.length > 0,
