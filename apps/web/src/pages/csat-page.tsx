@@ -28,6 +28,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { brand } from "../theme/colors";
 
@@ -132,7 +133,7 @@ export function CsatPage() {
   });
 
   const baseSnapshot = dashboardQuery.data;
-  const snapshot = useMemo(() => {
+  const aggregatedSnapshot = useMemo(() => {
     if (!baseSnapshot) return undefined;
     if (periodRange.viewMode === "aylik") return baseSnapshot;
     if (activePeriodIds.length === 0) return baseSnapshot;
@@ -158,6 +159,31 @@ export function CsatPage() {
       thresholds: baseSnapshot.thresholds
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
+
+  // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
+  // ama özet (summary / ortalama / toplam) hesaplarında korunur.
+  const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
+  const snapshot = useMemo(() => {
+    if (!aggregatedSnapshot) return undefined;
+    if (hiddenAgentKeys.size === 0) return aggregatedSnapshot;
+
+    const filteredAgents = aggregatedSnapshot.datasets.agentMetrics.filter(
+      (a) => !hiddenAgentKeys.has(a.agentKey)
+    );
+    const filteredAudits = aggregatedSnapshot.datasets.auditMetrics.filter(
+      (a) => !hiddenAgentKeys.has(a.agentKey)
+    );
+    const rebuilt = buildDashboardSnapshot({
+      period: aggregatedSnapshot.period,
+      datasets: {
+        ...aggregatedSnapshot.datasets,
+        agentMetrics: filteredAgents,
+        auditMetrics: filteredAudits
+      },
+      thresholds: aggregatedSnapshot.thresholds
+    });
+    return { ...rebuilt, summary: aggregatedSnapshot.summary };
+  }, [aggregatedSnapshot, hiddenAgentKeys]);
 
   const yearlyTrend = yearlyTrendQuery.data ?? [];
   const rows = useMemo(() => {
@@ -228,10 +254,12 @@ export function CsatPage() {
   const csatLeaderNames = formatNameList(csatLeaders.map((leader) => leader.name));
 
   const csatSummary = useMemo(() => {
-    const totalCalls = snapshot?.period.manualTotalCallCount ?? sum(rows.map((row) => row.totalCallCount));
-    const totalDigital = snapshot?.period.manualTotalChatMailCount ?? sum(rows.map((row) => row.totalChatMailCount));
+    // Özet toplamlar satıcı operasyon etiketlileri de içerir
+    const fullAgents = aggregatedSnapshot?.datasets.agentMetrics ?? [];
+    const totalCalls = aggregatedSnapshot?.period.manualTotalCallCount ?? sum(fullAgents.map((a) => a.totalCallCount));
+    const totalDigital = aggregatedSnapshot?.period.manualTotalChatMailCount ?? sum(fullAgents.map((a) => a.totalChatMailCount));
     const totalTickets =
-      snapshot?.period.manualTotalTicketClosedCount ?? sum(rows.map((row) => row.totalTicketClosedCount));
+      aggregatedSnapshot?.period.manualTotalTicketClosedCount ?? sum(fullAgents.map((a) => a.totalTicketClosedCount));
     const mixTotal = totalCalls + totalDigital + totalTickets || 1;
 
     return {
@@ -311,22 +339,32 @@ export function CsatPage() {
   ];
 
   const tableSummaryRows = useMemo(() => {
-    if (rows.length === 0) return [] as Array<Record<string, ReactNode> & { _label?: string; _tone?: "emerald" }>;
+    // Özet satırları 'satıcı operasyon' etiketlileri de dahil tüm temsilcilerden hesaplanır
+    const fullAgents = aggregatedSnapshot?.datasets.agentMetrics ?? [];
+    const fullAudits = aggregatedSnapshot ? selectAuditMetrics(aggregatedSnapshot.datasets) : [];
+    if (fullAgents.length === 0) return [] as Array<Record<string, ReactNode> & { _label?: string; _tone?: "emerald" }>;
+    const auditByKey = new Map(fullAudits.map((r) => [r.agentKey, r]));
+    const enriched = fullAgents.map((a) => ({
+      ...a,
+      auditScoreDisplay: auditByKey.get(a.agentKey)?.auditScore ?? a.auditScore,
+      previousAuditAccuracyDisplay:
+        auditByKey.get(a.agentKey)?.previousAuditAccuracy ?? a.previousAuditAccuracy
+    }));
     const avgRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
       _label: "ORTALAMA",
       _tone: "emerald",
       agentName: "ORTALAMA",
-      auditScoreDisplay: formatAuditScore(average(rows.map((row) => row.auditScoreDisplay))),
-      previousAuditAccuracyDisplay: formatPercent(average(rows.map((row) => row.previousAuditAccuracyDisplay))),
-      totalCallCount: formatNumber(Math.round(sum(rows.map((row) => row.totalCallCount)) / rows.length)),
-      totalChatMailCount: formatNumber(Math.round(sum(rows.map((row) => row.totalChatMailCount)) / rows.length)),
-      totalTicketClosedCount: formatNumber(Math.round(sum(rows.map((row) => row.totalTicketClosedCount)) / rows.length)),
-      totalConversationCount: formatNumber(Math.round(sum(rows.map((row) => row.totalConversationCount)) / rows.length)),
-      avgTalkDurationSeconds: formatSeconds(average(rows.map((row) => row.avgTalkDurationSeconds))),
-      localCloseRate: formatPercent(average(rows.map((row) => row.localCloseRate))),
-      missedCalls: formatNumber(Math.round(sum(rows.map((row) => row.missedCalls)) / rows.length)),
-      callEvaluationAverage: formatNumber(average(rows.map((row) => row.callEvaluationAverage)), 3),
-      evaluationCount: formatNumber(Math.round(sum(rows.map((row) => row.evaluationCount)) / rows.length))
+      auditScoreDisplay: formatAuditScore(average(enriched.map((r) => r.auditScoreDisplay))),
+      previousAuditAccuracyDisplay: formatPercent(average(enriched.map((r) => r.previousAuditAccuracyDisplay))),
+      totalCallCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalCallCount)) / enriched.length)),
+      totalChatMailCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalChatMailCount)) / enriched.length)),
+      totalTicketClosedCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalTicketClosedCount)) / enriched.length)),
+      totalConversationCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalConversationCount)) / enriched.length)),
+      avgTalkDurationSeconds: formatSeconds(average(enriched.map((r) => r.avgTalkDurationSeconds))),
+      localCloseRate: formatPercent(average(enriched.map((r) => r.localCloseRate))),
+      missedCalls: formatNumber(Math.round(sum(enriched.map((r) => r.missedCalls)) / enriched.length)),
+      callEvaluationAverage: formatNumber(average(enriched.map((r) => r.callEvaluationAverage)), 3),
+      evaluationCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluationCount)) / enriched.length))
     };
     const totalRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
       _label: "TOPLAM",
@@ -334,18 +372,18 @@ export function CsatPage() {
       agentName: "TOPLAM",
       auditScoreDisplay: "",
       previousAuditAccuracyDisplay: "",
-      totalCallCount: formatNumber(sum(rows.map((row) => row.totalCallCount))),
-      totalChatMailCount: formatNumber(sum(rows.map((row) => row.totalChatMailCount))),
-      totalTicketClosedCount: formatNumber(sum(rows.map((row) => row.totalTicketClosedCount))),
-      totalConversationCount: formatNumber(sum(rows.map((row) => row.totalConversationCount))),
+      totalCallCount: formatNumber(sum(enriched.map((r) => r.totalCallCount))),
+      totalChatMailCount: formatNumber(sum(enriched.map((r) => r.totalChatMailCount))),
+      totalTicketClosedCount: formatNumber(sum(enriched.map((r) => r.totalTicketClosedCount))),
+      totalConversationCount: formatNumber(sum(enriched.map((r) => r.totalConversationCount))),
       avgTalkDurationSeconds: "",
       localCloseRate: "",
-      missedCalls: formatNumber(sum(rows.map((row) => row.missedCalls))),
+      missedCalls: formatNumber(sum(enriched.map((r) => r.missedCalls))),
       callEvaluationAverage: "",
-      evaluationCount: formatNumber(sum(rows.map((row) => row.evaluationCount)))
+      evaluationCount: formatNumber(sum(enriched.map((r) => r.evaluationCount)))
     };
     return [avgRow, totalRow];
-  }, [rows]);
+  }, [aggregatedSnapshot]);
 
   return (
     <div className="space-y-6">
