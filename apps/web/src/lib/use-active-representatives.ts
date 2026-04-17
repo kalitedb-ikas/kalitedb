@@ -26,3 +26,23 @@ export function useActiveRepresentativeKeys() {
 
   return { activeKeys, isLoading: query.isLoading };
 }
+
+/**
+ * Belirli bir etiket (badge) taşıyan temsilci key'lerini döner.
+ * CS dashboard/CSAT/Audit sayfalarında "Satıcı Operasyon" etiketi olanları
+ * listelerden gizleyip yine de özet/ortalama hesaplarında tutmak için kullanılır.
+ */
+export function useRepresentativeKeysWithBadge(badgeKey: string): Set<string> {
+  const auth = useAuth();
+
+  const query = useQuery({
+    queryKey: ["representatives", auth.token],
+    queryFn: () => api.getRepresentatives(auth.token),
+    staleTime: 10 * 60 * 1000
+  });
+
+  return useMemo(() => {
+    const reps = query.data ?? [];
+    return new Set(reps.filter((r) => (r.badges ?? []).includes(badgeKey)).map((r) => r.key));
+  }, [query.data, badgeKey]);
+}

@@ -27,6 +27,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { chart } from "../theme/colors";
 
 type AuditAgentRow = {
@@ -94,7 +95,7 @@ export function AuditPage() {
     queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
     staleTime: 5 * 60 * 1000
   });
-  const snapshot = useMemo(() => {
+  const aggregatedSnapshot = useMemo(() => {
     if (!baseSnapshot) return undefined;
     if (periodRange.viewMode === "aylik") return baseSnapshot;
     if (activePeriodIds.length === 0) return baseSnapshot;
@@ -120,6 +121,30 @@ export function AuditPage() {
       thresholds: baseSnapshot.thresholds
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
+
+  // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
+  // özet/ortalama hesaplarına dahil edilir.
+  const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
+  const snapshot = useMemo(() => {
+    if (!aggregatedSnapshot) return undefined;
+    if (hiddenAgentKeys.size === 0) return aggregatedSnapshot;
+    const filteredAgents = aggregatedSnapshot.datasets.agentMetrics.filter(
+      (a) => !hiddenAgentKeys.has(a.agentKey)
+    );
+    const filteredAudits = aggregatedSnapshot.datasets.auditMetrics.filter(
+      (a) => !hiddenAgentKeys.has(a.agentKey)
+    );
+    const rebuilt = buildDashboardSnapshot({
+      period: aggregatedSnapshot.period,
+      datasets: {
+        ...aggregatedSnapshot.datasets,
+        agentMetrics: filteredAgents,
+        auditMetrics: filteredAudits
+      },
+      thresholds: aggregatedSnapshot.thresholds
+    });
+    return { ...rebuilt, summary: aggregatedSnapshot.summary };
+  }, [aggregatedSnapshot, hiddenAgentKeys]);
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
@@ -407,18 +432,35 @@ export function AuditPage() {
   ];
 
   const tableSummaryRows = useMemo(() => {
-    const scored = agents.filter((a) => a.auditScoreDisplay !== null);
-    if (scored.length === 0) return [] as Array<Record<string, ReactNode> & { _tone?: "emerald" }>;
+    // Ortalama satırı 'satıcı operasyon' etiketlileri de içerir
+    const fullAudits = aggregatedSnapshot ? selectAuditMetrics(aggregatedSnapshot.datasets) : [];
+    const fullAgents = aggregatedSnapshot?.datasets.agentMetrics ?? [];
+    const auditByKey = new Map(fullAudits.map((r) => [r.agentKey, r]));
+    const allKeys = new Set<string>([
+      ...fullAgents.map((a) => a.agentKey),
+      ...fullAudits.map((a) => a.agentKey)
+    ]);
+    const auditScores: Array<number | null> = [];
+    const prevAuditScores: Array<number | null> = [];
+    allKeys.forEach((key) => {
+      const audit = auditByKey.get(key);
+      const agent = fullAgents.find((a) => a.agentKey === key);
+      auditScores.push(audit?.auditScore ?? agent?.auditScore ?? null);
+      prevAuditScores.push(audit?.previousAuditAccuracy ?? agent?.previousAuditAccuracy ?? null);
+    });
+    if (auditScores.every((v) => v === null)) {
+      return [] as Array<Record<string, ReactNode> & { _tone?: "emerald" }>;
+    }
     return [
       {
         _tone: "emerald" as const,
         listIndex: "",
         agentName: "ORTALAMA",
-        auditScoreDisplay: formatAuditScore(average(agents.map((a) => a.auditScoreDisplay))),
-        previousAuditAccuracyDisplay: formatPercent(average(agents.map((a) => a.previousAuditAccuracyDisplay)))
+        auditScoreDisplay: formatAuditScore(average(auditScores)),
+        previousAuditAccuracyDisplay: formatPercent(average(prevAuditScores))
       }
     ];
-  }, [agents]);
+  }, [aggregatedSnapshot]);
 
   return (
     <div className="space-y-6">
