@@ -27,6 +27,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatDelta, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { brand, chart } from "../theme/colors";
 
 const TREND_DATASET_TYPES = ["agent-metrics", "audit-metrics"] as const;
@@ -106,7 +107,7 @@ export function DashboardPage() {
     queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
     staleTime: 5 * 60 * 1000
   });
-  const snapshot = useMemo(() => {
+  const aggregatedSnapshot = useMemo(() => {
     if (!baseSnapshot) return undefined;
     if (periodRange.viewMode === "aylik") return baseSnapshot;
     if (activePeriodIds.length === 0) return baseSnapshot;
@@ -132,6 +133,30 @@ export function DashboardPage() {
       thresholds: baseSnapshot.thresholds
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
+
+  // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
+  // özet/ortalama hesaplarına dahil edilir.
+  const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
+  const snapshot = useMemo(() => {
+    if (!aggregatedSnapshot) return undefined;
+    if (hiddenAgentKeys.size === 0) return aggregatedSnapshot;
+    const filteredAgents = aggregatedSnapshot.datasets.agentMetrics.filter(
+      (a) => !hiddenAgentKeys.has(a.agentKey)
+    );
+    const filteredAudits = aggregatedSnapshot.datasets.auditMetrics.filter(
+      (a) => !hiddenAgentKeys.has(a.agentKey)
+    );
+    const rebuilt = buildDashboardSnapshot({
+      period: aggregatedSnapshot.period,
+      datasets: {
+        ...aggregatedSnapshot.datasets,
+        agentMetrics: filteredAgents,
+        auditMetrics: filteredAudits
+      },
+      thresholds: aggregatedSnapshot.thresholds
+    });
+    return { ...rebuilt, summary: aggregatedSnapshot.summary };
+  }, [aggregatedSnapshot, hiddenAgentKeys]);
 
   const yearlyTrendQuery = useQuery({
     enabled: yearPeriods.length > 0,
