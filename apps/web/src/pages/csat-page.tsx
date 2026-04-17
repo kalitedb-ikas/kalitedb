@@ -1,4 +1,4 @@
-import { resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, sum, type AgentMetric } from "@kalitedb/shared";
+import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, sum, type AgentMetric } from "@kalitedb/shared";
 import {
   ChampionSpotlightCard,
   ExecutiveChartCard,
@@ -10,7 +10,7 @@ import {
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, PhoneCall, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
@@ -260,6 +260,43 @@ export function CsatPage() {
     columnHelper.accessor("evaluationCount", { header: "Değerlendirme" })
   ];
 
+  const tableSummaryRows = useMemo(() => {
+    if (rows.length === 0) return [] as Array<Record<string, ReactNode> & { _label?: string; _tone?: "emerald" }>;
+    const avgRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
+      _label: "ORTALAMA",
+      _tone: "emerald",
+      agentName: "ORTALAMA",
+      auditScoreDisplay: formatAuditScore(average(rows.map((row) => row.auditScoreDisplay))),
+      previousAuditAccuracyDisplay: formatPercent(average(rows.map((row) => row.previousAuditAccuracyDisplay))),
+      totalCallCount: formatNumber(Math.round(sum(rows.map((row) => row.totalCallCount)) / rows.length)),
+      totalChatMailCount: formatNumber(Math.round(sum(rows.map((row) => row.totalChatMailCount)) / rows.length)),
+      totalTicketClosedCount: formatNumber(Math.round(sum(rows.map((row) => row.totalTicketClosedCount)) / rows.length)),
+      totalConversationCount: formatNumber(Math.round(sum(rows.map((row) => row.totalConversationCount)) / rows.length)),
+      avgTalkDurationSeconds: formatSeconds(average(rows.map((row) => row.avgTalkDurationSeconds))),
+      localCloseRate: formatPercent(average(rows.map((row) => row.localCloseRate))),
+      missedCalls: formatNumber(Math.round(sum(rows.map((row) => row.missedCalls)) / rows.length)),
+      callEvaluationAverage: formatNumber(average(rows.map((row) => row.callEvaluationAverage)), 3),
+      evaluationCount: formatNumber(Math.round(sum(rows.map((row) => row.evaluationCount)) / rows.length))
+    };
+    const totalRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
+      _label: "TOPLAM",
+      _tone: "emerald",
+      agentName: "TOPLAM",
+      auditScoreDisplay: "",
+      previousAuditAccuracyDisplay: "",
+      totalCallCount: formatNumber(sum(rows.map((row) => row.totalCallCount))),
+      totalChatMailCount: formatNumber(sum(rows.map((row) => row.totalChatMailCount))),
+      totalTicketClosedCount: formatNumber(sum(rows.map((row) => row.totalTicketClosedCount))),
+      totalConversationCount: formatNumber(sum(rows.map((row) => row.totalConversationCount))),
+      avgTalkDurationSeconds: "",
+      localCloseRate: "",
+      missedCalls: formatNumber(sum(rows.map((row) => row.missedCalls))),
+      callEvaluationAverage: "",
+      evaluationCount: formatNumber(sum(rows.map((row) => row.evaluationCount)))
+    };
+    return [avgRow, totalRow];
+  }, [rows]);
+
   return (
     <div className="space-y-6">
       <PageHeader title="CSAT" actions={<PeriodRangeFilter onChange={setPeriodRange} periods={csPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />} />
@@ -377,7 +414,7 @@ export function CsatPage() {
           </div>
 
           <ExecutiveChartCard title="CSAT ayrıntı tablosu">
-            <DataTable columns={columns} data={rows} />
+            <DataTable columns={columns} data={rows} variant="emerald" striped summaryRows={tableSummaryRows} />
           </ExecutiveChartCard>
         </>
       ) : (

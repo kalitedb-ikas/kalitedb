@@ -3,7 +3,7 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { average, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
@@ -359,6 +359,20 @@ export function AuditPage() {
     })
   ];
 
+  const tableSummaryRows = useMemo(() => {
+    const scored = agents.filter((a) => a.auditScoreDisplay !== null);
+    if (scored.length === 0) return [] as Array<Record<string, ReactNode> & { _tone?: "emerald" }>;
+    return [
+      {
+        _tone: "emerald" as const,
+        listIndex: "",
+        agentName: "ORTALAMA",
+        auditScoreDisplay: formatAuditScore(average(agents.map((a) => a.auditScoreDisplay))),
+        previousAuditAccuracyDisplay: formatPercent(average(agents.map((a) => a.previousAuditAccuracyDisplay)))
+      }
+    ];
+  }, [agents]);
+
   return (
     <div className="space-y-6">
       <PageHeader title="Audit" actions={<PeriodRangeFilter onChange={setPeriodRange} periods={sortedPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />} />
@@ -441,16 +455,14 @@ export function AuditPage() {
             />
           </div>
 
-          <SurfaceCard
-            title="Detay tablo görünümü"
-            variant="default"
-            headerClassName="bg-emerald-800 border-emerald-700 dark:bg-emerald-900"
-            titleClassName="text-white"
-          >
+          <SurfaceCard title="Detay tablo görünümü" variant="default">
             <DataTable
               columns={columns}
               data={agents}
               density="comfortable"
+              variant="emerald"
+              striped
+              summaryRows={tableSummaryRows}
               emptyState="Seçilen dönemde gösterilecek audit kaydı bulunamadı."
             />
           </SurfaceCard>
