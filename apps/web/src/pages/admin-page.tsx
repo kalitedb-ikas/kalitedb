@@ -264,7 +264,13 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       }
 
       const text = await file.text();
-      const preview = parseDatasetCsv({ datasetType: input.datasetType, text, expectedPeriod: `${selectedYear}-${selectedMonthValue}` });
+      const expectedPeriod = `${selectedYear}-${selectedMonthValue}`;
+      const preview =
+        input.datasetType === "agent-metrics"
+          ? parseDatasetCsv({ datasetType: "agent-metrics", text, expectedPeriod })
+          : input.datasetType === "audit-metrics"
+            ? parseDatasetCsv({ datasetType: "audit-metrics", text, expectedPeriod })
+            : parseDatasetCsv({ datasetType: "question-performance", text, expectedPeriod });
       if (preview.errors.length > 0 && preview.validRows.length === 0) {
         throw new Error(preview.errors.map((e) => e.message).join(", "));
       }
