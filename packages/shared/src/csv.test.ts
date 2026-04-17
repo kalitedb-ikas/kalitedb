@@ -21,6 +21,24 @@ describe("csv parser", () => {
     expect(preview.validRows[0]?.totalConversationCount).toBe(143);
   });
 
+  it("kisa 'Toplam Ticket Adedi' basligini da parse eder", () => {
+    const preview = parseDatasetCsv({
+      datasetType: "agent-metrics",
+      expectedPeriod: "2026-02",
+      text: [
+        "M.T,Toplam Çağrı Adedi,Toplam Chat / Mail Adedi,Toplam Ticket Adedi",
+        "Ali Veli,100,40,3"
+      ].join("\n")
+    });
+
+    if (preview.datasetType !== "agent-metrics") {
+      throw new Error("agent metrics preview bekleniyordu");
+    }
+
+    expect(preview.errors).toHaveLength(0);
+    expect(preview.validRows[0]?.totalTicketClosedCount).toBe(3);
+  });
+
   it("audit csv dosyasini ayri veri kumesi olarak parse eder", () => {
     const preview = parseDatasetCsv({
       datasetType: "audit-metrics",
