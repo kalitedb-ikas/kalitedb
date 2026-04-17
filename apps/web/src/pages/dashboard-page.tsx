@@ -11,6 +11,7 @@ import {
   SurfaceCard
 } from "@kalitedb/ui";
 import {
+  average,
   buildDashboardSnapshot,
   resolveThresholdTone,
   selectDefaultReportPeriod,
@@ -134,29 +135,43 @@ export function DashboardPage() {
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
+  // "Premium Onboarding" etiketli temsilcilerin CSAT puanları ortalamaya dahil edilmez
+  const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
+  const aggregatedSnapshotCsatAdjusted = useMemo(() => {
+    if (!aggregatedSnapshot) return undefined;
+    if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
+    const csatValues = aggregatedSnapshot.datasets.agentMetrics
+      .filter((a) => !premiumOnboardingKeys.has(a.agentKey))
+      .map((a) => a.callEvaluationAverage);
+    return {
+      ...aggregatedSnapshot,
+      summary: { ...aggregatedSnapshot.summary, csatAverage: average(csatValues) }
+    };
+  }, [aggregatedSnapshot, premiumOnboardingKeys]);
+
   // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
   // özet/ortalama hesaplarına dahil edilir.
   const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
   const snapshot = useMemo(() => {
-    if (!aggregatedSnapshot) return undefined;
-    if (hiddenAgentKeys.size === 0) return aggregatedSnapshot;
-    const filteredAgents = aggregatedSnapshot.datasets.agentMetrics.filter(
+    if (!aggregatedSnapshotCsatAdjusted) return undefined;
+    if (hiddenAgentKeys.size === 0) return aggregatedSnapshotCsatAdjusted;
+    const filteredAgents = aggregatedSnapshotCsatAdjusted.datasets.agentMetrics.filter(
       (a) => !hiddenAgentKeys.has(a.agentKey)
     );
-    const filteredAudits = aggregatedSnapshot.datasets.auditMetrics.filter(
+    const filteredAudits = aggregatedSnapshotCsatAdjusted.datasets.auditMetrics.filter(
       (a) => !hiddenAgentKeys.has(a.agentKey)
     );
     const rebuilt = buildDashboardSnapshot({
-      period: aggregatedSnapshot.period,
+      period: aggregatedSnapshotCsatAdjusted.period,
       datasets: {
-        ...aggregatedSnapshot.datasets,
+        ...aggregatedSnapshotCsatAdjusted.datasets,
         agentMetrics: filteredAgents,
         auditMetrics: filteredAudits
       },
-      thresholds: aggregatedSnapshot.thresholds
+      thresholds: aggregatedSnapshotCsatAdjusted.thresholds
     });
-    return { ...rebuilt, summary: aggregatedSnapshot.summary };
-  }, [aggregatedSnapshot, hiddenAgentKeys]);
+    return { ...rebuilt, summary: aggregatedSnapshotCsatAdjusted.summary };
+  }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys]);
 
   const yearlyTrendQuery = useQuery({
     enabled: yearPeriods.length > 0,
