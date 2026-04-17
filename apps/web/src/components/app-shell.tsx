@@ -46,7 +46,7 @@ const csNavigation: NavigationItem[] = [
 
 const salesNavigation: NavigationItem[] = [
   { label: "Genel Bakış", to: "/sales", icon: Gauge },
-  { label: "Performans", to: "/sales/audit", icon: ClipboardList },
+  { label: "Performans", to: "/sales/performance", icon: ClipboardList },
   { label: "Sorular", to: "/sales/evaluation-questions", icon: FileQuestion },
   { label: "KPI", to: "/sales/kpi", icon: Target },
   { label: "Temsilciler", to: "/sales/representatives", icon: Users },
