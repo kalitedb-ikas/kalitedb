@@ -160,18 +160,21 @@ export function CsatPage() {
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
-  // "Premium Onboarding" etiketli temsilcilerin CSAT puanları ortalamaya dahil edilmez
+  // "Premium Onboarding" etiketlilerin CSAT skoru null'lanır → ortalama, leaderboard,
+  // champion ve tablo CSAT sütunundan otomatik düşer; her ay ölçülmeyen bir temsilcinin
+  // tek ayın yüksek skoruyla çeyrek/yıl liderine geçmesini engeller.
   const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
   const aggregatedSnapshotCsatAdjusted = useMemo(() => {
     if (!aggregatedSnapshot) return undefined;
     if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
-    const csatValues = aggregatedSnapshot.datasets.agentMetrics
-      .filter((a) => !premiumOnboardingKeys.has(a.agentKey))
-      .map((a) => a.callEvaluationAverage);
-    return {
-      ...aggregatedSnapshot,
-      summary: { ...aggregatedSnapshot.summary, csatAverage: average(csatValues) }
-    };
+    const adjustedAgents = aggregatedSnapshot.datasets.agentMetrics.map((a) =>
+      premiumOnboardingKeys.has(a.agentKey) ? { ...a, callEvaluationAverage: null } : a
+    );
+    return buildDashboardSnapshot({
+      period: aggregatedSnapshot.period,
+      datasets: { ...aggregatedSnapshot.datasets, agentMetrics: adjustedAgents },
+      thresholds: aggregatedSnapshot.thresholds
+    });
   }, [aggregatedSnapshot, premiumOnboardingKeys]);
 
   // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
@@ -353,9 +356,11 @@ export function CsatPage() {
   ];
 
   const tableSummaryRows = useMemo(() => {
-    // Özet satırları 'satıcı operasyon' etiketlileri de dahil tüm temsilcilerden hesaplanır
-    const fullAgents = aggregatedSnapshot?.datasets.agentMetrics ?? [];
-    const fullAudits = aggregatedSnapshot ? selectAuditMetrics(aggregatedSnapshot.datasets) : [];
+    // Özet satırları 'satıcı operasyon' etiketlileri de dahil tüm temsilcilerden hesaplanır;
+    // 'premium onboarding' temsilcilerin CSAT skoru yukarıda null'landığı için ortalamaya
+    // otomatik girmez.
+    const fullAgents = aggregatedSnapshotCsatAdjusted?.datasets.agentMetrics ?? [];
+    const fullAudits = aggregatedSnapshotCsatAdjusted ? selectAuditMetrics(aggregatedSnapshotCsatAdjusted.datasets) : [];
     if (fullAgents.length === 0) return [] as Array<Record<string, ReactNode> & { _label?: string; _tone?: "emerald" }>;
     const auditByKey = new Map(fullAudits.map((r) => [r.agentKey, r]));
     const enriched = fullAgents.map((a) => ({
@@ -377,7 +382,7 @@ export function CsatPage() {
       avgTalkDurationSeconds: formatSeconds(average(enriched.map((r) => r.avgTalkDurationSeconds))),
       localCloseRate: formatPercent(average(enriched.map((r) => r.localCloseRate))),
       missedCalls: formatNumber(Math.round(sum(enriched.map((r) => r.missedCalls)) / enriched.length)),
-      callEvaluationAverage: formatNumber(average(enriched.filter((r) => !premiumOnboardingKeys.has(r.agentKey)).map((r) => r.callEvaluationAverage)), 3),
+      callEvaluationAverage: formatNumber(average(enriched.map((r) => r.callEvaluationAverage)), 3),
       evaluationCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluationCount)) / enriched.length))
     };
     const totalRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
@@ -397,7 +402,7 @@ export function CsatPage() {
       evaluationCount: formatNumber(sum(enriched.map((r) => r.evaluationCount)))
     };
     return [avgRow, totalRow];
-  }, [aggregatedSnapshot, premiumOnboardingKeys]);
+  }, [aggregatedSnapshotCsatAdjusted]);
 
   return (
     <div className="space-y-6">
