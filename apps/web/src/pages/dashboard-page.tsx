@@ -135,18 +135,20 @@ export function DashboardPage() {
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
-  // "Premium Onboarding" etiketli temsilcilerin CSAT puanları ortalamaya dahil edilmez
+  // "Premium Onboarding" etiketlilerin CSAT skoru null'lanır → ortalama, leaderboard,
+  // champion ve tablo CSAT sütunundan otomatik düşer.
   const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
   const aggregatedSnapshotCsatAdjusted = useMemo(() => {
     if (!aggregatedSnapshot) return undefined;
     if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
-    const csatValues = aggregatedSnapshot.datasets.agentMetrics
-      .filter((a) => !premiumOnboardingKeys.has(a.agentKey))
-      .map((a) => a.callEvaluationAverage);
-    return {
-      ...aggregatedSnapshot,
-      summary: { ...aggregatedSnapshot.summary, csatAverage: average(csatValues) }
-    };
+    const adjustedAgents = aggregatedSnapshot.datasets.agentMetrics.map((a) =>
+      premiumOnboardingKeys.has(a.agentKey) ? { ...a, callEvaluationAverage: null } : a
+    );
+    return buildDashboardSnapshot({
+      period: aggregatedSnapshot.period,
+      datasets: { ...aggregatedSnapshot.datasets, agentMetrics: adjustedAgents },
+      thresholds: aggregatedSnapshot.thresholds
+    });
   }, [aggregatedSnapshot, premiumOnboardingKeys]);
 
   // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
