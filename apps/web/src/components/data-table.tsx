@@ -16,12 +16,15 @@ export function DataTable<TData>(props: {
   stickyHeader?: boolean;
   density?: "comfortable" | "compact";
   emptyState?: ReactNode;
+  striped?: boolean;
+  summaryRows?: Array<Record<string, ReactNode> & { _label?: string; _tone?: "emerald" }>;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const theme = props.theme ?? "light";
   const variant = props.variant ?? "default";
   const density = props.density ?? "comfortable";
   const stickyHeader = props.stickyHeader ?? true;
+  const striped = props.striped ?? false;
   const cellPadding = density === "compact" ? "px-4 py-2.5" : "px-4 py-3.5";
   const headerPadding = density === "compact" ? "px-4 py-2.5" : "px-4 py-3";
 
@@ -88,13 +91,15 @@ export function DataTable<TData>(props: {
           </thead>
           <tbody>
             {table.getRowModel().rows.length > 0 ? (
-              table.getRowModel().rows.map((row) => (
+              table.getRowModel().rows.map((row, rowIndex) => (
                 <tr
                   key={row.id}
                   className={
                     theme === "dark"
                       ? "border-b border-white/8 transition-colors hover:bg-white/[0.04]"
-                      : "border-b border-slate-200/70 transition-colors hover:bg-slate-50/80 dark:border-slate-700/50 dark:hover:bg-slate-700/30"
+                      : `border-b border-slate-200/70 transition-colors hover:bg-slate-50/80 dark:border-slate-700/50 dark:hover:bg-slate-700/30 ${
+                          striped && rowIndex % 2 === 1 ? "bg-slate-50/50 dark:bg-slate-800/50" : ""
+                        }`
                   }
                 >
                   {row.getVisibleCells().map((cell) => (
@@ -125,6 +130,34 @@ export function DataTable<TData>(props: {
                 </td>
               </tr>
             )}
+            {props.summaryRows?.map((summaryRow, rowIdx) => {
+              const leafColumns = table.getAllLeafColumns();
+              const tone = summaryRow._tone ?? "emerald";
+              const rowClass =
+                tone === "emerald"
+                  ? "border-t-2 border-emerald-600 bg-emerald-800 dark:border-emerald-700 dark:bg-emerald-900"
+                  : "border-t border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-700";
+              const cellTextClass = tone === "emerald" ? "text-emerald-200" : "text-slate-800 dark:text-slate-200";
+              const labelTextClass = tone === "emerald" ? "text-white" : "text-slate-900 dark:text-slate-100";
+              return (
+                <tr key={`summary-${rowIdx}`} className={rowClass}>
+                  {leafColumns.map((column, colIdx) => {
+                    const value = summaryRow[column.id];
+                    const isFirst = colIdx === 0;
+                    return (
+                      <td
+                        key={column.id}
+                        className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${
+                          isFirst ? labelTextClass : `${cellTextClass} text-center`
+                        }`}
+                      >
+                        {isFirst ? (value ?? summaryRow._label ?? "") : (value ?? "")}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
