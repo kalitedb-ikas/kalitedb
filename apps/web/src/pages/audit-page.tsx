@@ -27,7 +27,6 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
-import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { chart } from "../theme/colors";
 
 type AuditAgentRow = {
@@ -122,29 +121,8 @@ export function AuditPage() {
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
-  // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
-  // özet/ortalama hesaplarına dahil edilir.
-  const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
-  const snapshot = useMemo(() => {
-    if (!aggregatedSnapshot) return undefined;
-    if (hiddenAgentKeys.size === 0) return aggregatedSnapshot;
-    const filteredAgents = aggregatedSnapshot.datasets.agentMetrics.filter(
-      (a) => !hiddenAgentKeys.has(a.agentKey)
-    );
-    const filteredAudits = aggregatedSnapshot.datasets.auditMetrics.filter(
-      (a) => !hiddenAgentKeys.has(a.agentKey)
-    );
-    const rebuilt = buildDashboardSnapshot({
-      period: aggregatedSnapshot.period,
-      datasets: {
-        ...aggregatedSnapshot.datasets,
-        agentMetrics: filteredAgents,
-        auditMetrics: filteredAudits
-      },
-      thresholds: aggregatedSnapshot.thresholds
-    });
-    return { ...rebuilt, summary: aggregatedSnapshot.summary };
-  }, [aggregatedSnapshot, hiddenAgentKeys]);
+  // Audit sayfasında tüm temsilciler gösterilir (Satıcı Operasyon, Premium Onboarding dahil).
+  const snapshot = aggregatedSnapshot;
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
