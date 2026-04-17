@@ -192,7 +192,8 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
-    queryFn: () => api.getPeriods(auth.token)
+    queryFn: () => api.getPeriods(auth.token),
+    select: (periods) => periods.filter((period) => (period.department ?? "cs") === "cs")
   });
 
   const thresholdsQuery = useQuery({
