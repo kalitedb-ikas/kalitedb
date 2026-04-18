@@ -124,9 +124,9 @@ export function AuditPage() {
 
   // Audit sayfasında tüm temsilciler gösterilir (Satıcı Operasyon, Premium Onboarding dahil).
   const snapshot = aggregatedSnapshot;
-  // "Takım Lideri" badge'li temsilciler tablo + ortalamalarda kalır, öne çıkanlardan (champion,
+  // "Diğer" badge'li temsilciler tablo + ortalamalarda kalır, öne çıkanlardan (champion,
   // lider tablosu, insight tile) hariç tutulur.
-  const highlightExcludedKeys = useRepresentativeKeysWithBadge("takim_lideri");
+  const highlightExcludedKeys = useRepresentativeKeysWithBadge("diger");
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
