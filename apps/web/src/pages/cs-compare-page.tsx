@@ -23,25 +23,6 @@ import { useActiveRepresentativeKeys } from "../lib/use-active-representatives";
 
 /* ── Yardımcı fonksiyonlar ── */
 
-function computeSuccessIndex(params: {
-  callEvaluationAverage: number | null | undefined;
-  auditScore: number | null | undefined;
-  localCloseRate: number | null | undefined;
-}) {
-  const metrics: number[] = [];
-  if (params.callEvaluationAverage != null) metrics.push(Math.max(0, Math.min(100, params.callEvaluationAverage * 20)));
-  if (params.auditScore != null) metrics.push(params.auditScore);
-  if (params.localCloseRate != null) metrics.push(params.localCloseRate);
-  return metrics.length === 0 ? null : metrics.reduce((s, v) => s + v, 0) / metrics.length;
-}
-
-function resolveSuccessState(value: number | null | undefined) {
-  if (value == null) return { label: "Beklemede", cls: "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-400" };
-  if (value >= 85) return { label: "İyi", cls: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400" };
-  if (value >= 70) return { label: "İzlenmeli", cls: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-700/40 dark:bg-sky-900/30 dark:text-sky-400" };
-  return { label: "Geliştirilmeli", cls: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400" };
-}
-
 function buildAvatar(name: string, index: number) {
   const photo = getRepresentativePhotoSrc(name);
   if (photo) return photo;
@@ -186,11 +167,6 @@ export function CsComparePage() {
   const repDataA = (repsQuery.data ?? []).find((r) => r.key === keyA);
   const repDataB = (repsQuery.data ?? []).find((r) => r.key === keyB);
 
-  const successA = computeSuccessIndex({ callEvaluationAverage: agentA?.callEvaluationAverage, auditScore: auditA?.auditScore, localCloseRate: agentA?.localCloseRate });
-  const successB = computeSuccessIndex({ callEvaluationAverage: agentB?.callEvaluationAverage, auditScore: auditB?.auditScore, localCloseRate: agentB?.localCloseRate });
-  const stateA = resolveSuccessState(successA);
-  const stateB = resolveSuccessState(successB);
-
   const selectOptions = representatives.map((r) => ({ key: r.agentKey, label: r.agentName }));
 
   return (
@@ -234,8 +210,8 @@ export function CsComparePage() {
             {/* Profil kartları */}
             <div className="relative grid gap-6 lg:grid-cols-2">
               <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-px bg-slate-200 dark:bg-slate-700 lg:block" />
-              <RepCard name={repA?.agentName} avatarSrc={repA?.avatarSrc} badges={(repDataA as any)?.badges ?? []} successIndex={successA} state={stateA} />
-              <RepCard name={repB?.agentName} avatarSrc={repB?.avatarSrc} badges={(repDataB as any)?.badges ?? []} successIndex={successB} state={stateB} />
+              <RepCard name={repA?.agentName} avatarSrc={repA?.avatarSrc} badges={(repDataA as any)?.badges ?? []} />
+              <RepCard name={repB?.agentName} avatarSrc={repB?.avatarSrc} badges={(repDataB as any)?.badges ?? []} />
             </div>
 
             {/* Metrik karşılaştırma */}
@@ -243,7 +219,6 @@ export function CsComparePage() {
               <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Performans Karşılaştırması</h3>
 
               <div className="space-y-1.5">
-                <CompareMetricRow label="Başarı Endeksi" leftValue={successA} rightValue={successB} format={(v) => formatNumber(v, 1)} />
                 <CompareMetricRow label="CSAT" leftValue={agentA?.callEvaluationAverage} rightValue={agentB?.callEvaluationAverage} format={(v) => formatNumber(v, 3)} />
                 <CompareMetricRow label="Audit" leftValue={auditA?.auditScore} rightValue={auditB?.auditScore} format={formatAuditScore} />
                 <CompareMetricRow label="Görüşme" leftValue={agentA?.totalConversationCount} rightValue={agentB?.totalConversationCount} format={(v) => formatNumber(v)} />
@@ -269,10 +244,8 @@ function RepCard(props: {
   name: string | undefined;
   avatarSrc: string | undefined;
   badges: string[];
-  successIndex: number | null;
-  state: { label: string; cls: string };
 }) {
-  const { name, avatarSrc, badges, successIndex, state } = props;
+  const { name, avatarSrc, badges } = props;
 
   if (!name) {
     return (
@@ -299,15 +272,6 @@ function RepCard(props: {
               {badges.map((b: string) => <BadgePill key={b} badgeKey={b} small />)}
             </div>
           )}
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Başarı</p>
-          <p className="text-xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
-            {successIndex != null ? formatNumber(successIndex, 1) : "N/A"}
-          </p>
-          <span className={`mt-0.5 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold ${state.cls}`}>
-            {state.label}
-          </span>
         </div>
       </div>
     </div>

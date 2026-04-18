@@ -61,12 +61,17 @@ export const agentSchema = z.object({
 
 export const representativeStatusSchema = z.enum(["active", "departed", "department_changed"]);
 
+export const timelineEventTypeSchema = z.enum(["start", "promotion", "department_change", "achievement", "other"]);
+
 export const timelineEventSchema = z.object({
   id: z.string(),
   title: z.string(),
   startDate: z.string(),
   endDate: z.string().optional(),
-  department: z.string().optional()
+  department: z.string().optional(),
+  role: z.string().optional(),
+  note: z.string().optional(),
+  type: timelineEventTypeSchema.optional()
 });
 
 export const representativeSchema = z.object({
@@ -327,6 +332,7 @@ export type Agent = z.infer<typeof agentSchema>;
 export type RepresentativeStatus = z.infer<typeof representativeStatusSchema>;
 export type Representative = z.infer<typeof representativeSchema>;
 export type TimelineEvent = z.infer<typeof timelineEventSchema>;
+export type TimelineEventType = z.infer<typeof timelineEventTypeSchema>;
 export type AgentMetric = z.infer<typeof agentMetricSchema>;
 export type AuditMetric = z.infer<typeof auditMetricSchema>;
 export type QuestionPerformance = z.infer<typeof questionPerformanceSchema>;
