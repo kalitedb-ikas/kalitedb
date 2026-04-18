@@ -23,11 +23,8 @@
   --surface-subtle-border: rgba(226, 232, 240, 0.78);
   --surface-dark-bg: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
   --surface-dark-border: rgba(148, 163, 184, 0.2);
-  --surface-hero-bg:
-    radial-gradient(circle at top right, rgba(125, 211, 252, 0.14), transparent 30%),
-    radial-gradient(circle at bottom left, rgba(191, 219, 254, 0.16), transparent 28%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 252, 0.96));
-  --surface-hero-border: rgba(191, 219, 254, 0.6);
+  --surface-hero-bg: #ffffff;
+  --surface-hero-border: rgba(226, 232, 240, 0.9);
   --shadow-soft: 0 16px 40px rgba(15, 23, 42, 0.06);
   --shadow-medium: 0 22px 60px rgba(15, 23, 42, 0.09);
   --shadow-strong: 0 32px 90px rgba(15, 23, 42, 0.14);
