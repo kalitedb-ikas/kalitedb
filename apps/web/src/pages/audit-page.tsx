@@ -1,16 +1,15 @@
-import { ChampionSpotlightCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
+import { ChampionSpotlightCard, Leaderboard, PageHeader, SurfaceCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   average,
   buildDashboardSnapshot,
-  resolveThresholdTone,
   selectAuditMetrics,
   selectDefaultReportPeriod,
   type AgentMetric,
   type AuditMetric
 } from "@kalitedb/shared";
-import { LineChart, ShieldCheck, TrendingDown, TrendingUp, Users } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
@@ -28,6 +27,10 @@ import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
+import { useRepresentativesMap } from "../lib/use-representatives-map";
+import { RepNameCell } from "../components/rep-name-cell";
+import { BadgeFilter } from "../components/badge-filter";
+import { CompactStatCard } from "../components/compact-stat-card";
 import { chart } from "../theme/colors";
 
 type AuditAgentRow = {
@@ -127,11 +130,12 @@ export function AuditPage() {
   // "Diğer" badge'li temsilciler tablo + ortalamalarda kalır, öne çıkanlardan (champion,
   // lider tablosu, insight tile) hariç tutulur.
   const highlightExcludedKeys = useRepresentativeKeysWithBadge("diger");
+  const repsMap = useRepresentativesMap();
+  const [badgeFilter, setBadgeFilter] = useState<string>("");
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
   }, [snapshot?.period.month]);
-  const auditThreshold = snapshot?.thresholds.auditScore;
   const currentAudits = useMemo(() => (snapshot ? selectAuditMetrics(snapshot.datasets) : []), [snapshot]);
   const highlightAudits = useMemo(
     () => currentAudits.filter((a) => !highlightExcludedKeys.has(a.agentKey)),
@@ -207,6 +211,10 @@ export function AuditPage() {
       listIndex: index + 1
     }));
   }, [currentAudits, snapshot]);
+  const filteredAgents = useMemo(() => {
+    if (!badgeFilter) return agents;
+    return agents.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
+  }, [agents, badgeFilter, repsMap]);
   const evaluatedAgentCount = useMemo(
     () =>
       (snapshot?.datasets.auditMetrics ?? []).filter(
@@ -405,6 +413,10 @@ export function AuditPage() {
       }))
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
   }, [auditHistoryMap, trendYearPeriods, selectedYear]);
+  const filteredMonthlyData = useMemo(() => {
+    if (!badgeFilter) return auditMonthlyData;
+    return auditMonthlyData.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
+  }, [auditMonthlyData, badgeFilter, repsMap]);
 
   /* ── Aylık role-play pivot tablosu (toplam) ── */
   const columns: ColumnDef<AuditAgentRow, any>[] = [
@@ -412,7 +424,10 @@ export function AuditPage() {
       header: "#",
       cell: (info) => <span className="font-medium text-slate-500">{info.getValue()}</span>
     }),
-    columnHelper.accessor("agentName", { header: "Temsilci" }),
+    columnHelper.accessor("agentName", {
+      header: "Temsilci",
+      cell: (info) => <RepNameCell name={info.getValue()} rep={repsMap.get(info.row.original.agentKey)} />
+    }),
     columnHelper.accessor("auditScoreDisplay", {
       header: "Audit skoru",
       cell: (info) => <AuditTableBadge value={info.getValue()} />
@@ -424,9 +439,14 @@ export function AuditPage() {
   ];
 
   const tableSummaryRows = useMemo(() => {
-    // Ortalama satırı 'satıcı operasyon' etiketlileri de içerir
-    const fullAudits = aggregatedSnapshot ? selectAuditMetrics(aggregatedSnapshot.datasets) : [];
-    const fullAgents = aggregatedSnapshot?.datasets.agentMetrics ?? [];
+    // Ortalama satırı 'satıcı operasyon' etiketlileri de içerir.
+    // Etiket filtresi aktifse ortalama yalnızca filtrelenmiş temsilciler üzerinden hesaplanır.
+    let fullAudits = aggregatedSnapshot ? selectAuditMetrics(aggregatedSnapshot.datasets) : [];
+    let fullAgents = aggregatedSnapshot?.datasets.agentMetrics ?? [];
+    if (badgeFilter) {
+      fullAudits = fullAudits.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
+      fullAgents = fullAgents.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
+    }
     const auditByKey = new Map(fullAudits.map((r) => [r.agentKey, r]));
     const allKeys = new Set<string>([
       ...fullAgents.map((a) => a.agentKey),
@@ -452,7 +472,7 @@ export function AuditPage() {
         previousAuditAccuracyDisplay: formatPercent(average(prevAuditScores))
       }
     ];
-  }, [aggregatedSnapshot]);
+  }, [aggregatedSnapshot, badgeFilter, repsMap]);
 
   return (
     <div className="space-y-6">
@@ -460,28 +480,44 @@ export function AuditPage() {
 
       {snapshot ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <StatCard
-              icon={<ShieldCheck size={18} />}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <CompactStatCard
               label="Takım audit ortalaması"
-              tone={auditThreshold ? resolveThresholdTone(snapshot.summary.auditAverage, auditThreshold) : "neutral"}
               value={formatAuditScore(snapshot.summary.auditAverage)}
             />
-            <StatCard
-              icon={<LineChart size={18} />}
+            <CompactStatCard
               label={previousAuditAccuracyLabel}
-              tone="neutral"
               value={formatPercent(snapshot.summary.previousAuditAccuracyAverage)}
             />
-            <StatCard
-              icon={<Users size={18} />}
+            <CompactStatCard
               label="Değerlendirilen temsilci"
-              tone="neutral"
               value={formatNumber(evaluatedAgentCount)}
+            />
+            <CompactStatCard
+              label={performanceShift?.title ?? "Yükselen performans"}
+              valueClassName="text-base font-semibold leading-snug"
+              value={
+                <span className="flex items-start gap-1.5">
+                  <TrendingUp className="mt-0.5 shrink-0 text-emerald-500" size={16} />
+                  <span className="min-w-0 break-words">{performanceShift?.names ?? "Henüz yok"}</span>
+                </span>
+              }
+              hint={performanceShift ? `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan` : undefined}
+            />
+            <CompactStatCard
+              label="En düşük audit"
+              valueClassName="text-base font-semibold leading-snug"
+              value={
+                <span className="flex items-start gap-1.5">
+                  <TrendingDown className="mt-0.5 shrink-0 text-rose-500" size={16} />
+                  <span className="min-w-0 break-words">{lowestAuditGroup?.names ?? "Henüz yok"}</span>
+                </span>
+              }
+              hint={lowestAuditGroup ? formatAuditScore(lowestAuditGroup.score) : undefined}
             />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div>
             <ChampionSpotlightCard
               kicker={auditLeaders.length > 1 ? "Öne çıkan temsilciler" : "Öne çıkan temsilci"}
               metricLabel={auditLeaders.length > 1 ? "Lider temsilciler" : "Lider temsilci"}
@@ -492,21 +528,6 @@ export function AuditPage() {
               theme="orange"
               title="En yüksek audit skoru"
             />
-
-            <div className="grid gap-4">
-              <InsightTile
-                description={performanceShift ? `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan` : undefined}
-                icon={<TrendingUp size={16} />}
-                title={performanceShift?.title ?? "Yükselen performans"}
-                value={performanceShift?.names ?? "Henüz yok"}
-              />
-              <InsightTile
-                description={formatAuditScore(lowestAuditGroup?.score)}
-                icon={<TrendingDown size={16} />}
-                title="En düşük audit"
-                value={lowestAuditGroup?.names ?? "Henüz yok"}
-              />
-            </div>
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
@@ -540,10 +561,14 @@ export function AuditPage() {
             />
           </div>
 
-          <SurfaceCard title="Detay tablo görünümü" variant="default">
+          <SurfaceCard
+            title="Detay tablo görünümü"
+            variant="default"
+            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+          >
             <DataTable
               columns={columns}
-              data={agents}
+              data={filteredAgents}
               density="comfortable"
               variant="emerald"
               striped
@@ -553,10 +578,12 @@ export function AuditPage() {
           </SurfaceCard>
 
           <MonthlyTable
-            data={auditMonthlyData}
+            data={filteredMonthlyData}
             summaryMode="average"
             title="Aylık Audit Skorları"
             valueFormatter={(v) => formatAuditScore(v)}
+            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+            repsMap={repsMap}
           />
 
         </>

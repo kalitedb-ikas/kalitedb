@@ -309,19 +309,19 @@ export function HeatChip(props: {
 
 const podiumRankStyles: Record<number, { badge: string; row: string; value: string }> = {
   0: {
-    badge: "border-amber-500/70 bg-gradient-to-br from-yellow-300 to-amber-500 text-amber-950 shadow-[0_2px_8px_rgba(234,179,8,0.28)] dark:border-amber-400/60 dark:from-amber-500/60 dark:to-yellow-600/50 dark:text-amber-50",
-    row: "border-amber-300/55 bg-gradient-to-r from-amber-50/60 via-white/90 to-white/90 shadow-[0_10px_28px_rgba(234,179,8,0.1)] dark:border-amber-500/30 dark:from-amber-800/22 dark:via-slate-800/60 dark:to-slate-800/60",
+    badge: "border-amber-500 bg-amber-400 text-amber-950 shadow-[0_2px_8px_rgba(234,179,8,0.28)] dark:border-amber-400/70 dark:bg-amber-500/70 dark:text-amber-50",
+    row: "border-amber-300/55 bg-amber-50/60 shadow-[0_10px_28px_rgba(234,179,8,0.1)] dark:border-amber-500/30 dark:bg-amber-900/20",
     value: "text-amber-800 dark:text-amber-200"
   },
   1: {
-    badge: "border-slate-300/80 bg-gradient-to-br from-slate-100 to-slate-50 text-slate-600 shadow-[0_2px_6px_rgba(148,163,184,0.14)] dark:border-slate-500/50 dark:from-slate-700/50 dark:to-slate-800/40 dark:text-slate-300",
-    row: "border-slate-200/80 bg-gradient-to-r from-slate-50/60 via-white/90 to-white/90 shadow-[0_10px_25px_rgba(15,23,42,0.05)] dark:border-slate-600/35 dark:from-slate-700/20 dark:via-slate-800/60 dark:to-slate-800/60",
+    badge: "border-slate-400 bg-slate-200 text-slate-700 shadow-[0_2px_6px_rgba(148,163,184,0.18)] dark:border-slate-400/60 dark:bg-slate-500/40 dark:text-slate-100",
+    row: "border-slate-200/80 bg-slate-50/60 shadow-[0_10px_25px_rgba(15,23,42,0.05)] dark:border-slate-500/35 dark:bg-slate-700/25",
     value: "text-slate-700 dark:text-slate-300"
   },
   2: {
-    badge: "border-orange-800/50 bg-gradient-to-br from-orange-500 to-amber-700 text-orange-50 shadow-[0_2px_6px_rgba(154,52,18,0.25)] dark:border-orange-700/55 dark:from-orange-800/55 dark:to-amber-900/50 dark:text-orange-100",
-    row: "border-orange-400/25 bg-gradient-to-r from-orange-50/50 via-white/90 to-white/90 shadow-[0_10px_25px_rgba(154,52,18,0.08)] dark:border-orange-700/30 dark:from-orange-900/22 dark:via-slate-800/60 dark:to-slate-800/60",
-    value: "text-orange-900 dark:text-orange-300"
+    badge: "border-[#8B4513] bg-[#B87333] text-white shadow-[0_2px_6px_rgba(139,69,19,0.35)] dark:border-[#6B3410]/80 dark:bg-[#8B4513] dark:text-orange-50",
+    row: "border-[#B87333]/25 bg-[#B87333]/10 shadow-[0_10px_25px_rgba(139,69,19,0.08)] dark:border-[#8B4513]/40 dark:bg-[#6B3410]/25",
+    value: "text-[#8B4513] dark:text-[#D2905A]"
   }
 };
 
@@ -337,7 +337,7 @@ export function Leaderboard(props: {
   className?: string | undefined;
   variant?: "podium" | "flat" | undefined;
 }) {
-  const variant = props.variant ?? "podium";
+  const variant = props.variant ?? "flat";
   return (
     <SurfaceCard className={props.className} title={props.title} variant="default">
       <ul className="space-y-2.5">

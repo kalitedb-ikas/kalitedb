@@ -1,4 +1,4 @@
-import type { Department, Representative, TimelineEvent } from "@kalitedb/shared";
+import type { Department, Representative, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
 import { BarChart3, Briefcase, Crown, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
@@ -86,6 +86,9 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
   const [tlStartDate, setTlStartDate] = useState("");
   const [tlEndDate, setTlEndDate] = useState("");
   const [tlDepartment, setTlDepartment] = useState("");
+  const [tlRole, setTlRole] = useState("");
+  const [tlType, setTlType] = useState<TimelineEventType | "">("");
+  const [tlNote, setTlNote] = useState("");
 
   const photoSrc = representative ? getRepresentativePhotoSrc(representative.displayName) : undefined;
 
@@ -100,13 +103,19 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
       title: tlTitle.trim(),
       startDate: tlStartDate,
       endDate: tlEndDate || undefined,
-      department: tlDepartment || undefined
+      department: tlDepartment || undefined,
+      role: tlRole.trim() || undefined,
+      note: tlNote.trim() || undefined,
+      type: tlType || undefined
     };
     setTimeline((prev) => [...prev, event]);
     setTlTitle("");
     setTlStartDate("");
     setTlEndDate("");
     setTlDepartment("");
+    setTlRole("");
+    setTlType("");
+    setTlNote("");
     setShowTimelineForm(false);
   };
 
@@ -265,6 +274,39 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
                   value={tlEndDate}
                 />
               </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500">Rol / ünvan</label>
+                <input
+                  className="mt-1 h-9 w-full rounded-[10px] border border-slate-200 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                  onChange={(e) => setTlRole(e.target.value)}
+                  placeholder="Ör: Senior CS Uzmanı"
+                  value={tlRole}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500">Tip</label>
+                <select
+                  className="mt-1 h-9 w-full rounded-[10px] border border-slate-200 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                  onChange={(e) => setTlType(e.target.value as TimelineEventType | "")}
+                  value={tlType}
+                >
+                  <option value="">Seçim yok</option>
+                  <option value="start">Başlangıç</option>
+                  <option value="promotion">Terfi</option>
+                  <option value="department_change">Departman değişimi</option>
+                  <option value="achievement">Başarı</option>
+                  <option value="other">Diğer</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-slate-500">Not</label>
+                <textarea
+                  className="mt-1 min-h-[60px] w-full rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                  onChange={(e) => setTlNote(e.target.value)}
+                  placeholder="Opsiyonel açıklama"
+                  value={tlNote}
+                />
+              </div>
               <div className="flex items-end sm:col-span-2">
                 <button
                   className="h-9 rounded-[10px] bg-[#2f6b7a] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#285d6a] disabled:opacity-50"
@@ -289,6 +331,9 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{event.title}</p>
+                        {event.role ? (
+                          <p className="text-xs text-slate-600 dark:text-slate-400">{event.role}</p>
+                        ) : null}
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                           {event.startDate}{event.endDate ? ` — ${event.endDate}` : " — Devam ediyor"}
                         </p>

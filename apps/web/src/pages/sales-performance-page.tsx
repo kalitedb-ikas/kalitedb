@@ -1,9 +1,9 @@
-import { ChampionSpotlightCard, InsightTile, Leaderboard, PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
+import { ChampionSpotlightCard, Leaderboard, PageHeader, SurfaceCard } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { SalesKpiAgent, SalesKpiData } from "@kalitedb/shared";
-import { Target, TrendingDown, TrendingUp, Users, X } from "lucide-react";
+import { TrendingDown, TrendingUp, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
@@ -15,6 +15,10 @@ import {
 } from "../lib/period-aggregation";
 import { DataTable } from "../components/data-table";
 import { MonthlyTable, buildAgentAvatar, type MonthlyAgentRow } from "../components/audit-shared";
+import { BadgeFilter } from "../components/badge-filter";
+import { CompactStatCard } from "../components/compact-stat-card";
+import { RepNameCell } from "../components/rep-name-cell";
+import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatNumber, formatPercent } from "../lib/format";
@@ -181,6 +185,15 @@ export function SalesPerformancePage() {
       conversionRateDisplay: a.conversionRate
     }));
   }, [aggregatedAgents]);
+
+  const repsMap = useRepresentativesMap();
+  const [badgeFilter, setBadgeFilter] = useState<string>("");
+  const filteredAgents = useMemo(() => {
+    if (!badgeFilter) return agents;
+    return agents.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
+  }, [agents, badgeFilter, repsMap]);
+  const filterMonthly = (data: MonthlyAgentRow[]) =>
+    badgeFilter ? data.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter)) : data;
 
   /* ── Takım performans ortalaması ── */
   const teamPerfAverage = useMemo(
@@ -443,7 +456,10 @@ export function SalesPerformancePage() {
       header: "#",
       cell: (info) => <span className="font-medium text-slate-500 dark:text-slate-400">{info.getValue()}</span>
     }),
-    columnHelper.accessor("agentName", { header: "Temsilci" }),
+    columnHelper.accessor("agentName", {
+      header: "Temsilci",
+      cell: (info) => <RepNameCell name={info.getValue()} rep={repsMap.get(info.row.original.agentKey)} />
+    }),
     columnHelper.accessor("perfScoreDisplay", {
       header: "Performans puanı",
       cell: (info) => <PerformanceBadge value={info.getValue()} />
@@ -487,22 +503,40 @@ export function SalesPerformancePage() {
         </SurfaceCard>
       ) : (
         <>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <StatCard
-              icon={<Target size={18} />}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <CompactStatCard
               label="Takım performans ortalaması"
-              tone="neutral"
               value={formatPerfScore(teamPerfAverage)}
             />
-            <StatCard
-              icon={<Users size={18} />}
+            <CompactStatCard
               label="Değerlendirilen temsilci"
-              tone="neutral"
               value={formatNumber(evaluatedAgentCount)}
+            />
+            <CompactStatCard
+              label={performanceShift?.title ?? "Yükselen performans"}
+              valueClassName="text-base font-semibold leading-snug"
+              value={
+                <span className="flex items-start gap-1.5">
+                  <TrendingUp className="mt-0.5 shrink-0 text-emerald-500" size={16} />
+                  <span className="min-w-0 break-words">{performanceShift?.names ?? "Henüz yok"}</span>
+                </span>
+              }
+              hint={performanceShift ? `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan` : undefined}
+            />
+            <CompactStatCard
+              label="En düşük performans"
+              valueClassName="text-base font-semibold leading-snug"
+              value={
+                <span className="flex items-start gap-1.5">
+                  <TrendingDown className="mt-0.5 shrink-0 text-rose-500" size={16} />
+                  <span className="min-w-0 break-words">{lowestPerfGroup?.names ?? "Henüz yok"}</span>
+                </span>
+              }
+              hint={lowestPerfGroup ? formatPerfScore(lowestPerfGroup.score) : undefined}
             />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div>
             <ChampionSpotlightCard
               kicker={perfLeaders.length > 1 ? "Öne çıkan temsilciler" : "Öne çıkan temsilci"}
               metricLabel={perfLeaders.length > 1 ? "Lider temsilciler" : "Lider temsilci"}
@@ -513,21 +547,6 @@ export function SalesPerformancePage() {
               theme="ink"
               title="En yüksek performans puanı"
             />
-
-            <div className="grid gap-4">
-              <InsightTile
-                description={performanceShift ? `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan` : undefined}
-                icon={<TrendingUp size={16} />}
-                title={performanceShift?.title ?? "Yükselen performans"}
-                value={performanceShift?.names ?? "Henüz yok"}
-              />
-              <InsightTile
-                description={formatPerfScore(lowestPerfGroup?.score)}
-                icon={<TrendingDown size={16} />}
-                title="En düşük performans"
-                value={lowestPerfGroup?.names ?? "Henüz yok"}
-              />
-            </div>
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
@@ -556,25 +575,28 @@ export function SalesPerformancePage() {
             variant="default"
             headerClassName="bg-emerald-800 border-emerald-700 dark:bg-emerald-900"
             titleClassName="text-white"
+            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
           >
             <DataTable
               columns={columns}
-              data={agents}
+              data={filteredAgents}
               density="comfortable"
               emptyState="Seçilen dönemde gösterilecek performans kaydı bulunamadı."
             />
           </SurfaceCard>
 
           <MonthlyTable
-            data={perfMonthlyData}
+            data={filterMonthly(perfMonthlyData)}
             summaryMode="average"
             title="Aylık Performans Puanları"
             valueFormatter={(v) => formatPerfScore(v)}
+            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+            repsMap={repsMap}
           />
 
           <div className="grid gap-6 xl:grid-cols-2">
             <MonthlyTable
-              data={rolePlayData}
+              data={filterMonthly(rolePlayData)}
               noteMap={roleplayNoteMap}
               onNoteClick={(agentKey, agentName, currentNote) =>
                 setNoteModal({ agentKey, agentName, note: currentNote })
@@ -583,14 +605,18 @@ export function SalesPerformancePage() {
               title="IS Role-Play Adet"
               emptyNote="Role-play verileri henüz girilmemiş. Yönetim panelinden giriş yapabilirsiniz."
               colorScale="count"
+              actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+              repsMap={repsMap}
             />
 
             <MonthlyTable
-              data={revOpsData}
+              data={filterMonthly(revOpsData)}
               summaryMode="total"
               title="RevOPS"
               emptyNote="RevOPS verileri henüz girilmemiş. Yönetim panelinden giriş yapabilirsiniz."
               colorScale="count"
+              actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+              repsMap={repsMap}
             />
           </div>
         </>
