@@ -3,7 +3,7 @@ import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
-import { GitCompareArrows } from "lucide-react";
+import { GitCompareArrows, Route } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -35,7 +35,8 @@ import {
   getQuarterPeriodIds
 } from "../lib/period-aggregation";
 import { RepresentativeSelect } from "../components/representative-select";
-import { BadgePill, TimelineDisplay } from "../components/representative-detail-modal";
+import { BadgePill } from "../components/representative-detail-modal";
+import { CareerPathModal } from "../components/career-path-modal";
 import { useActiveRepresentativeKeys } from "../lib/use-active-representatives";
 
 function formatOrNa(value: number | null | undefined, formatter: (value: number) => string) {
@@ -392,23 +393,30 @@ export function SalesRepresentativesPage() {
     const map: Record<string, { rank: number; total: number } | null> = {};
     if (!selectedRepresentative || kpiAgents.length < 2) return map;
     const key = selectedRepresentative.agentKey;
+    const compare = (def: MetricDef, a: SalesKpiAgent, b: SalesKpiAgent) => {
+      const diff = (def.getValue(b) as number) - (def.getValue(a) as number);
+      if (diff !== 0 || !def.tiebreaker) return diff;
+      return def.tiebreaker(b) - def.tiebreaker(a);
+    };
     for (const def of metricDefs) {
       const valid = kpiAgents.filter((a) => def.getValue(a) != null);
       if (valid.length < 2) { map[def.key] = null; continue; }
-      const sorted = [...valid].sort((a, b) => {
-        const diff = (def.getValue(b) as number) - (def.getValue(a) as number);
-        if (diff !== 0 || !def.tiebreaker) return diff;
-        return def.tiebreaker(b) - def.tiebreaker(a);
-      });
-      const idx = sorted.findIndex((a) => a.agentKey === key);
-      map[def.key] = idx >= 0 ? { rank: idx + 1, total: sorted.length } : null;
+      const me = valid.find((a) => a.agentKey === key);
+      if (!me) { map[def.key] = null; continue; }
+      const higherCount = valid.filter((a) => compare(def, a, me) < 0).length;
+      map[def.key] = { rank: higherCount + 1, total: valid.length };
     }
-    // Audit
+    // Audit — tie-aware
     const validAudit = auditMetrics.filter((a) => a.auditScore != null);
     if (validAudit.length >= 2) {
-      const sorted = [...validAudit].sort((a, b) => (b.auditScore ?? 0) - (a.auditScore ?? 0));
-      const idx = sorted.findIndex((a) => a.agentKey === selectedRepresentative.agentKey);
-      map["auditScore"] = idx >= 0 ? { rank: idx + 1, total: sorted.length } : null;
+      const me = validAudit.find((a) => a.agentKey === selectedRepresentative.agentKey);
+      if (me) {
+        const myScore = me.auditScore ?? 0;
+        const higherCount = validAudit.filter((a) => (a.auditScore ?? 0) > myScore).length;
+        map["auditScore"] = { rank: higherCount + 1, total: validAudit.length };
+      } else {
+        map["auditScore"] = null;
+      }
     }
     return map;
   }, [selectedRepresentative, kpiAgents, auditMetrics, metricDefs]);
@@ -442,6 +450,7 @@ export function SalesRepresentativesPage() {
   }, [metricDefs, metricRankMap]);
 
   const [rankingModalMetric, setRankingModalMetric] = useState<string | null>(null);
+  const [showCareerModal, setShowCareerModal] = useState(false);
 
   const rankingModalData = useMemo(() => {
     if (!rankingModalMetric) return null;
@@ -708,7 +717,17 @@ export function SalesRepresentativesPage() {
                 <div className="min-w-0 flex-1">
                   <div className="space-y-4">
                     <div>
-                      <h2 className="font-display text-2xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100">{selectedName}</h2>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h2 className="font-display text-2xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100">{selectedName}</h2>
+                        <button
+                          type="button"
+                          onClick={() => setShowCareerModal(true)}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-white dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700"
+                        >
+                          <Route size={13} />
+                          Kariyer yolu
+                        </button>
+                      </div>
                       {topMetricLabels.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {topMetricLabels.map((label) => (
@@ -1011,16 +1030,19 @@ export function SalesRepresentativesPage() {
               ) : null}
             </div>
 
-            {selectedTimeline.length > 0 && (
-              <SectionCard title="Kariyer Zaman Çizelgesi">
-                <TimelineDisplay events={selectedTimeline} />
-              </SectionCard>
-            )}
           </div>
         ) : (
           <p className="text-sm text-slate-600 dark:text-slate-400">Seçilen dönemde gösterilecek temsilci verisi bulunamadı.</p>
         )}
       </SectionCard>
+
+      {showCareerModal && selectedRepresentative && (
+        <CareerPathModal
+          events={selectedTimeline}
+          repName={selectedName}
+          onClose={() => setShowCareerModal(false)}
+        />
+      )}
 
       {rankingModalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setRankingModalMetric(null)}>

@@ -1,9 +1,11 @@
 import { SurfaceCard } from "@kalitedb/ui";
-import { normalizeKey } from "@kalitedb/shared";
+import { normalizeKey, type Representative } from "@kalitedb/shared";
 import { MessageSquare } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { formatAuditScore, formatPercent } from "../lib/format";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
+import { RepNameCell } from "./rep-name-cell";
 
 export const MONTH_LABELS = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 
@@ -110,6 +112,10 @@ export function MonthlyTable(props: {
   onNoteClick?: (agentKey: string, agentName: string, currentNote: string) => void;
   /** Hücrelere değere göre renk uygula */
   colorScale?: "count";
+  /** Kartın sağ üstüne yerleştirilecek aksiyon bölümü (örn. BadgeFilter) */
+  actions?: ReactNode;
+  /** agentKey -> Representative eşlemesi; verilirse "Ayrıldı" rozeti otomatik render edilir */
+  repsMap?: Map<string, Representative>;
 }) {
   const formatter = props.valueFormatter ?? String;
   const hasAnyData = props.data.some((row) => row.months.some((v) => v !== null));
@@ -133,6 +139,7 @@ export function MonthlyTable(props: {
       variant="default"
       headerClassName="bg-emerald-800 border-emerald-700 dark:bg-emerald-900"
       titleClassName="text-white"
+      actions={props.actions}
     >
       <div className="-mx-1 overflow-x-auto">
         <table className="w-full min-w-[920px] border-collapse text-sm">
@@ -163,7 +170,11 @@ export function MonthlyTable(props: {
                   </td>
                   <td className="sticky left-10 z-10 bg-white px-3 py-2.5 font-medium text-slate-900 whitespace-nowrap dark:bg-slate-800/90 dark:text-slate-200">
                     <span className="inline-flex items-center gap-1.5">
-                      {row.agentName}
+                      {props.repsMap ? (
+                        <RepNameCell name={row.agentName} rep={props.repsMap.get(row.agentKey)} />
+                      ) : (
+                        row.agentName
+                      )}
                       {props.noteMap && (
                         <button
                           className={[
