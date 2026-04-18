@@ -2,7 +2,7 @@ import { PageHeader, SurfaceCard } from "@kalitedb/ui";
 import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { SalesKpiAgent } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, Target } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -232,6 +232,13 @@ export function SalesKpiPage() {
               periods={salesPeriods}
               value={{ ...periodRange, monthPeriodId: monthlyPeriodId }}
             />
+            <Link
+              to="/sales/kpi/target-calibration"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
+            >
+              <Target size={14} />
+              Hedef Kalibrasyonu
+            </Link>
             <Link
               to="/sales/kpi/compare"
               className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
