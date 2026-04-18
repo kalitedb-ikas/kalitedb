@@ -309,25 +309,25 @@ export function HeatChip(props: {
 
 const podiumRankStyles: Record<number, { badge: string; row: string; value: string }> = {
   0: {
-    badge: "border-amber-500 bg-amber-400 text-amber-950 shadow-[0_2px_8px_rgba(234,179,8,0.28)] dark:border-amber-400/70 dark:bg-amber-500/70 dark:text-amber-50",
-    row: "border-amber-300/55 bg-amber-50/60 shadow-[0_10px_28px_rgba(234,179,8,0.1)] dark:border-amber-500/30 dark:bg-amber-900/20",
+    badge: "border-amber-500 bg-amber-400 text-amber-950 dark:border-amber-400/70 dark:bg-amber-500/70 dark:text-amber-50",
+    row: "border-slate-200 bg-white dark:border-slate-600/40 dark:bg-slate-800/60",
     value: "text-amber-800 dark:text-amber-200"
   },
   1: {
-    badge: "border-slate-400 bg-slate-200 text-slate-700 shadow-[0_2px_6px_rgba(148,163,184,0.18)] dark:border-slate-400/60 dark:bg-slate-500/40 dark:text-slate-100",
-    row: "border-slate-200/80 bg-slate-50/60 shadow-[0_10px_25px_rgba(15,23,42,0.05)] dark:border-slate-500/35 dark:bg-slate-700/25",
+    badge: "border-slate-400 bg-slate-200 text-slate-700 dark:border-slate-400/60 dark:bg-slate-500/40 dark:text-slate-100",
+    row: "border-slate-200 bg-white dark:border-slate-600/40 dark:bg-slate-800/60",
     value: "text-slate-700 dark:text-slate-300"
   },
   2: {
-    badge: "border-[#8B4513] bg-[#B87333] text-white shadow-[0_2px_6px_rgba(139,69,19,0.35)] dark:border-[#6B3410]/80 dark:bg-[#8B4513] dark:text-orange-50",
-    row: "border-[#B87333]/25 bg-[#B87333]/10 shadow-[0_10px_25px_rgba(139,69,19,0.08)] dark:border-[#8B4513]/40 dark:bg-[#6B3410]/25",
+    badge: "border-[#8B4513] bg-[#B87333] text-white dark:border-[#6B3410]/80 dark:bg-[#8B4513] dark:text-orange-50",
+    row: "border-slate-200 bg-white dark:border-slate-600/40 dark:bg-slate-800/60",
     value: "text-[#8B4513] dark:text-[#D2905A]"
   }
 };
 
 const defaultRankStyle = {
   badge: "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-400",
-  row: "border-slate-200/90 bg-white/92 shadow-[0_10px_25px_rgba(15,23,42,0.04)] dark:border-slate-600/40 dark:bg-slate-800/60",
+  row: "border-slate-200 bg-white dark:border-slate-600/40 dark:bg-slate-800/60",
   value: "text-slate-900 dark:text-slate-200"
 };
 
@@ -568,8 +568,6 @@ export function ChampionSpotlightCard(props: {
 
   return (
     <section className={cn("surface-hero relative overflow-hidden rounded-[10px] p-6 sm:p-7", props.className)}>
-      <div className={cn("absolute -right-8 top-0 h-40 w-40 blur-3xl", theme.glow)} />
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.4),rgba(255,255,255,0)_35%,rgba(15,23,42,0.02)_70%)]" />
       <div className="relative grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
         <div className="relative z-20">
           {props.kicker ? <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-300">{props.kicker}</p> : null}
@@ -585,7 +583,7 @@ export function ChampionSpotlightCard(props: {
                 <span
                   key={person.name}
                   className={cn(
-                    "rounded-full border bg-white/88 dark:bg-slate-800/70 px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100 shadow-[0_8px_24px_rgba(15,23,42,0.06)]",
+                    "rounded-full border bg-white/88 dark:bg-slate-800/70 px-3 py-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100",
                     theme.ring
                   )}
                 >
@@ -608,19 +606,10 @@ export function ChampionSpotlightCard(props: {
               : "h-[300px] overflow-visible"
           )}
         >
-          <div
-            className={cn(
-              "absolute blur-3xl",
-              theme.glow,
-              showPodium
-                ? "inset-x-12 top-4 h-24"
-                : "left-1/2 top-1/2 h-40 w-[82%] -translate-x-1/2 -translate-y-1/2 opacity-95"
-            )}
-          />
           {visiblePeople.length === 1 ? (
             <div
               className={cn(
-                "absolute overflow-hidden border border-slate-200 bg-white/85 shadow-[0_18px_50px_rgba(15,23,42,0.08)]",
+                "absolute overflow-hidden border border-slate-200 bg-white/85",
                 showPodium
                   ? "left-1/2 top-8 h-36 w-36 -translate-x-1/2 rounded-full"
                   : "left-[37%] top-[55%] h-[318px] w-[236px] -translate-x-1/2 -translate-y-1/2 rounded-[10px]"
@@ -643,7 +632,7 @@ export function ChampionSpotlightCard(props: {
               {visiblePeople.map((person) => (
                 <div
                   key={person.name}
-                  className="relative h-[210px] w-[150px] overflow-hidden rounded-[10px] border border-slate-200 bg-white/88 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
+                  className="relative h-[210px] w-[150px] overflow-hidden rounded-[10px] border border-slate-200 bg-white/88"
                 >
                   <ChampionAvatar
                     imageAlt={person.imageAlt ?? person.name}
@@ -668,7 +657,7 @@ export function ChampionSpotlightCard(props: {
                 <div
                   key={person.name}
                   className={cn(
-                    "relative overflow-hidden border border-slate-200 bg-white/88 shadow-[0_18px_50px_rgba(15,23,42,0.08)]",
+                    "relative overflow-hidden border border-slate-200 bg-white/88",
                     gridTileSizeClass
                   )}
                 >
@@ -684,7 +673,7 @@ export function ChampionSpotlightCard(props: {
           )}
           {showPodium ? (
             <div className="absolute inset-x-8 bottom-8">
-              <div className="rounded-[10px] border border-slate-200 bg-white/92 p-4 shadow-[0_14px_35px_rgba(15,23,42,0.06)]">
+              <div className="rounded-[10px] border border-slate-200 bg-white/92 p-4">
                 <div className="flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
                   <span />
                   <span>Lider</span>
