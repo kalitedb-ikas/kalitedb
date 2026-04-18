@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
+import { FancySelect } from "../components/fancy-select";
 import { formatNumber, formatPercent, formatPeriodMonth, parseTalkDurationLabelToSeconds } from "../lib/format";
 import {
   ADVISOR_LOOKBACK_MONTHS,
@@ -416,19 +417,17 @@ export function SalesTargetCalibrationPage() {
           <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400" htmlFor="period-select">
             Hedefi düzenlenecek dönem
           </label>
-          <select
-            className="rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
-            id="period-select"
-            onChange={(e) => setSelectedPeriodId(e.target.value)}
+          <FancySelect
+            ariaLabel="Hedefi düzenlenecek dönem"
+            onChange={(v) => setSelectedPeriodId(v)}
+            options={salesPeriods.map((p) => ({
+              value: p.id,
+              label: `${formatPeriodMonth(p.month, { includeYear: true })}${p.title ? ` — ${p.title}` : ""}`
+            }))}
+            panelWidthClass="w-64"
+            placeholder="Dönem seçin"
             value={selectedPeriodId ?? ""}
-          >
-            {salesPeriods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {formatPeriodMonth(p.month, { includeYear: true })}
-                {p.title ? ` — ${p.title}` : ""}
-              </option>
-            ))}
-          </select>
+          />
           <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
             {repCount} aktif satış temsilcisi · {samples.length} agent-ay örneklem (son {advisorPeriodIds.length} ay)
           </span>
