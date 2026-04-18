@@ -134,3 +134,28 @@ export function getPreviousPeriod(period: string | null | undefined) {
 
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+
+export function formatDateLong(iso: string | null | undefined) {
+  if (!iso) return "-";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const fmt = new Intl.DateTimeFormat("tr-TR", { month: "short", year: "numeric" });
+  const label = fmt.format(date).replace(".", "");
+  return label.charAt(0).toLocaleUpperCase("tr-TR") + label.slice(1);
+}
+
+export function formatDuration(startIso: string | null | undefined, endIso?: string | null | undefined) {
+  if (!startIso) return "";
+  const start = new Date(startIso);
+  const end = endIso ? new Date(endIso) : new Date();
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "";
+  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (end.getDate() < start.getDate()) months -= 1;
+  if (months < 0) months = 0;
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  if (years === 0 && remMonths === 0) return "< 1 ay";
+  if (years === 0) return `${remMonths} ay`;
+  if (remMonths === 0) return `${years} yıl`;
+  return `${years} yıl ${remMonths} ay`;
+}
