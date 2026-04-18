@@ -302,12 +302,14 @@ export function SalesComparePage() {
   });
 
   const representatives = useMemo(() => {
+    const salesReps = (repsQuery.data ?? []).filter((r) => (r.badges ?? []).includes("satis"));
+    const salesKeys = new Set(salesReps.map((r) => r.key));
     const options = new Map<string, string>();
-    (repsQuery.data ?? []).filter((r) => (r.department ?? "cs") === "sales").forEach((r) => options.set(r.key, r.displayName));
-    sideA.auditMetrics.forEach((record) => options.set(record.agentKey, record.agentName));
-    sideA.kpiAgents.forEach((record) => { if (record.agentKey) options.set(record.agentKey, record.agentName); });
-    sideB.auditMetrics.forEach((record) => options.set(record.agentKey, record.agentName));
-    sideB.kpiAgents.forEach((record) => { if (record.agentKey) options.set(record.agentKey, record.agentName); });
+    salesReps.forEach((r) => options.set(r.key, r.displayName));
+    sideA.auditMetrics.forEach((record) => { if (salesKeys.has(record.agentKey)) options.set(record.agentKey, record.agentName); });
+    sideA.kpiAgents.forEach((record) => { if (record.agentKey && salesKeys.has(record.agentKey)) options.set(record.agentKey, record.agentName); });
+    sideB.auditMetrics.forEach((record) => { if (salesKeys.has(record.agentKey)) options.set(record.agentKey, record.agentName); });
+    sideB.kpiAgents.forEach((record) => { if (record.agentKey && salesKeys.has(record.agentKey)) options.set(record.agentKey, record.agentName); });
 
     return Array.from(options.entries())
       .filter(([k]) => !activeKeys || activeKeys.has(k))
