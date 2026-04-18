@@ -29,6 +29,9 @@ import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
+import { useRepresentativesMap } from "../lib/use-representatives-map";
+import { RepNameCell } from "../components/rep-name-cell";
+import { BadgeFilter } from "../components/badge-filter";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { brand } from "../theme/colors";
 
@@ -164,6 +167,8 @@ export function CsatPage() {
   // champion ve tablo CSAT sütunundan otomatik düşer; her ay ölçülmeyen bir temsilcinin
   // tek ayın yüksek skoruyla çeyrek/yıl liderine geçmesini engeller.
   const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
+  const repsMap = useRepresentativesMap();
+  const [badgeFilter, setBadgeFilter] = useState<string>("");
   const aggregatedSnapshotCsatAdjusted = useMemo(() => {
     if (!aggregatedSnapshot) return undefined;
     if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
@@ -321,8 +326,16 @@ export function CsatPage() {
     };
   }, [rows]);
 
+  const filteredRows = useMemo(() => {
+    if (!badgeFilter) return rows;
+    return rows.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
+  }, [rows, badgeFilter, repsMap]);
+
   const columns: ColumnDef<CsatRow, any>[] = [
-    columnHelper.accessor("agentName", { header: "Temsilci" }),
+    columnHelper.accessor("agentName", {
+      header: "Temsilci",
+      cell: (info) => <RepNameCell name={info.getValue()} rep={repsMap.get(info.row.original.agentKey)} />
+    }),
     columnHelper.accessor("auditScoreDisplay", {
       header: "Audit skoru",
       cell: (info) => formatAuditScore(info.getValue())
@@ -373,9 +386,13 @@ export function CsatPage() {
   const tableSummaryRows = useMemo(() => {
     // Özet satırları 'satıcı operasyon' etiketlileri de dahil tüm temsilcilerden hesaplanır;
     // 'premium onboarding' temsilcilerin CSAT skoru yukarıda null'landığı için ortalamaya
-    // otomatik girmez.
-    const fullAgents = aggregatedSnapshotCsatAdjusted?.datasets.agentMetrics ?? [];
-    const fullAudits = aggregatedSnapshotCsatAdjusted ? selectAuditMetrics(aggregatedSnapshotCsatAdjusted.datasets) : [];
+    // otomatik girmez. Etiket filtresi aktifse yalnızca filtrelenmiş temsilciler baz alınır.
+    let fullAgents = aggregatedSnapshotCsatAdjusted?.datasets.agentMetrics ?? [];
+    let fullAudits = aggregatedSnapshotCsatAdjusted ? selectAuditMetrics(aggregatedSnapshotCsatAdjusted.datasets) : [];
+    if (badgeFilter) {
+      fullAgents = fullAgents.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
+      fullAudits = fullAudits.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
+    }
     if (fullAgents.length === 0) return [] as Array<Record<string, ReactNode> & { _label?: string; _tone?: "emerald" }>;
     const auditByKey = new Map(fullAudits.map((r) => [r.agentKey, r]));
     const enriched = fullAgents.map((a) => ({
@@ -417,7 +434,7 @@ export function CsatPage() {
       evaluationCount: formatNumber(sum(enriched.map((r) => r.evaluationCount)))
     };
     return [avgRow, totalRow];
-  }, [aggregatedSnapshotCsatAdjusted]);
+  }, [aggregatedSnapshotCsatAdjusted, badgeFilter, repsMap]);
 
   return (
     <div className="space-y-6">
@@ -432,7 +449,7 @@ export function CsatPage() {
               people={csatLeaders}
               score={formatNumber(snapshot.highlights.bestCsat?.value, 3)}
               showPodium={false}
-              theme="violet"
+              theme="ink"
               title="En yüksek CSAT skoru"
             />
 
@@ -535,8 +552,11 @@ export function CsatPage() {
             />
           </div>
 
-          <ExecutiveChartCard title="CSAT ayrıntı tablosu">
-            <DataTable columns={columns} data={rows} variant="emerald" striped summaryRows={tableSummaryRows} />
+          <ExecutiveChartCard
+            title="CSAT ayrıntı tablosu"
+            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+          >
+            <DataTable columns={columns} data={filteredRows} variant="emerald" striped summaryRows={tableSummaryRows} />
           </ExecutiveChartCard>
         </>
       ) : (
