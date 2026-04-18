@@ -15,7 +15,7 @@ import { QualityAdminPage } from "../pages/quality-admin-page";
 import { QuestionsPage } from "../pages/questions-page";
 import { RepresentativesPage } from "../pages/representatives-page";
 import { SalesAdminPage } from "../pages/sales-admin-page";
-import { SalesAuditPage } from "../pages/sales-audit-page";
+import { SalesPerformancePage } from "../pages/sales-performance-page";
 import { SalesCalendarPage } from "../pages/sales-calendar-page";
 import { SalesDashboardPage } from "../pages/sales-dashboard-page";
 import { SalesEvaluationQuestionsPage } from "../pages/sales-evaluation-questions-page";
@@ -23,6 +23,7 @@ import { SalesKpiPage } from "../pages/sales-kpi-page";
 import { SalesMeetingsPage } from "../pages/sales-meetings-page";
 import { SalesRepresentativesPage } from "../pages/sales-representatives-page";
 import { SalesSuccessIndexPage } from "../pages/sales-success-index-page";
+import { SalesTargetCalibrationPage } from "../pages/sales-target-calibration-page";
 import { CsComparePage } from "../pages/cs-compare-page";
 import { SalesComparePage } from "../pages/sales-compare-page";
 import { SalesCompanyComparePage } from "../pages/sales-company-compare-page";
@@ -90,12 +91,14 @@ function AppRoutes() {
         <Route element={<SalesKpiPage />} path="/sales/kpi" />
         <Route element={<SalesSuccessIndexPage />} path="/sales/success-index" />
         <Route element={<SalesRampPage />} path="/sales/ramp" />
-        <Route element={<SalesAuditPage />} path="/sales/audit" />
+        <Route element={<SalesPerformancePage />} path="/sales/performance" />
+        <Route element={<Navigate replace to="/sales/performance" />} path="/sales/audit" />
         <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
         <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
         <Route element={<SalesRepresentativesPage />} path="/sales/representatives" />
         <Route element={<SalesComparePage />} path="/sales/compare" />
         <Route element={<SalesCompanyComparePage />} path="/sales/kpi/compare" />
+        <Route element={<SalesTargetCalibrationPage />} path="/sales/kpi/target-calibration" />
         <Route element={<SalesCalendarPage currentUser={currentUser} />} path="/sales/calendar" />
         <Route
           element={
