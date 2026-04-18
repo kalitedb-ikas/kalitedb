@@ -311,6 +311,7 @@ export function DashboardPage() {
                 ...(agent.delta != null ? { delta: `Değişim ${formatDelta(agent.delta)}` } : {})
               }))}
               title="Audit lider tablosu"
+              variant="flat"
             />
             <Leaderboard
               items={snapshot.rankings.csatTop.slice(0, 5).map((agent) => ({
@@ -320,6 +321,7 @@ export function DashboardPage() {
                 ...(agent.delta != null ? { delta: `Değişim ${formatNumber(agent.delta, 2)}` } : {})
               }))}
               title="CSAT lider tablosu"
+              variant="flat"
             />
           </div>
         </>

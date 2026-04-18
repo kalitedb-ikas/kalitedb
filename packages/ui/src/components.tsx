@@ -335,12 +335,14 @@ export function Leaderboard(props: {
   title: string;
   items: Array<{ id: string; label: string; value: string; delta?: string; subtitle?: string; imageSrc?: string | undefined }>;
   className?: string | undefined;
+  variant?: "podium" | "flat" | undefined;
 }) {
+  const variant = props.variant ?? "podium";
   return (
     <SurfaceCard className={props.className} title={props.title} variant="default">
       <ul className="space-y-2.5">
         {props.items.map((item, index) => {
-          const style = podiumRankStyles[index] ?? defaultRankStyle;
+          const style = variant === "flat" ? defaultRankStyle : (podiumRankStyles[index] ?? defaultRankStyle);
           return (
             <li
               key={item.id}
@@ -362,7 +364,7 @@ export function Leaderboard(props: {
                   <img src={item.imageSrc} alt={item.label} className="h-9 w-9 rounded-full object-cover" />
                 ) : null}
                 <div>
-                  <p className={cn("text-sm font-semibold", index < 3 ? "text-slate-950 dark:text-slate-100" : "text-slate-900 dark:text-slate-200")}>{item.label}</p>
+                  <p className={cn("text-sm font-semibold", variant === "podium" && index < 3 ? "text-slate-950 dark:text-slate-100" : "text-slate-900 dark:text-slate-200")}>{item.label}</p>
                   {item.subtitle ? <p className="text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</p> : null}
                   {item.delta ? <p className="text-xs text-slate-500 dark:text-slate-400">{item.delta}</p> : null}
                 </div>
