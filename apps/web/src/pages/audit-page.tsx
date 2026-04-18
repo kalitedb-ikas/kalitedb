@@ -27,6 +27,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { chart } from "../theme/colors";
 
 type AuditAgentRow = {
@@ -123,12 +124,19 @@ export function AuditPage() {
 
   // Audit sayfasında tüm temsilciler gösterilir (Satıcı Operasyon, Premium Onboarding dahil).
   const snapshot = aggregatedSnapshot;
+  // "Takım Lideri" badge'li temsilciler tablo + ortalamalarda kalır, öne çıkanlardan (champion,
+  // lider tablosu, insight tile) hariç tutulur.
+  const highlightExcludedKeys = useRepresentativeKeysWithBadge("takim_lideri");
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
   }, [snapshot?.period.month]);
   const auditThreshold = snapshot?.thresholds.auditScore;
   const currentAudits = useMemo(() => (snapshot ? selectAuditMetrics(snapshot.datasets) : []), [snapshot]);
+  const highlightAudits = useMemo(
+    () => currentAudits.filter((a) => !highlightExcludedKeys.has(a.agentKey)),
+    [currentAudits, highlightExcludedKeys]
+  );
   const agents = useMemo<AuditAgentRow[]>(() => {
     if (!snapshot) return [];
     const auditMap = new Map(
@@ -207,7 +215,7 @@ export function AuditPage() {
     [snapshot]
   );
   const auditLeaders = useMemo(() => {
-    const scoredAgents = currentAudits.filter(
+    const scoredAgents = highlightAudits.filter(
       (agent): agent is typeof agent & { auditScore: number } => agent.auditScore !== null
     );
 
@@ -224,10 +232,16 @@ export function AuditPage() {
         imageAlt: agent.agentName,
         imageSrc: buildAgentAvatar(agent.agentName, index)
       }));
-  }, [currentAudits]);
+  }, [highlightAudits]);
   const auditLeaderNames = auditLeaders.map((leader) => leader.name).join(", ");
+  const topHighlightScore = useMemo(() => {
+    const scored = highlightAudits
+      .map((a) => a.auditScore)
+      .filter((v): v is number => v !== null);
+    return scored.length === 0 ? null : Math.max(...scored);
+  }, [highlightAudits]);
   const lowestAuditGroup = useMemo(() => {
-    const scoredAgents = currentAudits.filter(
+    const scoredAgents = highlightAudits.filter(
       (agent): agent is typeof agent & { auditScore: number } => agent.auditScore !== null
     );
 
@@ -244,7 +258,7 @@ export function AuditPage() {
       names: leaders.map((agent) => agent.agentName).join(", "),
       score: lowestScore
     };
-  }, [currentAudits]);
+  }, [highlightAudits]);
 
   /* ── CS dönemleri (yıla göre — trend için) ── */
   const trendYearPeriods = useMemo(
@@ -307,7 +321,7 @@ export function AuditPage() {
         .map((agent) => [agent.agentKey, agent.auditScore])
     );
 
-    const changes = currentAudits
+    const changes = highlightAudits
       .filter((agent): agent is typeof agent & { auditScore: number } => agent.auditScore !== null)
       .map((agent) => {
         const previousScore = previousAuditMap.get(agent.agentKey);
@@ -360,7 +374,7 @@ export function AuditPage() {
         .join(", "),
       delta: 0
     };
-  }, [currentAudits, previousAuditMetrics]);
+  }, [highlightAudits, previousAuditMetrics]);
 
   /* ── Aylık audit pivot tablosu (ortalama) ── */
   const auditMonthlyData = useMemo<MonthlyAgentRow[]>(() => {
@@ -471,9 +485,9 @@ export function AuditPage() {
             <ChampionSpotlightCard
               kicker={auditLeaders.length > 1 ? "Öne çıkan temsilciler" : "Öne çıkan temsilci"}
               metricLabel={auditLeaders.length > 1 ? "Lider temsilciler" : "Lider temsilci"}
-              name={auditLeaderNames || snapshot.highlights.bestAudit?.label || "Takip ediliyor"}
+              name={auditLeaderNames || "Takip ediliyor"}
               people={auditLeaders}
-              score={formatAuditScore(snapshot.highlights.bestAudit?.value)}
+              score={formatAuditScore(topHighlightScore)}
               showPodium={false}
               theme="orange"
               title="En yüksek audit skoru"
@@ -513,11 +527,15 @@ export function AuditPage() {
             />
 
             <Leaderboard
-              items={snapshot.rankings.auditTop.slice(0, 5).map((item) => ({
-                id: item.id,
-                label: item.label,
-                value: formatAuditScore(item.value)
-              }))}
+              items={[...highlightAudits]
+                .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
+                .sort((left, right) => right.auditScore - left.auditScore)
+                .slice(0, 5)
+                .map((a) => ({
+                  id: a.id,
+                  label: a.agentName,
+                  value: formatAuditScore(a.auditScore)
+                }))}
               title="Audit lider tablosu"
             />
           </div>
