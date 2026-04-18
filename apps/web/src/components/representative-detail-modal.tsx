@@ -1,5 +1,5 @@
 import type { Department, Representative, TimelineEvent } from "@kalitedb/shared";
-import { BarChart3, Briefcase, Crown, Headphones, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
+import { BarChart3, Briefcase, Crown, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -18,6 +18,7 @@ export const BADGE_DEFINITIONS: { key: string; label: string; color: string; ico
   { key: "revops", label: "RevOPS", color: "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-700/40", icon: <BarChart3 size={12} /> },
   { key: "cs", label: "CS", color: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-700/40", icon: <Headphones size={12} /> },
   { key: "satici_operasyon", label: "Satıcı Operasyon", color: "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-700/40", icon: <Briefcase size={12} /> },
+  { key: "takim_lideri", label: "Takım Lideri", color: "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-700/40", icon: <Medal size={12} /> },
 ];
 
 export function BadgePill(props: { badgeKey: string; small?: boolean }) {
