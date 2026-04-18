@@ -550,8 +550,21 @@ export function ChampionSpotlightCard(props: {
     props.people && props.people.length > 0
       ? props.people
       : [{ name: props.name, imageSrc: props.imageSrc, imageAlt: props.imageAlt }];
-  const visiblePeople = people.slice(0, 4);
+  const visiblePeople = people.slice(0, 8);
   const hasExpandedPortraitLayout = !showPodium && visiblePeople.length <= 2;
+  const gridColsClass =
+    visiblePeople.length >= 7
+      ? "grid-cols-4"
+      : visiblePeople.length >= 5
+        ? "grid-cols-3"
+        : "grid-cols-2";
+  const gridTileSizeClass = showPodium
+    ? "h-24 rounded-[10px]"
+    : visiblePeople.length >= 7
+      ? "h-[100px] w-[72px] rounded-[10px]"
+      : visiblePeople.length >= 5
+        ? "h-[124px] w-[90px] rounded-[10px]"
+        : "h-[148px] w-[108px] rounded-[10px]";
 
   return (
     <section className={cn("surface-hero relative overflow-hidden rounded-[10px] p-6 sm:p-7", props.className)}>
@@ -644,7 +657,8 @@ export function ChampionSpotlightCard(props: {
           ) : (
             <div
               className={cn(
-                "absolute grid grid-cols-2",
+                "absolute grid",
+                gridColsClass,
                 showPodium
                   ? "inset-x-8 top-8 gap-3"
                   : "inset-x-4 top-1/2 -translate-y-1/2 justify-items-center gap-x-3 gap-y-4"
@@ -655,7 +669,7 @@ export function ChampionSpotlightCard(props: {
                   key={person.name}
                   className={cn(
                     "relative overflow-hidden border border-slate-200 bg-white/88 shadow-[0_18px_50px_rgba(15,23,42,0.08)]",
-                    showPodium ? "h-24 rounded-[10px]" : "h-[148px] w-[108px] rounded-[10px]"
+                    gridTileSizeClass
                   )}
                 >
                   <ChampionAvatar
