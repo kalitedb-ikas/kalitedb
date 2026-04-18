@@ -426,7 +426,7 @@ export function SalesDashboardPage() {
           <div className="grid gap-4 xl:grid-cols-2">
             {summary.topByAmount ? (
               <ChampionSpotlightCard
-                kicker="Ayın Yıldızı"
+                kicker={viewMode === "ceyreklik" ? `Q${selectedQuarter} Yıldızı` : viewMode === "yillik" ? `${selectedYear} Yıldızı` : "Ayın Yıldızı"}
                 title="En Çok Satış (Tutar)"
                 name={summary.topByAmount.agentName}
                 imageSrc={getRepresentativePhotoSrc(summary.topByAmount.agentName) ?? undefined}
