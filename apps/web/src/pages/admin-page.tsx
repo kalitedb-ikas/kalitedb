@@ -546,17 +546,20 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         id: "action",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <select
-              className="rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-2 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
-              value={row.original.status}
-              onChange={(e) =>
-                updateRepresentativeStatusMutation.mutate({ key: row.original.key, status: e.target.value })
+            <FancySelect
+              ariaLabel="Temsilci durumu"
+              size="sm"
+              panelWidthClass="w-48"
+              options={[
+                { value: "active", label: "Aktif" },
+                { value: "departed", label: "Ayrıldı" },
+                { value: "department_changed", label: "Departman Değişti" }
+              ]}
+              value={row.original.status ?? "active"}
+              onChange={(v) =>
+                updateRepresentativeStatusMutation.mutate({ key: row.original.key, status: v })
               }
-            >
-              <option value="active">Aktif</option>
-              <option value="departed">Ayrıldı</option>
-              <option value="department_changed">Departman Değişti</option>
-            </select>
+            />
             <button
               className="rounded-full p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
               onClick={() => { if (confirm(`"${row.original.displayName}" temsilcisi silinecek. Emin misiniz?`)) deleteRepresentativeMutation.mutate(row.original.key); }}
@@ -1232,25 +1235,29 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     Yeni Temsilci
                   </button>
                   <div className="ml-auto flex items-center gap-2">
-                    <select
-                      className="rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                    <FancySelect
+                      ariaLabel="Departman filtresi"
+                      panelWidthClass="w-48"
+                      options={[
+                        { value: "all", label: "Tüm Departmanlar" },
+                        { value: "cs", label: "CS" },
+                        { value: "sales", label: "Satış" }
+                      ]}
                       value={repDepartmentFilter}
-                      onChange={(e) => setRepDepartmentFilter(e.target.value as typeof repDepartmentFilter)}
-                    >
-                      <option value="all">Tüm Departmanlar</option>
-                      <option value="cs">CS</option>
-                      <option value="sales">Satış</option>
-                    </select>
-                    <select
-                      className="rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                      onChange={(v) => setRepDepartmentFilter(v as typeof repDepartmentFilter)}
+                    />
+                    <FancySelect
+                      ariaLabel="Durum filtresi"
+                      panelWidthClass="w-48"
+                      options={[
+                        { value: "all", label: "Tüm Durumlar" },
+                        { value: "active", label: "Aktif" },
+                        { value: "departed", label: "Ayrıldı" },
+                        { value: "department_changed", label: "Departman Değişti" }
+                      ]}
                       value={repStatusFilter}
-                      onChange={(e) => setRepStatusFilter(e.target.value as typeof repStatusFilter)}
-                    >
-                      <option value="all">Tüm Durumlar</option>
-                      <option value="active">Aktif</option>
-                      <option value="departed">Ayrıldı</option>
-                      <option value="department_changed">Departman Değişti</option>
-                    </select>
+                      onChange={(v) => setRepStatusFilter(v as typeof repStatusFilter)}
+                    />
                   </div>
                 </div>
                 {representativesQuery.isLoading ? (

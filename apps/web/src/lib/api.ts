@@ -2031,6 +2031,19 @@ export const api = {
     key: string,
     body: { status?: string; department?: string; statusNote?: string }
   ): Promise<Representative> {
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      const repDoc = doc(firebaseDb, "representatives", key);
+      const snap = await getDoc(repDoc);
+      if (!snap.exists()) throw new Error("Temsilci bulunamadı");
+      const current = snap.data() as Record<string, unknown>;
+      const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+      if (body.status != null) updates.status = body.status;
+      if (body.department != null) updates.department = body.department;
+      if (body.statusNote != null) updates.statusNote = body.statusNote;
+      await setDoc(repDoc, { ...current, ...updates });
+      return { ...current, ...updates } as unknown as Representative;
+    }
     return request<Representative>(`/api/representatives/${encodeURIComponent(key)}`, {
       token,
       method: "PATCH",
