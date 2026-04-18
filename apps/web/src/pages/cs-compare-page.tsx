@@ -147,13 +147,15 @@ export function CsComparePage() {
   });
 
   const representatives = useMemo(() => {
+    const nonSalesReps = (repsQuery.data ?? []).filter((r) => !(r.badges ?? []).includes("satis"));
+    const nonSalesKeys = new Set(nonSalesReps.map((r) => r.key));
     const options = new Map<string, string>();
-    (repsQuery.data ?? []).filter((r) => (r.department ?? "cs") === "cs").forEach((r) => options.set(r.key, r.displayName));
+    nonSalesReps.forEach((r) => options.set(r.key, r.displayName));
     // Her iki snapshot'tan ek isimler
-    (sideA.snapshot?.datasets.agentMetrics ?? []).forEach((record) => options.set(record.agentKey, record.agentName));
-    sideA.auditMetrics.forEach((record) => options.set(record.agentKey, record.agentName));
-    (sideB.snapshot?.datasets.agentMetrics ?? []).forEach((record) => options.set(record.agentKey, record.agentName));
-    sideB.auditMetrics.forEach((record) => options.set(record.agentKey, record.agentName));
+    (sideA.snapshot?.datasets.agentMetrics ?? []).forEach((record) => { if (nonSalesKeys.has(record.agentKey)) options.set(record.agentKey, record.agentName); });
+    sideA.auditMetrics.forEach((record) => { if (nonSalesKeys.has(record.agentKey)) options.set(record.agentKey, record.agentName); });
+    (sideB.snapshot?.datasets.agentMetrics ?? []).forEach((record) => { if (nonSalesKeys.has(record.agentKey)) options.set(record.agentKey, record.agentName); });
+    sideB.auditMetrics.forEach((record) => { if (nonSalesKeys.has(record.agentKey)) options.set(record.agentKey, record.agentName); });
 
     return Array.from(options.entries())
       .filter(([k]) => !activeKeys || activeKeys.has(k))

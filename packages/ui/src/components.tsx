@@ -309,9 +309,9 @@ export function HeatChip(props: {
 
 const podiumRankStyles: Record<number, { badge: string; row: string; value: string }> = {
   0: {
-    badge: "border-amber-300/80 bg-gradient-to-br from-amber-50 to-orange-50 text-amber-700 shadow-[0_2px_8px_rgba(251,191,36,0.18)] dark:border-amber-600/50 dark:from-amber-900/40 dark:to-orange-900/30 dark:text-amber-400",
-    row: "border-amber-200/60 bg-gradient-to-r from-amber-50/50 via-white/90 to-white/90 shadow-[0_10px_28px_rgba(251,191,36,0.08)] dark:border-amber-700/30 dark:from-amber-900/20 dark:via-slate-800/60 dark:to-slate-800/60",
-    value: "text-amber-700 dark:text-amber-400"
+    badge: "border-amber-500/70 bg-gradient-to-br from-yellow-300 to-amber-500 text-amber-950 shadow-[0_2px_8px_rgba(234,179,8,0.28)] dark:border-amber-400/60 dark:from-amber-500/60 dark:to-yellow-600/50 dark:text-amber-50",
+    row: "border-amber-300/55 bg-gradient-to-r from-amber-50/60 via-white/90 to-white/90 shadow-[0_10px_28px_rgba(234,179,8,0.1)] dark:border-amber-500/30 dark:from-amber-800/22 dark:via-slate-800/60 dark:to-slate-800/60",
+    value: "text-amber-800 dark:text-amber-200"
   },
   1: {
     badge: "border-slate-300/80 bg-gradient-to-br from-slate-100 to-slate-50 text-slate-600 shadow-[0_2px_6px_rgba(148,163,184,0.14)] dark:border-slate-500/50 dark:from-slate-700/50 dark:to-slate-800/40 dark:text-slate-300",
@@ -319,9 +319,9 @@ const podiumRankStyles: Record<number, { badge: string; row: string; value: stri
     value: "text-slate-700 dark:text-slate-300"
   },
   2: {
-    badge: "border-amber-700/50 bg-gradient-to-br from-amber-100 to-orange-200/70 text-amber-900 shadow-[0_2px_6px_rgba(180,83,9,0.18)] dark:border-amber-800/60 dark:from-amber-950/60 dark:to-orange-950/50 dark:text-amber-300",
-    row: "border-amber-700/25 bg-gradient-to-r from-amber-100/40 via-white/90 to-white/90 shadow-[0_10px_25px_rgba(180,83,9,0.06)] dark:border-amber-900/30 dark:from-amber-950/20 dark:via-slate-800/60 dark:to-slate-800/60",
-    value: "text-amber-900 dark:text-amber-300"
+    badge: "border-orange-800/50 bg-gradient-to-br from-orange-500 to-amber-700 text-orange-50 shadow-[0_2px_6px_rgba(154,52,18,0.25)] dark:border-orange-700/55 dark:from-orange-800/55 dark:to-amber-900/50 dark:text-orange-100",
+    row: "border-orange-400/25 bg-gradient-to-r from-orange-50/50 via-white/90 to-white/90 shadow-[0_10px_25px_rgba(154,52,18,0.08)] dark:border-orange-700/30 dark:from-orange-900/22 dark:via-slate-800/60 dark:to-slate-800/60",
+    value: "text-orange-900 dark:text-orange-300"
   }
 };
 
