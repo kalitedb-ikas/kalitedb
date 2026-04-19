@@ -244,7 +244,7 @@ function useSalesSideData(
         agentKey: agent.agentKey,
         salesAmount: agent.salesAmount,
         licenseCount: agent.licenseCount,
-        auditScore: audit?.auditScore ?? null,
+        auditScore: agent.perfScore ?? audit?.auditScore ?? null,
         callAttempts: agent.callAttempts,
         talkDurationSeconds: agent.talkDurationSeconds,
         avgSalesAmount: agent.avgLicensePrice,
@@ -334,8 +334,6 @@ export function SalesComparePage() {
   // Sol taraf → sideA verisi, sağ taraf → sideB verisi
   const kpiA = sideA.kpiAgents.find((m) => m.agentKey === keyA) ?? null;
   const kpiB = sideB.kpiAgents.find((m) => m.agentKey === keyB) ?? null;
-  const auditA = sideA.auditMetrics.find((m) => m.agentKey === keyA) ?? null;
-  const auditB = sideB.auditMetrics.find((m) => m.agentKey === keyB) ?? null;
 
   const repDataA = (repsQuery.data ?? []).find((r) => r.key === keyA);
   const repDataB = (repsQuery.data ?? []).find((r) => r.key === keyB);
@@ -500,7 +498,6 @@ export function SalesComparePage() {
                 <CompareMetricRow label="Scale %" leftValue={kpiA?.scaleConversion} rightValue={kpiB?.scaleConversion} format={formatPercent} />
                 <CompareMetricRow label="Scale+ %" leftValue={kpiA?.scalePlusConversion} rightValue={kpiB?.scalePlusConversion} format={formatPercent} />
                 <CompareMetricRow label="Toplam Dönüşüm %" leftValue={kpiA?.totalConversion} rightValue={kpiB?.totalConversion} format={formatPercent} />
-                <CompareMetricRow label="Audit" leftValue={auditA?.auditScore} rightValue={auditB?.auditScore} format={(v) => formatNumber(v, 1)} />
               </div>
             </div>
           </div>
