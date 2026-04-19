@@ -25,13 +25,13 @@
   --surface-dark-border: rgba(148, 163, 184, 0.2);
   --surface-hero-bg: #ffffff;
   --surface-hero-border: rgba(226, 232, 240, 0.9);
-  --shadow-soft: none;
-  --shadow-medium: none;
-  --shadow-strong: none;
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-medium: 0 3px 6px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-strong: 0 6px 14px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.1);
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(255, 255, 255, 0.5);
-  --glass-shadow: none;
-  --glass-shadow-strong: none;
+  --glass-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+  --glass-shadow-strong: 0 6px 14px rgba(0, 0, 0, 0.14);
   --glass-dark-bg: rgba(15, 23, 42, 0.8);
   --glass-dark-border: rgba(255, 255, 255, 0.12);
 }
@@ -59,20 +59,15 @@ body {
   box-sizing: border-box;
 }
 
-/* Kart arkaplanlarında shadow istenmiyor — global kapatma. */
-*:not(:focus-visible) {
-  box-shadow: none !important;
-}
-
 ::selection {
-  background: rgba(249, 115, 22, 0.22);
+  background: rgba(15, 23, 42, 0.18);
 }
 
 :focus-visible {
   outline: none;
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.92),
-    0 0 0 4px rgba(249, 115, 22, 0.42) !important;
+    0 0 0 4px rgba(15, 23, 42, 0.4);
 }
 
 .app-backdrop {
@@ -97,7 +92,7 @@ body {
   right: -120px;
   width: 300px;
   height: 300px;
-  background: rgba(249, 115, 22, 0.18);
+  background: transparent;
 }
 
 .app-backdrop::after {
@@ -105,7 +100,7 @@ body {
   bottom: 8vh;
   width: 320px;
   height: 320px;
-  background: rgba(56, 189, 248, 0.14);
+  background: transparent;
 }
 
 .surface-default,
@@ -115,7 +110,7 @@ body {
 .surface-hero {
   position: relative;
   border-radius: 10px;
-  border: 1px solid transparent;
+  border: 1.5px solid transparent;
 }
 
 .surface-default {
@@ -133,7 +128,7 @@ body {
 .surface-subtle {
   background: var(--surface-subtle-bg);
   border-color: var(--surface-subtle-border);
-  box-shadow: none;
+  box-shadow: var(--shadow-soft);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -141,7 +136,7 @@ body {
 .surface-dark {
   background: var(--surface-dark-bg);
   border-color: var(--surface-dark-border);
-  box-shadow: none;
+  box-shadow: var(--shadow-medium);
   color: white;
 }
 
@@ -223,13 +218,13 @@ body {
 .glass-card-glow {
   background: #ffffff;
   border: 1px solid var(--surface-default-border);
-  box-shadow: none;
+  box-shadow: var(--shadow-soft);
 }
 
 .glass-card-accent {
   background: #ffffff;
   border: 1px solid var(--surface-default-border);
-  box-shadow: none;
+  box-shadow: var(--shadow-soft);
 }
 
 .card,
@@ -635,13 +630,13 @@ html.dark {
   --surface-dark-border: rgba(148, 163, 184, 0.2);
   --surface-hero-bg: rgba(30, 41, 59, 0.9);
   --surface-hero-border: rgba(71, 85, 105, 0.5);
-  --shadow-soft: none;
-  --shadow-medium: none;
-  --shadow-strong: none;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px 1px rgba(0, 0, 0, 0.2);
+  --shadow-medium: 0 2px 4px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-strong: 0 4px 10px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25);
   --glass-bg: rgba(30, 41, 59, 0.72);
   --glass-border: rgba(71, 85, 105, 0.4);
-  --glass-shadow: none;
-  --glass-shadow-strong: none;
+  --glass-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --glass-shadow-strong: 0 4px 10px rgba(0, 0, 0, 0.35);
   --glass-dark-bg: rgba(2, 6, 23, 0.8);
   --glass-dark-border: rgba(148, 163, 184, 0.15);
   color: #e2e8f0;
