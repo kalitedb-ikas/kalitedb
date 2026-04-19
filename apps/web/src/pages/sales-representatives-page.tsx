@@ -300,14 +300,23 @@ export function SalesRepresentativesPage() {
 
   const representatives = useMemo(() => {
     const options = new Map<string, string>();
-    // Önce kayıtlı temsilcilerden (dönemden bağımsız)
-    (repsQuery.data ?? [])
-      .filter((r) => (r.department ?? "cs") === "sales")
-      .forEach((r) => options.set(r.key, r.displayName));
-    // Sonra dönem verisinden (ek isimler olabilir)
-    auditMetrics.forEach((record) => options.set(record.agentKey, record.agentName));
+    const excludedKeys = new Set<string>();
+    // Önce kayıtlı temsilcilerden (dönemden bağımsız) — sadece satış
+    (repsQuery.data ?? []).forEach((r) => {
+      if ((r.department ?? "cs") === "sales") {
+        options.set(r.key, r.displayName);
+      } else {
+        excludedKeys.add(r.key);
+      }
+    });
+    // Sonra dönem verisinden (ek isimler olabilir); CS olarak bilinenleri atla
+    auditMetrics.forEach((record) => {
+      if (excludedKeys.has(record.agentKey)) return;
+      options.set(record.agentKey, record.agentName);
+    });
     kpiAgents.forEach((record) => {
-      if (record.agentKey) options.set(record.agentKey, record.agentName);
+      if (!record.agentKey || excludedKeys.has(record.agentKey)) return;
+      options.set(record.agentKey, record.agentName);
     });
 
     return Array.from(options.entries())
