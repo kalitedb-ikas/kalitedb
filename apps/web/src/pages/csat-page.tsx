@@ -522,35 +522,14 @@ export function CsatPage() {
             yTicks={[4.5, 4.6, 4.7, 4.8, 4.9, 5]}
           />
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <ExecutiveChartCard title="Kanal dağılımı">
-              <div className="space-y-4">
-                {csatSummary.channelMix.map((item) => (
-                  <div key={item.label}>
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <span className="font-medium text-slate-600 dark:text-slate-400">{item.label}</span>
-                      <span className="font-semibold text-slate-900 dark:text-slate-100">{formatNumber(item.value)}</span>
-                    </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700">
-                      <div
-                        className={`h-full rounded-full ${item.className}`}
-                        style={{ width: `${Math.max(item.ratio * 100, 8)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ExecutiveChartCard>
-
-            <Leaderboard
-              items={snapshot.rankings.csatTop.slice(0, 5).map((item) => ({
-                id: item.id,
-                label: item.label,
-                value: formatNumber(item.value, 3)
-              }))}
-              title="En güçlü CSAT"
-            />
-          </div>
+          <Leaderboard
+            items={snapshot.rankings.csatTop.slice(0, 5).map((item) => ({
+              id: item.id,
+              label: item.label,
+              value: formatNumber(item.value, 3)
+            }))}
+            title="En başarılı CSAT"
+          />
 
           <ExecutiveChartCard
             title="CSAT ayrıntı tablosu"
