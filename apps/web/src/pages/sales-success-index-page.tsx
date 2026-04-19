@@ -321,7 +321,8 @@ export function SalesSuccessIndexPage() {
         agentName: agent.agentName,
         salesAmount: agent.salesAmount,
         licenseCount: agent.licenseCount,
-        auditScore: audit?.auditScore ?? null,
+        // CSV import'undan gelen perfScore öncelikli; yoksa manuel audit fallback
+        auditScore: agent.perfScore ?? audit?.auditScore ?? null,
         callAttempts: agent.callAttempts,
         talkDurationSeconds: agent.talkDurationSeconds,
         avgSalesAmount: agent.avgLicensePrice,
