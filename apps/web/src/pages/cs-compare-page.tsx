@@ -1,4 +1,4 @@
-import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { buildDashboardSnapshot, selectAuditMetrics, selectDefaultReportPeriod, type AgentMetric, type AuditMetric } from "@kalitedb/shared";
 import { SectionCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
@@ -13,7 +13,7 @@ import {
   formatPercent,
   formatSeconds
 } from "../lib/format";
-import { computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { RepresentativeSelect } from "../components/representative-select";
@@ -80,6 +80,8 @@ function useCsSideData(
   );
 
   const periodId = activePeriodIds.length > 0 ? activePeriodIds[activePeriodIds.length - 1] : undefined;
+  const activePeriodIdsKey = activePeriodIds.join(",");
+  const needsAggregation = periodRange.viewMode !== "aylik" && activePeriodIds.length > 1;
 
   const dashboardQuery = useQuery({
     enabled: Boolean(periodId),
@@ -88,7 +90,43 @@ function useCsSideData(
     staleTime: 60 * 1000
   });
 
-  const snapshot = dashboardQuery.data;
+  const agentMetricsBulkQuery = useQuery({
+    enabled: needsAggregation,
+    queryKey: ["cs-compare-agent-bulk", auth.token, activePeriodIdsKey],
+    queryFn: () => api.getAgentMetricsForPeriods(auth.token, activePeriodIds),
+    staleTime: 60 * 1000
+  });
+  const auditMetricsBulkQuery = useQuery({
+    enabled: needsAggregation,
+    queryKey: ["cs-compare-audit-bulk", auth.token, activePeriodIdsKey],
+    queryFn: () => api.getAuditMetricsForPeriods(auth.token, activePeriodIds),
+    staleTime: 60 * 1000
+  });
+
+  const baseSnapshot = dashboardQuery.data;
+  const snapshot = useMemo(() => {
+    if (!baseSnapshot) return undefined;
+    if (!needsAggregation) return baseSnapshot;
+    const agentMap = agentMetricsBulkQuery.data;
+    const auditMap = auditMetricsBulkQuery.data;
+    if (!agentMap || !auditMap) return baseSnapshot;
+    const agentPerPeriod = activePeriodIds.map((pid) => agentMap[pid] ?? []);
+    const auditPerPeriod = activePeriodIds.map((pid) => auditMap[pid] ?? []);
+    const aggregatedAgents: AgentMetric[] = aggregateAgentMetrics(agentPerPeriod);
+    const aggregatedAudits: AuditMetric[] = aggregateAuditMetrics(auditPerPeriod);
+    const aggregatedPeriod = { ...baseSnapshot.period, manualTotalCallCount: null, manualTotalChatMailCount: null, manualTotalTicketClosedCount: null };
+    return buildDashboardSnapshot({
+      period: aggregatedPeriod,
+      datasets: {
+        agentMetrics: aggregatedAgents,
+        auditMetrics: aggregatedAudits,
+        questionPerformance: baseSnapshot.datasets.questionPerformance,
+        qtMetrics: baseSnapshot.datasets.qtMetrics
+      },
+      thresholds: baseSnapshot.thresholds
+    });
+  }, [baseSnapshot, needsAggregation, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
+
   const auditMetrics = useMemo(() => selectAuditMetrics(snapshot?.datasets ?? { agentMetrics: [], auditMetrics: [] }), [snapshot]);
 
   return { snapshot, auditMetrics, monthlyPeriodId, yearPeriods };
