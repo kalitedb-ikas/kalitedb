@@ -9,7 +9,7 @@ export const OPTIONS = optionsResponse;
 
 const patchRepresentativeSchema = z.object({
   status: z.enum(["active", "departed", "department_changed"]).optional(),
-  department: z.enum(["cs", "sales"]).optional(),
+  department: z.enum(["cs", "sales", "quality", "partner"]).optional(),
   displayName: z.string().min(1).optional(),
   statusNote: z.string().optional(),
   badges: z.array(z.string()).optional(),

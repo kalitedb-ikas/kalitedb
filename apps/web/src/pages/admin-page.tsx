@@ -187,7 +187,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     totalTicketClosedCount: ""
   });
   const [editingRoleEmail, setEditingRoleEmail] = useState<string | null>(null);
-  const [repDepartmentFilter, setRepDepartmentFilter] = useState<"all" | "cs" | "sales">("all");
+  const [repDepartmentFilter, setRepDepartmentFilter] = useState<"all" | "cs" | "sales" | "quality" | "partner">("all");
   const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
 
   const periodsQuery = useQuery({
@@ -342,9 +342,10 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const updateRepresentativeMutation = useMutation({
-    mutationFn: (input: { key: string; displayName?: string; badges?: string[]; timeline?: Array<Record<string, unknown>> }) => {
+    mutationFn: (input: { key: string; displayName?: string; department?: string; badges?: string[]; timeline?: Array<Record<string, unknown>> }) => {
       const body: Record<string, unknown> = {};
       if (input.displayName != null) body.displayName = input.displayName;
+      if (input.department != null) body.department = input.department;
       if (input.badges != null) body.badges = input.badges;
       if (input.timeline != null) body.timeline = input.timeline;
       return api.updateRepresentative(auth.token, input.key, body as any);
@@ -520,7 +521,10 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
       {
         header: "Departman",
         accessorKey: "department",
-        cell: ({ row }) => (row.original.department === "cs" ? "CS" : "Satış")
+        cell: ({ row }) => {
+          const dept = row.original.department;
+          return dept === "cs" ? "CS" : dept === "sales" ? "Satış" : dept === "quality" ? "Kalite" : dept === "partner" ? "Partner" : dept;
+        }
       },
       {
         header: "Durum",
@@ -1241,7 +1245,9 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       options={[
                         { value: "all", label: "Tüm Departmanlar" },
                         { value: "cs", label: "CS" },
-                        { value: "sales", label: "Satış" }
+                        { value: "sales", label: "Satış" },
+                        { value: "quality", label: "Kalite" },
+                        { value: "partner", label: "Partner" }
                       ]}
                       value={repDepartmentFilter}
                       onChange={(v) => setRepDepartmentFilter(v as typeof repDepartmentFilter)}

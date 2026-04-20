@@ -9,7 +9,7 @@ export const OPTIONS = optionsResponse;
 
 const createRepresentativeSchema = z.object({
   displayName: z.string().min(1),
-  department: z.enum(["cs", "sales"]),
+  department: z.enum(["cs", "sales", "quality", "partner"]),
   status: z.enum(["active", "departed", "department_changed"]).default("active"),
   statusNote: z.string().optional()
 });
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     await requireAuth(request as never);
     const url = new URL(request.url);
     const status = url.searchParams.get("status") as "active" | "departed" | "department_changed" | null;
-    const department = url.searchParams.get("department") as "cs" | "sales" | null;
+    const department = url.searchParams.get("department") as "cs" | "sales" | "quality" | "partner" | null;
 
     const repository = await getRepository();
     const representatives = await repository.listRepresentatives({
