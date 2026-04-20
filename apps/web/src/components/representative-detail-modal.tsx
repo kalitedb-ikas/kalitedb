@@ -1,5 +1,5 @@
 import type { Department, Representative, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
-import { BarChart3, Briefcase, Crown, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
+import { BarChart3, Briefcase, Crown, Handshake, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -18,6 +18,7 @@ export const BADGE_DEFINITIONS: { key: string; label: string; color: string; ico
   { key: "revops", label: "RevOPS", color: "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-700/40", icon: <BarChart3 size={12} /> },
   { key: "cs", label: "CS", color: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-700/40", icon: <Headphones size={12} /> },
   { key: "satici_operasyon", label: "Satıcı Operasyon", color: "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-700/40", icon: <Briefcase size={12} /> },
+  { key: "partner", label: "Partner", color: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 dark:border-fuchsia-700/40", icon: <Handshake size={12} /> },
   { key: "diger", label: "Diğer", color: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/40 dark:text-slate-300 dark:border-slate-600", icon: <Medal size={12} /> },
 ];
 
