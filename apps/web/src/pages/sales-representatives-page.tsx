@@ -303,7 +303,8 @@ export function SalesRepresentativesPage() {
     const excludedKeys = new Set<string>();
     // Önce kayıtlı temsilcilerden (dönemden bağımsız) — sadece satış
     (repsQuery.data ?? []).forEach((r) => {
-      if ((r.department ?? "cs") === "sales") {
+      const dept = r.department ?? "cs";
+      if (dept === "sales" || dept === "partner") {
         options.set(r.key, r.displayName);
       } else {
         excludedKeys.add(r.key);

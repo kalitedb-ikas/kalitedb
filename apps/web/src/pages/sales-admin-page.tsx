@@ -264,7 +264,7 @@ export function SalesAdminPage() {
   });
 
   const filteredSalesReps = useMemo(() => {
-    const registered = (representativesQuery.data ?? []).filter((r) => r.department === "sales");
+    const registered = (representativesQuery.data ?? []).filter((r) => r.department === "sales" || r.department === "partner");
     const registeredKeys = new Set(registered.map((r) => r.key));
 
     // KPI verilerindeki temsilcileri de dahil et (tüm dönemlerden, dönem bağımsız)
@@ -383,7 +383,7 @@ export function SalesAdminPage() {
     } else {
       // Kayıtlı veri yoksa aktif satış temsilcilerini otomatik doldur
       const activeReps = (representativesQuery.data ?? [])
-        .filter((r) => r.department === "sales" && r.status === "active")
+        .filter((r) => (r.department === "sales" || r.department === "partner") && r.status === "active")
         .sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
       if (activeReps.length > 0) {
         setAuditRows(activeReps.map((rep) => ({
@@ -418,7 +418,7 @@ export function SalesAdminPage() {
       );
     } else {
       const activeReps = (representativesQuery.data ?? [])
-        .filter((r) => r.department === "sales" && r.status === "active")
+        .filter((r) => (r.department === "sales" || r.department === "partner") && r.status === "active")
         .sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
       if (activeReps.length > 0) {
         setRoleplayRows(activeReps.map((rep) => ({
@@ -1130,7 +1130,7 @@ export function SalesAdminPage() {
   const availableAgents = useMemo(() => {
     const names = new Map<string, string>();
     // Temsilciler listesindeki aktif satış temsilcileri
-    const reps = (representativesQuery.data ?? []).filter((r) => r.department === "sales" && r.status === "active");
+    const reps = (representativesQuery.data ?? []).filter((r) => (r.department === "sales" || r.department === "partner") && r.status === "active");
     for (const rep of reps) {
       names.set(rep.key, rep.displayName);
     }
