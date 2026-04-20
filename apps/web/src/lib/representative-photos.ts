@@ -79,7 +79,9 @@ const REPRESENTATIVE_DISPLAY_NAME_MAP: Record<string, string> = {
   [normalizeKey("baturay.cetinel")]: "Baturay Çetinel",
   [normalizeKey("baturay.cetinel@ikas.com")]: "Baturay Çetinel",
   [normalizeKey("sercan.ari")]: "Sercan Arı",
-  [normalizeKey("sercan.ari@ikas.com")]: "Sercan Arı"
+  [normalizeKey("sercan.ari@ikas.com")]: "Sercan Arı",
+  [normalizeKey("zafer.coban")]: "Zafer Çoban",
+  [normalizeKey("zafer.coban@ikas.com")]: "Zafer Çoban"
 };
 
 export function getRepresentativeDisplayName(value: string) {

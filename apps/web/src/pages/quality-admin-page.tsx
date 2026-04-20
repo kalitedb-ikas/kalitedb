@@ -126,7 +126,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
     const options = new Map<string, { email: string; name: string; label: string }>();
 
     for (const assignment of rolesQuery.data ?? []) {
-      if (assignment.role !== "qt" && assignment.role !== "quality") {
+      if (assignment.role !== "qt" && assignment.role !== "quality" && assignment.role !== "admin") {
         continue;
       }
 
