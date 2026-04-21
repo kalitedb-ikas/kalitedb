@@ -28,6 +28,7 @@ import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPr
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
+import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
 import { BadgeFilter } from "../components/badge-filter";
 import { CompactStatCard } from "../components/compact-stat-card";
@@ -47,12 +48,14 @@ const columnHelper = createColumnHelper<AuditAgentRow>();
 export function AuditPage() {
   const auth = useAuth();
   const now = new Date();
-  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+  const periodRangeDefaults = useMemo<PeriodRangeValue>(() => {
     const prevMonth = now.getMonth();
     const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
     const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
     return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [periodRange, setPeriodRange] = useUrlPeriodRange(periodRangeDefaults);
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -131,7 +134,7 @@ export function AuditPage() {
   // lider tablosu, insight tile) hariç tutulur.
   const highlightExcludedKeys = useRepresentativeKeysWithBadge("diger");
   const repsMap = useRepresentativesMap();
-  const [badgeFilter, setBadgeFilter] = useState<string>("");
+  const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
