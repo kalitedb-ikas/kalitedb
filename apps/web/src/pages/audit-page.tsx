@@ -32,6 +32,8 @@ import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
 import { BadgeFilter } from "../components/badge-filter";
 import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
+import { CsvDownloadButton } from "../components/csv-download-button";
+import { exportToCsv } from "../lib/csv-export";
 import { CompactStatCard } from "../components/compact-stat-card";
 import { chart } from "../theme/colors";
 
@@ -595,6 +597,22 @@ export function AuditPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <AgentSearch onChange={setAgentSearch} value={agentSearch} />
                 <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+                <CsvDownloadButton
+                  disabled={filteredAgents.length === 0}
+                  onClick={() => {
+                    const periodTag = selectedPeriod?.month ?? selectedYear ?? "tum";
+                    exportToCsv(
+                      `audit-detay-${periodTag}`,
+                      ["#", "Temsilci", "Audit skoru", "Önceki audit doğruluk (%)"],
+                      filteredAgents.map((a, idx) => [
+                        idx + 1,
+                        a.agentName,
+                        a.auditScoreDisplay,
+                        a.previousAuditAccuracyDisplay
+                      ])
+                    );
+                  }}
+                />
               </div>
             }
           >
@@ -618,6 +636,17 @@ export function AuditPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <AgentSearch onChange={setAgentSearch} value={agentSearch} />
                 <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+                <CsvDownloadButton
+                  disabled={filteredMonthlyData.length === 0}
+                  onClick={() => {
+                    const monthLabels = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+                    exportToCsv(
+                      `audit-aylik-${selectedYear ?? "tum"}`,
+                      ["Temsilci", ...monthLabels],
+                      filteredMonthlyData.map((r) => [r.agentName, ...r.months])
+                    );
+                  }}
+                />
               </div>
             }
             repsMap={repsMap}

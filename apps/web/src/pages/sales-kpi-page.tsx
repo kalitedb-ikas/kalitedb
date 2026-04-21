@@ -12,6 +12,8 @@ import { formatNumber, formatPeriodMonth } from "../lib/format";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
+import { CsvDownloadButton } from "../components/csv-download-button";
+import { exportToCsv } from "../lib/csv-export";
 import {
   QUARTER_SHORT,
   aggregateMultiPeriodKpi,
@@ -242,6 +244,47 @@ export function SalesKpiPage() {
               onChange={setPeriodRange}
               periods={salesPeriods}
               value={{ ...periodRange, monthPeriodId: monthlyPeriodId }}
+            />
+            <CsvDownloadButton
+              disabled={sortedAgents.length === 0}
+              onClick={() => {
+                const periodTag = selectedPeriod?.month ?? selectedYear;
+                exportToCsv(
+                  `sales-kpi-${periodTag}`,
+                  [
+                    "#",
+                    "Temsilci",
+                    "Perf. Değ.",
+                    "Satış (TRY)",
+                    "Lisans Adeti",
+                    "Ort. Lisans Fiyatı (TRY)",
+                    "Top. Konuşma Süresi (sn)",
+                    "Arama Denemesi",
+                    "Dönüşüm Oranı (%)",
+                    "Scale 2+1",
+                    "Scale %",
+                    "Scale+ 2+1",
+                    "Scale+ %",
+                    "Toplam %"
+                  ],
+                  sortedAgents.map((a, idx) => [
+                    idx + 1,
+                    a.agentName,
+                    a.perfScore,
+                    a.salesAmount,
+                    a.licenseCount,
+                    a.avgLicensePrice,
+                    a.talkDurationSeconds,
+                    a.callAttempts,
+                    a.conversionRate,
+                    a.scaleCount ?? 0,
+                    a.scaleConversion ?? 0,
+                    a.scalePlusCount ?? 0,
+                    a.scalePlusConversion ?? 0,
+                    a.totalConversion ?? 0
+                  ])
+                );
+              }}
             />
             <Link
               to="/sales/kpi/target-calibration"

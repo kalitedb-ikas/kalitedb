@@ -34,6 +34,8 @@ import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
 import { BadgeFilter } from "../components/badge-filter";
 import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
+import { CsvDownloadButton } from "../components/csv-download-button";
+import { exportToCsv } from "../lib/csv-export";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { brand } from "../theme/colors";
 
@@ -548,6 +550,43 @@ export function CsatPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <AgentSearch onChange={setAgentSearch} value={agentSearch} />
                 <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+                <CsvDownloadButton
+                  disabled={filteredRows.length === 0}
+                  onClick={() => {
+                    const periodTag = selectedPeriod?.month ?? selectedYear ?? "tum";
+                    exportToCsv(
+                      `csat-${periodTag}`,
+                      [
+                        "Temsilci",
+                        "Audit skoru",
+                        "Önceki audit doğruluk (%)",
+                        "Toplam çağrı",
+                        "Chat / e-posta",
+                        "Ticket",
+                        "Toplam görüşme",
+                        "Ortalama konuşma süresi (sn)",
+                        "Lokal kapatma (%)",
+                        "Kaçan çağrılar",
+                        "CSAT ortalaması",
+                        "Değerlendirme"
+                      ],
+                      filteredRows.map((r) => [
+                        r.agentName,
+                        r.auditScoreDisplay,
+                        r.previousAuditAccuracyDisplay,
+                        r.totalCallCount,
+                        r.totalChatMailCount,
+                        r.totalTicketClosedCount,
+                        r.totalConversationCount,
+                        r.avgTalkDurationSeconds,
+                        r.localCloseRate,
+                        r.missedCalls,
+                        r.callEvaluationAverage,
+                        r.evaluationCount
+                      ])
+                    );
+                  }}
+                />
               </div>
             }
           >
