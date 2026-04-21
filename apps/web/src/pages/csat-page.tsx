@@ -30,6 +30,7 @@ import { formatAuditScore, formatNumber, formatPercent, formatSeconds } from "..
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
+import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
 import { BadgeFilter } from "../components/badge-filter";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -58,12 +59,14 @@ function formatNameList(names: string[]) {
 export function CsatPage() {
   const auth = useAuth();
   const now = new Date();
-  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+  const periodRangeDefaults = useMemo<PeriodRangeValue>(() => {
     const prevMonth = now.getMonth();
     const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
     const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
     return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [periodRange, setPeriodRange] = useUrlPeriodRange(periodRangeDefaults);
   const datasetTypes = ["agent-metrics", "audit-metrics"] as const;
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -168,7 +171,7 @@ export function CsatPage() {
   // tek ayın yüksek skoruyla çeyrek/yıl liderine geçmesini engeller.
   const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
   const repsMap = useRepresentativesMap();
-  const [badgeFilter, setBadgeFilter] = useState<string>("");
+  const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
   const aggregatedSnapshotCsatAdjusted = useMemo(() => {
     if (!aggregatedSnapshot) return undefined;
     if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
