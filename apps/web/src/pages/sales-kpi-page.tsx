@@ -11,6 +11,7 @@ import { api } from "../lib/api";
 import { formatNumber, formatPeriodMonth } from "../lib/format";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
+import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
 import {
   QUARTER_SHORT,
   aggregateMultiPeriodKpi,
@@ -90,6 +91,7 @@ export function SalesKpiPage() {
   const [periodRange, setPeriodRange] = useUrlPeriodRange(periodRangeDefaults);
   const [sortKeyParam, setSortKeyParam] = useUrlParam("sort", "salesAmount");
   const [sortDirParam, setSortDirParam] = useUrlParam("dir", "desc");
+  const [agentSearch, setAgentSearch] = useUrlParam("search", "");
   const sortKey = (sortKeyParam || null) as SortKey | null;
   const sortDir = (sortDirParam === "asc" ? "asc" : "desc") as SortDir;
 
@@ -169,15 +171,18 @@ export function SalesKpiPage() {
   const summary = useMemo(() => computeSummary(agents), [agents]);
 
   const sortedAgents = useMemo(() => {
-    if (!sortKey) return agents;
-    return [...agents].sort((a, b) => {
+    const filtered = agentSearch
+      ? agents.filter((a) => matchesAgentSearch(a.agentName, agentSearch))
+      : agents;
+    if (!sortKey) return filtered;
+    return [...filtered].sort((a, b) => {
       const va = getSortValue(a, sortKey);
       const vb = getSortValue(b, sortKey);
       if (va < vb) return sortDir === "asc" ? -1 : 1;
       if (va > vb) return sortDir === "asc" ? 1 : -1;
       return 0;
     });
-  }, [agents, sortKey, sortDir]);
+  }, [agents, sortKey, sortDir, agentSearch]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -232,6 +237,7 @@ export function SalesKpiPage() {
         title="KPI"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <AgentSearch onChange={setAgentSearch} value={agentSearch} />
             <PeriodRangeFilter
               onChange={setPeriodRange}
               periods={salesPeriods}

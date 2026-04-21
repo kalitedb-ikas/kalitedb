@@ -33,6 +33,7 @@ import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
 import { BadgeFilter } from "../components/badge-filter";
+import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { brand } from "../theme/colors";
 
@@ -172,6 +173,7 @@ export function CsatPage() {
   const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
   const repsMap = useRepresentativesMap();
   const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
+  const [agentSearch, setAgentSearch] = useUrlParam("search", "");
   const aggregatedSnapshotCsatAdjusted = useMemo(() => {
     if (!aggregatedSnapshot) return undefined;
     if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
@@ -330,9 +332,15 @@ export function CsatPage() {
   }, [rows]);
 
   const filteredRows = useMemo(() => {
-    if (!badgeFilter) return rows;
-    return rows.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
-  }, [rows, badgeFilter, repsMap]);
+    let out = rows;
+    if (badgeFilter) {
+      out = out.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
+    }
+    if (agentSearch) {
+      out = out.filter((r) => matchesAgentSearch(r.agentName, agentSearch));
+    }
+    return out;
+  }, [rows, badgeFilter, agentSearch, repsMap]);
 
   const columns: ColumnDef<CsatRow, any>[] = [
     columnHelper.accessor("agentName", {
@@ -536,7 +544,12 @@ export function CsatPage() {
 
           <ExecutiveChartCard
             title="CSAT ayrıntı tablosu"
-            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentSearch onChange={setAgentSearch} value={agentSearch} />
+                <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+              </div>
+            }
           >
             <DataTable columns={columns} data={filteredRows} variant="emerald" striped summaryRows={tableSummaryRows} />
           </ExecutiveChartCard>
