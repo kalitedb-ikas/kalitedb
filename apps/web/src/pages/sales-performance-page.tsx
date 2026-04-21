@@ -307,28 +307,41 @@ export function SalesPerformancePage() {
       .filter((a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null)
       .map((a) => {
         const prev = prevMap.get(a.agentKey);
-        return prev !== undefined ? { label: a.agentName, delta: Number((a.perfScore - prev).toFixed(2)) } : null;
+        return prev !== undefined
+          ? { label: a.agentName, score: a.perfScore, delta: Number((a.perfScore - prev).toFixed(2)) }
+          : null;
       })
-      .filter((item): item is { label: string; delta: number } => item !== null);
+      .filter((item): item is { label: string; score: number; delta: number } => item !== null);
 
     if (changes.length === 0) return null;
 
     const maxDelta = Math.max(...changes.map((c) => c.delta));
     if (maxDelta > 0) {
       const leaders = changes.filter((c) => c.delta === maxDelta).sort((a, b) => a.label.localeCompare(b.label, "tr"));
-      return { title: "Yükselen performans", names: leaders.map((l) => l.label).join(", "), delta: maxDelta };
+      return {
+        title: "Yükselen performans",
+        names: leaders.map((l) => l.label).join(", "),
+        delta: maxDelta,
+        score: leaders.length === 1 ? leaders[0]!.score : null
+      };
     }
 
     const minDelta = Math.min(...changes.map((c) => c.delta));
     if (minDelta < 0) {
       const leaders = changes.filter((c) => c.delta === minDelta).sort((a, b) => a.label.localeCompare(b.label, "tr"));
-      return { title: "Düşen performans", names: leaders.map((l) => l.label).join(", "), delta: minDelta };
+      return {
+        title: "Düşen performans",
+        names: leaders.map((l) => l.label).join(", "),
+        delta: minDelta,
+        score: leaders.length === 1 ? leaders[0]!.score : null
+      };
     }
 
     return {
       title: `${performanceShiftTitlePrefix} değişim`,
       names: changes.map((c) => c.label).sort((a, b) => a.localeCompare(b, "tr")).join(", "),
-      delta: 0
+      delta: 0,
+      score: null
     };
   }, [aggregatedAgents, previousAggregatedAgents, performanceShiftTitlePrefix]);
 
@@ -521,7 +534,13 @@ export function SalesPerformancePage() {
                   <span className="min-w-0 break-words">{performanceShift?.names ?? "Henüz yok"}</span>
                 </span>
               }
-              hint={performanceShift ? `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan` : undefined}
+              hint={
+                performanceShift
+                  ? performanceShift.score !== null
+                    ? `${formatPerfScore(performanceShift.score)} puan · ${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)}`
+                    : `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan`
+                  : undefined
+              }
             />
             <CompactStatCard
               label="En düşük performans"
