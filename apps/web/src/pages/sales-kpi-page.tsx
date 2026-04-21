@@ -10,6 +10,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatNumber, formatPeriodMonth } from "../lib/format";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
+import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import {
   QUARTER_SHORT,
   aggregateMultiPeriodKpi,
@@ -79,14 +80,18 @@ function getSortValue(agent: SalesKpiAgent, key: SortKey): number | string {
 export function SalesKpiPage() {
   const auth = useAuth();
   const now = new Date();
-  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+  const periodRangeDefaults = useMemo<PeriodRangeValue>(() => {
     const prevMonth = now.getMonth();
     const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
     const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
     return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
-  });
-  const [sortKey, setSortKey] = useState<SortKey | null>("salesAmount");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [periodRange, setPeriodRange] = useUrlPeriodRange(periodRangeDefaults);
+  const [sortKeyParam, setSortKeyParam] = useUrlParam("sort", "salesAmount");
+  const [sortDirParam, setSortDirParam] = useUrlParam("dir", "desc");
+  const sortKey = (sortKeyParam || null) as SortKey | null;
+  const sortDir = (sortDirParam === "asc" ? "asc" : "desc") as SortDir;
 
   const selectedYear = periodRange.year;
   const viewMode = periodRange.viewMode;
@@ -176,10 +181,10 @@ export function SalesKpiPage() {
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      setSortDirParam(sortDir === "asc" ? "desc" : "asc");
     } else {
-      setSortKey(key);
-      setSortDir("desc");
+      setSortKeyParam(key);
+      setSortDirParam("desc");
     }
   };
 
@@ -337,6 +342,7 @@ export function SalesKpiPage() {
                 {/* Başlık satırı */}
                 <thead>
                   <tr className="bg-emerald-800 dark:bg-emerald-900">
+                    <th className={`${thBase} text-center cursor-default hover:bg-emerald-800 dark:hover:bg-emerald-900`}>#</th>
                     {sortTh("KPI's", "agentName", "left")}
                     {sortTh("Perf. Değ.", "perfScore")}
                     {sortTh(monthLabel, "salesAmount")}
@@ -356,6 +362,7 @@ export function SalesKpiPage() {
                 <tbody>
                   {/* Hedef satırı */}
                   <tr className="bg-emerald-800 dark:bg-emerald-900">
+                    <td className="px-4 py-2.5 text-sm font-bold text-white/70 whitespace-nowrap" />
                     <td className="px-4 py-2.5 text-sm font-bold text-white/70 whitespace-nowrap" />
                     <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">
                       {formatNumber(targets.perfScore)}
@@ -396,6 +403,7 @@ export function SalesKpiPage() {
                           : "bg-slate-50/50 dark:bg-slate-800/50"
                       ].join(" ")}
                     >
+                      <td className={`${tdCenterCls} font-medium text-slate-500 dark:text-slate-400`}>{idx + 1}</td>
                       <td className={`${tdCls} font-semibold`}>{agent.agentName}</td>
                       <td className={tdCenterCls}>
                         {agent.perfScore !== null ? (
@@ -442,6 +450,7 @@ export function SalesKpiPage() {
 
                   {/* Ortalama satırı */}
                   <tr className="border-t-2 border-emerald-600 bg-emerald-800 dark:border-emerald-700 dark:bg-emerald-900">
+                    <td className="px-4 py-3 text-sm font-bold text-white whitespace-nowrap" />
                     <td className="px-4 py-3 text-sm font-bold text-white whitespace-nowrap">ORTALAMA</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">
                       {summary.avg.perfScore !== null ? formatNumber(summary.avg.perfScore, 2) : "-"}
@@ -461,6 +470,7 @@ export function SalesKpiPage() {
 
                   {/* Toplam satırı */}
                   <tr className="border-t border-emerald-600 bg-emerald-800 dark:border-emerald-700 dark:bg-emerald-900">
+                    <td className="px-4 py-3 text-sm font-bold text-white whitespace-nowrap" />
                     <td className="px-4 py-3 text-sm font-bold text-white whitespace-nowrap">TOPLAM</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatCurrency(summary.total.salesAmount)}</td>
