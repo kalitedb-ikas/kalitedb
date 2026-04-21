@@ -339,10 +339,11 @@ export function AuditPage() {
 
         return {
           label: agent.agentName,
+          score: agent.auditScore,
           delta: Number((agent.auditScore - previousScore).toFixed(2))
         };
       })
-      .filter((item): item is { label: string; delta: number } => item !== null);
+      .filter((item): item is { label: string; score: number; delta: number } => item !== null);
 
     if (changes.length === 0) {
       return null;
@@ -357,7 +358,8 @@ export function AuditPage() {
       return {
         title: "Yükselen performans",
         names: leaders.map((item) => item.label).join(", "),
-        delta: highestIncrease
+        delta: highestIncrease,
+        score: leaders.length === 1 ? leaders[0]!.score : null
       };
     }
 
@@ -370,7 +372,8 @@ export function AuditPage() {
       return {
         title: "Düşen performans",
         names: leaders.map((item) => item.label).join(", "),
-        delta: biggestDecrease
+        delta: biggestDecrease,
+        score: leaders.length === 1 ? leaders[0]!.score : null
       };
     }
 
@@ -380,7 +383,8 @@ export function AuditPage() {
         .map((item) => item.label)
         .sort((left, right) => left.localeCompare(right, "tr"))
         .join(", "),
-      delta: 0
+      delta: 0,
+      score: null
     };
   }, [highlightAudits, previousAuditMetrics]);
 
@@ -502,7 +506,13 @@ export function AuditPage() {
                   <span className="min-w-0 break-words">{performanceShift?.names ?? "Henüz yok"}</span>
                 </span>
               }
-              hint={performanceShift ? `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan` : undefined}
+              hint={
+                performanceShift
+                  ? performanceShift.score !== null
+                    ? `${formatAuditScore(performanceShift.score)} puan · ${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)}`
+                    : `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan`
+                  : undefined
+              }
             />
             <CompactStatCard
               label="En düşük audit"
