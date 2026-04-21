@@ -148,7 +148,7 @@ export function DataTable<TData>(props: {
                       <td
                         key={column.id}
                         className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${
-                          isFirst ? labelTextClass : `${cellTextClass} text-center`
+                          isFirst ? labelTextClass : cellTextClass
                         }`}
                       >
                         {isFirst ? (value ?? summaryRow._label ?? "") : (value ?? "")}
