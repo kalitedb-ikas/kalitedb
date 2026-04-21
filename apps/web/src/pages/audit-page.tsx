@@ -31,6 +31,7 @@ import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
 import { BadgeFilter } from "../components/badge-filter";
+import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
 import { CompactStatCard } from "../components/compact-stat-card";
 import { chart } from "../theme/colors";
 
@@ -135,6 +136,7 @@ export function AuditPage() {
   const highlightExcludedKeys = useRepresentativeKeysWithBadge("diger");
   const repsMap = useRepresentativesMap();
   const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
+  const [agentSearch, setAgentSearch] = useUrlParam("search", "");
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
@@ -215,9 +217,15 @@ export function AuditPage() {
     }));
   }, [currentAudits, snapshot]);
   const filteredAgents = useMemo(() => {
-    if (!badgeFilter) return agents;
-    return agents.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
-  }, [agents, badgeFilter, repsMap]);
+    let out = agents;
+    if (badgeFilter) {
+      out = out.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
+    }
+    if (agentSearch) {
+      out = out.filter((a) => matchesAgentSearch(a.agentName, agentSearch));
+    }
+    return out;
+  }, [agents, badgeFilter, agentSearch, repsMap]);
   const evaluatedAgentCount = useMemo(
     () =>
       (snapshot?.datasets.auditMetrics ?? []).filter(
@@ -421,9 +429,15 @@ export function AuditPage() {
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
   }, [auditHistoryMap, trendYearPeriods, selectedYear]);
   const filteredMonthlyData = useMemo(() => {
-    if (!badgeFilter) return auditMonthlyData;
-    return auditMonthlyData.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
-  }, [auditMonthlyData, badgeFilter, repsMap]);
+    let out = auditMonthlyData;
+    if (badgeFilter) {
+      out = out.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
+    }
+    if (agentSearch) {
+      out = out.filter((r) => matchesAgentSearch(r.agentName, agentSearch));
+    }
+    return out;
+  }, [auditMonthlyData, badgeFilter, agentSearch, repsMap]);
 
   /* ── Aylık role-play pivot tablosu (toplam) ── */
   const columns: ColumnDef<AuditAgentRow, any>[] = [
@@ -577,7 +591,12 @@ export function AuditPage() {
           <SurfaceCard
             title="Detay tablo görünümü"
             variant="default"
-            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentSearch onChange={setAgentSearch} value={agentSearch} />
+                <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+              </div>
+            }
           >
             <DataTable
               columns={columns}
@@ -595,7 +614,12 @@ export function AuditPage() {
             summaryMode="average"
             title="Aylık Audit Skorları"
             valueFormatter={(v) => formatAuditScore(v)}
-            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentSearch onChange={setAgentSearch} value={agentSearch} />
+                <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+              </div>
+            }
             repsMap={repsMap}
           />
 
