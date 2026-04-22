@@ -35,6 +35,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { RecordEditor } from "../components/record-editor";
@@ -189,6 +190,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const [editingRoleEmail, setEditingRoleEmail] = useState<string | null>(null);
   const [repDepartmentFilter, setRepDepartmentFilter] = useState<"all" | "cs" | "sales" | "quality" | "partner">("all");
   const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
+  const [sidebarQuery, setSidebarQuery] = useState("");
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -484,6 +486,28 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     []
   );
   const selectedSectionMeta = visibleAdminSections.find((section) => section.id === selectedSection) ?? visibleAdminSections[0]!;
+  const navGroups = useMemo<AdminNavGroup[]>(() => {
+    const byId = new Map(visibleAdminSections.map((section) => [section.id, section]));
+    const build = (ids: AdminSection[]) =>
+      ids
+        .map((id) => byId.get(id))
+        .filter((section): section is (typeof adminSections)[number] => Boolean(section))
+        .map((section) => ({
+          id: section.id,
+          label: section.label,
+          description: section.description,
+          icon: <section.icon size={14} strokeWidth={2} />,
+          active: selectedSection === section.id,
+          onClick: () => setSelectedSection(section.id)
+        }));
+
+    return [
+      { id: "period", label: "Dönem Yönetimi", items: build(["periods"]) },
+      { id: "datasets", label: "Veri Setleri", items: build(["agent-metrics", "audit-metrics", "question-performance"]) },
+      { id: "config", label: "Konfigürasyon", items: build(["thresholds", "roles"]) },
+      { id: "team", label: "Takım", items: build(["representatives"]) }
+    ].filter((group) => group.items.length > 0);
+  }, [visibleAdminSections, selectedSection]);
   const availableYears = useMemo(
     () =>
       Array.from(new Set([String(new Date().getFullYear()), ...(periodsQuery.data ?? []).map((period) => period.month.slice(0, 4))])).sort(
@@ -811,121 +835,115 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     return [];
   }, [activeDatasetType]);
 
+  const sidebarHeader = (
+    <div className="space-y-3">
+      <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+        {auth.user?.email ?? "Yerel yönetim erişimi"}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <FancySelect
+          size="md"
+          className="w-full"
+          panelWidthClass="w-36"
+          options={availableYears.map((year) => ({ value: year, label: year }))}
+          value={selectedYear}
+          onChange={setSelectedYear}
+          placeholder="Yıl"
+        />
+        <FancySelect
+          size="md"
+          className="w-full"
+          panelWidthClass="w-40"
+          options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
+          value={selectedMonthValue}
+          onChange={setSelectedMonthValue}
+          placeholder="Ay"
+        />
+      </div>
+    </div>
+  );
+
+  const sidebarFooter = (
+    <button
+      className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400 transition hover:text-slate-900 dark:hover:text-slate-200"
+      onClick={() => void auth.logout()}
+      type="button"
+    >
+      <LogOut size={15} />
+      Çıkış Yap
+    </button>
+  );
+
+  const headerActions = (
+    <>
+      {selectedSection === "periods" ? (
+        <button
+          className="inline-flex min-h-10 items-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-100 px-4 text-sm font-semibold text-white dark:text-slate-900 transition hover:bg-slate-800 dark:hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!selectedPeriodId}
+          onClick={() => publishMutation.mutate(selectedPeriod?.status === "published" ? "reopen" : "publish")}
+          type="button"
+        >
+          <Save size={14} />
+          {selectedPeriod?.status === "published" ? "Taslağa geri al" : "Şimdi kaydet"}
+        </button>
+      ) : null}
+      {selectedSection === "thresholds" ? (
+        <button
+          className="inline-flex min-h-10 items-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-100 px-4 text-sm font-semibold text-white dark:text-slate-900 transition hover:bg-slate-800 dark:hover:bg-slate-200"
+          onClick={() => thresholdMutation.mutate()}
+          type="button"
+        >
+          <Save size={14} />
+          Eşikleri kaydet
+        </button>
+      ) : null}
+      {activeDatasetType ? (
+        <button
+          className="inline-flex min-h-10 items-center gap-2 rounded-[10px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-600"
+          onClick={() => downloadCsvTemplate(activeDatasetType)}
+          type="button"
+        >
+          <FileDown size={14} />
+          Şablon indir
+        </button>
+      ) : null}
+      <button
+        className="inline-flex min-h-10 items-center gap-2 rounded-[10px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-600"
+        onClick={() => void refreshCurrentView()}
+        type="button"
+      >
+        <RefreshCw size={14} />
+        Yenile
+      </button>
+    </>
+  );
+
+  const headerPills = (
+    <>
+      <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
+      {activeDatasetType ? <HeaderPill tone="success">CSV Sync</HeaderPill> : null}
+      <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
+    </>
+  );
+
   return (
-    <div className="rounded-[10px] border border-sky-100/90 dark:border-slate-700/50 bg-[#edf6fb] dark:bg-slate-900/80 p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)]">
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="overflow-hidden rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white dark:bg-slate-800 shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <p className="text-sm text-slate-500 dark:text-slate-400">{auth.user?.email ?? "Yerel yönetim erişimi"}</p>
-          </div>
-
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <SidebarSectionTitle>Dönem</SidebarSectionTitle>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-              <InputField label="Yıl">
-                <FancySelect
-                  size="lg"
-                  className="w-full"
-                  panelWidthClass="w-40"
-                  options={availableYears.map((year) => ({ value: year, label: year }))}
-                  value={selectedYear}
-                  onChange={setSelectedYear}
-                  placeholder="Yıl"
-                />
-              </InputField>
-              <InputField label="Ay">
-                <FancySelect
-                  size="lg"
-                  className="w-full"
-                  panelWidthClass="w-44"
-                  options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
-                  value={selectedMonthValue}
-                  onChange={setSelectedMonthValue}
-                  placeholder="Ay"
-                />
-              </InputField>
-            </div>
-          </div>
-
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <SidebarSectionTitle>Bölümler</SidebarSectionTitle>
-            <div className="mt-5 space-y-2">
-              {visibleAdminSections.map((section) => (
-                <SidebarButton
-                  active={selectedSection === section.id}
-                  key={section.id}
-                  label={section.label}
-                  onClick={() => setSelectedSection(section.id)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <SidebarSectionTitle>Aksiyonlar</SidebarSectionTitle>
-            <div className="mt-5 space-y-2">
-              {selectedSection === "periods" ? (
-                <SidebarActionButton
-                  disabled={!selectedPeriodId}
-                  icon={<Save size={15} />}
-                  onClick={() =>
-                    publishMutation.mutate(selectedPeriod?.status === "published" ? "reopen" : "publish")
-                  }
-                  primary
-                >
-                  {selectedPeriod?.status === "published" ? "Taslağa geri al" : "Şimdi kaydet"}
-                </SidebarActionButton>
-              ) : null}
-              {selectedSection === "thresholds" ? (
-                <SidebarActionButton icon={<Save size={15} />} onClick={() => thresholdMutation.mutate()} primary>
-                  Eşikleri kaydet
-                </SidebarActionButton>
-              ) : null}
-              <SidebarActionButton icon={<RefreshCw size={15} />} onClick={() => void refreshCurrentView()}>
-                Veriyi yenile
-              </SidebarActionButton>
-            </div>
-          </div>
-
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <SidebarSectionTitle>Veri Alanları</SidebarSectionTitle>
-            <div className="mt-5 space-y-3">
-              {visibleDatasetSections.map((datasetType) => (
-                <ImportShortcutRow
-                  active={activeDatasetType === datasetType}
-                  key={datasetType}
-                  label={datasetLabels[datasetType]}
-                  onDownload={() => downloadCsvTemplate(datasetType)}
-                  onOpen={() => setSelectedSection(datasetType)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="px-6 py-6">
-            <button
-              className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 transition hover:text-slate-900 dark:hover:text-slate-200"
-              onClick={() => void auth.logout()}
-              type="button"
-            >
-              <LogOut size={16} />
-              Çıkış Yap
-            </button>
-          </div>
-        </aside>
-
-        <main className="min-w-0 space-y-4">
-          <section className="rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white dark:bg-slate-800 px-8 py-6 shadow-[0_12px_34px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-wrap items-center gap-2">
-              <HeaderPill>{selectedSectionMeta.label}</HeaderPill>
-              <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
-              <HeaderPill tone="success">{activeDatasetType ? "CSV Sync" : "Hazır"}</HeaderPill>
-              <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
-            </div>
-            <h1 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100 sm:text-4xl">
-              Veri Yönetim Paneli
-            </h1>
-          </section>
+    <AdminShell
+      sidebar={
+        <AdminShellSidebar
+          header={sidebarHeader}
+          search={{ value: sidebarQuery, onChange: setSidebarQuery, placeholder: "Bölüm ara..." }}
+          groups={navGroups}
+          footer={sidebarFooter}
+        />
+      }
+    >
+      <AdminShellHeader
+        breadcrumb={<span>Yönetim · CS</span>}
+        title={selectedSectionMeta.label}
+        description={selectedSectionMeta.description}
+        pills={headerPills}
+        actions={headerActions}
+      />
 
           <div className="space-y-6">
             {selectedSection === "periods" ? (
@@ -1412,9 +1430,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
               </div>
             ) : null}
           </div>
-        </main>
-      </div>
-    </div>
+    </AdminShell>
   );
 }
 

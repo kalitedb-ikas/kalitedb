@@ -13,6 +13,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { firebaseDb } from "../lib/firebase";
 import { parseTalkDurationLabelToSeconds } from "../lib/format";
+import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
@@ -83,6 +84,7 @@ export function SalesAdminPage() {
   const now = new Date();
 
   const [activeSection, setActiveSection] = useState<AdminSection>("audit");
+  const [sidebarQuery, setSidebarQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
   const [selectedMonthValue, setSelectedMonthValue] = useState(String(now.getMonth() + 1).padStart(2, "0"));
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
@@ -1192,133 +1194,148 @@ export function SalesAdminPage() {
     }
   };
 
+  const sectionMeta: Record<AdminSection, { label: string; description: string; icon: ReactNode }> = {
+    audit: { label: "Audit Girişi", description: "Temsilci bazlı audit skorlarını CSV ile veya manuel ekleyin.", icon: <ClipboardCheck size={14} /> },
+    roleplay: { label: "Role-Play Girişi", description: "Role-play ve RevOps çalışma sayıları ile notları yönetin.", icon: <Play size={14} /> },
+    evaluation: { label: "Değerlendirme Soruları", description: "Dönem değerlendirme sorularını ve cevap skorlarını tanımlayın.", icon: <FileQuestion size={14} /> },
+    kpi: { label: "KPI Verileri", description: "Hedefler, temsilci performans verileri ve lisans özetini yönetin.", icon: <Target size={14} /> },
+    meetings: { label: "Satış Toplantıları", description: "Toplantı listesini yönetin; CSV import ve satır düzenleme.", icon: <Handshake size={14} /> },
+    representatives: { label: "Temsilciler", description: "Satış ve partner temsilcilerini yönetin.", icon: <Users size={14} /> },
+    ramp: { label: "RAMP Girişi", description: "Yeni katılan temsilciler için RAMP dönemini yönetin.", icon: <TrendingUp size={14} /> }
+  };
+
+  const activeMeta = sectionMeta[activeSection];
+
+  const navGroups: AdminNavGroup[] = [
+    {
+      id: "evaluation",
+      label: "Değerlendirme",
+      items: (["audit", "roleplay", "evaluation"] as const).map((id) => ({
+        id,
+        label: sectionMeta[id].label,
+        description: sectionMeta[id].description,
+        icon: sectionMeta[id].icon,
+        active: activeSection === id,
+        onClick: () => setActiveSection(id)
+      }))
+    },
+    {
+      id: "performance",
+      label: "Performans & Operasyon",
+      items: (["kpi", "meetings"] as const).map((id) => ({
+        id,
+        label: sectionMeta[id].label,
+        description: sectionMeta[id].description,
+        icon: sectionMeta[id].icon,
+        active: activeSection === id,
+        onClick: () => setActiveSection(id)
+      }))
+    },
+    {
+      id: "team",
+      label: "Takım",
+      items: (["representatives", "ramp"] as const).map((id) => ({
+        id,
+        label: sectionMeta[id].label,
+        description: sectionMeta[id].description,
+        icon: sectionMeta[id].icon,
+        active: activeSection === id,
+        onClick: () => setActiveSection(id)
+      }))
+    }
+  ];
+
+  const showSaveAction = activeSection === "audit" || activeSection === "roleplay" || activeSection === "evaluation";
+
+  const sidebarHeader = (
+    <div className="space-y-3">
+      <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+        {auth.user?.email ?? "Yerel yönetim erişimi"}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <FancySelect
+          size="md"
+          className="w-full"
+          panelWidthClass="w-36"
+          options={availableYears.map((year) => ({ value: year, label: year }))}
+          value={selectedYear}
+          onChange={setSelectedYear}
+          placeholder="Yıl"
+        />
+        <FancySelect
+          size="md"
+          className="w-full"
+          panelWidthClass="w-40"
+          options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
+          value={selectedMonthValue}
+          onChange={setSelectedMonthValue}
+          placeholder="Ay"
+        />
+      </div>
+    </div>
+  );
+
+  const sidebarFooter = (
+    <button
+      className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400 transition hover:text-slate-900 dark:hover:text-slate-200"
+      onClick={() => void auth.logout()}
+      type="button"
+    >
+      <LogOut size={15} />
+      Çıkış Yap
+    </button>
+  );
+
+  const headerActions = (
+    <>
+      {showSaveAction ? (
+        <button
+          className="inline-flex min-h-10 items-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-100 px-4 text-sm font-semibold text-white dark:text-slate-900 transition hover:bg-slate-800 dark:hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isSaving || validRowCount === 0}
+          onClick={handleSave}
+          type="button"
+        >
+          <Save size={14} />
+          {isSaving ? "Kaydediliyor..." : "Kaydet"}
+        </button>
+      ) : null}
+      <button
+        className="inline-flex min-h-10 items-center gap-2 rounded-[10px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-600"
+        onClick={() => void refreshCurrentView()}
+        type="button"
+      >
+        <RefreshCw size={14} />
+        Yenile
+      </button>
+    </>
+  );
+
+  const headerPills = (
+    <>
+      <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
+      <HeaderPill tone="success">Manuel Giriş</HeaderPill>
+      <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
+    </>
+  );
+
   return (
-    <div className="rounded-[10px] border border-sky-100/90 bg-[#edf6fb] p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)] dark:border-slate-700 dark:bg-slate-900/80">
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        {/* Sidebar */}
-        <aside className="overflow-hidden rounded-[10px] border border-slate-200/90 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-800">
-          <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-700">
-            <p className="text-sm text-slate-500">{auth.user?.email ?? "Yerel yönetim erişimi"}</p>
-          </div>
-
-          <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-700">
-            <SidebarSectionTitle>Dönem</SidebarSectionTitle>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-              <InputField label="Yıl">
-                <FancySelect
-                  size="lg"
-                  className="w-full"
-                  panelWidthClass="w-40"
-                  options={availableYears.map((year) => ({ value: year, label: year }))}
-                  value={selectedYear}
-                  onChange={setSelectedYear}
-                  placeholder="Yıl"
-                />
-              </InputField>
-              <InputField label="Ay">
-                <FancySelect
-                  size="lg"
-                  className="w-full"
-                  panelWidthClass="w-44"
-                  options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
-                  value={selectedMonthValue}
-                  onChange={setSelectedMonthValue}
-                  placeholder="Ay"
-                />
-              </InputField>
-            </div>
-          </div>
-
-          <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-700">
-            <SidebarSectionTitle>Bölümler</SidebarSectionTitle>
-            <div className="mt-5 space-y-2">
-              <SidebarButton
-                active={activeSection === "audit"}
-                icon={<ClipboardCheck size={15} />}
-                label="Audit girişi"
-                onClick={() => setActiveSection("audit")}
-              />
-              <SidebarButton
-                active={activeSection === "roleplay"}
-                icon={<Play size={15} />}
-                label="Role-Play girişi"
-                onClick={() => setActiveSection("roleplay")}
-              />
-              <SidebarButton
-                active={activeSection === "evaluation"}
-                icon={<FileQuestion size={15} />}
-                label="Değerlendirme soruları"
-                onClick={() => setActiveSection("evaluation")}
-              />
-              <SidebarButton
-                active={activeSection === "kpi"}
-                icon={<Target size={15} />}
-                label="KPI verileri"
-                onClick={() => setActiveSection("kpi")}
-              />
-              <SidebarButton
-                active={activeSection === "meetings"}
-                icon={<Handshake size={15} />}
-                label="Satış toplantıları"
-                onClick={() => setActiveSection("meetings")}
-              />
-              <SidebarButton
-                active={activeSection === "representatives"}
-                icon={<Users size={15} />}
-                label="Temsilciler"
-                onClick={() => setActiveSection("representatives")}
-              />
-              <SidebarButton
-                active={activeSection === "ramp"}
-                icon={<TrendingUp size={15} />}
-                label="RAMP Girişi"
-                onClick={() => setActiveSection("ramp")}
-              />
-            </div>
-          </div>
-
-          <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-700">
-            <SidebarSectionTitle>Aksiyonlar</SidebarSectionTitle>
-            <div className="mt-5 space-y-2">
-              <SidebarActionButton
-                disabled={isSaving || validRowCount === 0}
-                icon={<Save size={15} />}
-                onClick={handleSave}
-                primary
-              >
-                {isSaving ? "Kaydediliyor..." : "Kaydet"}
-              </SidebarActionButton>
-              <SidebarActionButton icon={<RefreshCw size={15} />} onClick={() => void refreshCurrentView()}>
-                Veriyi yenile
-              </SidebarActionButton>
-            </div>
-          </div>
-
-          <div className="px-6 py-6">
-            <button
-              className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
-              onClick={() => void auth.logout()}
-              type="button"
-            >
-              <LogOut size={16} />
-              Çıkış Yap
-            </button>
-          </div>
-        </aside>
-
-        {/* Ana içerik */}
-        <main className="min-w-0 space-y-4">
-          <section className="rounded-[10px] border border-slate-200/90 bg-white px-8 py-6 shadow-[0_12px_34px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-800">
-            <div className="flex flex-wrap items-center gap-2">
-              <HeaderPill>{activeSection === "audit" ? "Audit girişi" : activeSection === "roleplay" ? "Role-Play girişi" : activeSection === "evaluation" ? "Değerlendirme soruları" : activeSection === "kpi" ? "KPI verileri" : activeSection === "representatives" ? "Temsilciler" : activeSection === "ramp" ? "RAMP Girişi" : "Satış toplantıları"}</HeaderPill>
-              <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
-              <HeaderPill tone="success">Manuel Giriş</HeaderPill>
-              <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
-            </div>
-            <h1 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100 sm:text-4xl">
-              Satış Veri Yönetim Paneli
-            </h1>
-          </section>
+    <AdminShell
+      sidebar={
+        <AdminShellSidebar
+          header={sidebarHeader}
+          search={{ value: sidebarQuery, onChange: setSidebarQuery, placeholder: "Bölüm ara..." }}
+          groups={navGroups}
+          footer={sidebarFooter}
+        />
+      }
+    >
+      <AdminShellHeader
+        breadcrumb={<span>Yönetim · Satış</span>}
+        title={activeMeta.label}
+        description={activeMeta.description}
+        pills={headerPills}
+        actions={headerActions}
+      />
 
           {/* ── Audit Bölümü ── */}
           {activeSection === "audit" ? (
@@ -1473,9 +1490,7 @@ export function SalesAdminPage() {
               updateMeetingMutation={updateMeetingMutation}
             />
           )}
-        </main>
-      </div>
-    </div>
+    </AdminShell>
   );
 }
 

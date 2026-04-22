@@ -2,9 +2,10 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { QtManualEntry } from "@kalitedb/shared";
 import { SurfaceCard } from "@kalitedb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Headphones, RefreshCw, Save } from "lucide-react";
+import { Headphones, LogOut, RefreshCw, Save, Users } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
+import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { useAuth } from "../lib/auth";
@@ -78,6 +79,8 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
 
   const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
   const [selectedMonthValue, setSelectedMonthValue] = useState(String(now.getMonth() + 1).padStart(2, "0"));
+  const [activeView, setActiveView] = useState<"entry" | "list">("entry");
+  const [sidebarQuery, setSidebarQuery] = useState("");
   const [selectedQtTargetEmail, setSelectedQtTargetEmail] = useState("");
   const [qtManualInputs, setQtManualInputs] = useState(EMPTY_QT_MANUAL_INPUTS);
   const [isQtManualDirty, setIsQtManualDirty] = useState(false);
@@ -334,78 +337,111 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
     ]);
   };
 
-  return (
-    <div className="rounded-[10px] border border-sky-100/90 dark:border-slate-700/50 bg-[#edf6fb] dark:bg-slate-900/80 p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)]">
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="overflow-hidden rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white dark:bg-slate-800 shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <p className="text-sm text-slate-500 dark:text-slate-400">{auth.user?.email ?? "Yerel yönetim erişimi"}</p>
-          </div>
+  const viewMeta = {
+    entry: { label: "QT Manuel Giriş", description: "Seçili dönem için QT kullanıcısı adına dinleme, değerlendirme ve geri bildirim değerlerini girin." },
+    list: { label: "QT Kullanıcı Girişleri", description: "Seçili döneme ait tüm QT kullanıcılarının manuel giriş verileri." }
+  } as const;
+  const activeViewMeta = viewMeta[activeView];
 
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <SidebarSectionTitle>Dönem</SidebarSectionTitle>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-              <InputField label="Yıl">
+  const navGroups: AdminNavGroup[] = [
+    {
+      id: "qt",
+      label: "QT Metrikleri",
+      items: [
+        {
+          id: "entry",
+          label: viewMeta.entry.label,
+          description: viewMeta.entry.description,
+          icon: <Headphones size={14} />,
+          active: activeView === "entry",
+          onClick: () => setActiveView("entry")
+        },
+        {
+          id: "list",
+          label: viewMeta.list.label,
+          description: viewMeta.list.description,
+          icon: <Users size={14} />,
+          active: activeView === "list",
+          onClick: () => setActiveView("list")
+        }
+      ]
+    }
+  ];
+
+  return (
+    <AdminShell
+      sidebar={
+        <AdminShellSidebar
+          header={
+            <div className="space-y-3">
+              <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+                {auth.user?.email ?? "Yerel yönetim erişimi"}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
                 <FancySelect
-                  size="lg"
+                  size="md"
                   className="w-full"
-                  panelWidthClass="w-40"
+                  panelWidthClass="w-36"
                   options={availableYears.map((year) => ({ value: year, label: year }))}
                   value={selectedYear}
                   onChange={setSelectedYear}
                   placeholder="Yıl"
                 />
-              </InputField>
-              <InputField label="Ay">
                 <FancySelect
-                  size="lg"
+                  size="md"
                   className="w-full"
-                  panelWidthClass="w-44"
+                  panelWidthClass="w-40"
                   options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
                   value={selectedMonthValue}
                   onChange={setSelectedMonthValue}
                   placeholder="Ay"
                 />
-              </InputField>
+              </div>
             </div>
-          </div>
+          }
+          search={{ value: sidebarQuery, onChange: setSidebarQuery, placeholder: "Bölüm ara..." }}
+          groups={navGroups}
+          footer={
+            <button
+              className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400 transition hover:text-slate-900 dark:hover:text-slate-200"
+              onClick={() => void auth.logout()}
+              type="button"
+            >
+              <LogOut size={15} />
+              Çıkış Yap
+            </button>
+          }
+        />
+      }
+    >
+      <AdminShellHeader
+        breadcrumb={<span>Yönetim · Kalite</span>}
+        title={activeViewMeta.label}
+        description={activeViewMeta.description}
+        pills={
+          <>
+            <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
+            <HeaderPill tone="success">
+              <span className="inline-flex items-center gap-1.5">
+                <Headphones size={12} /> Kalite Ekibi
+              </span>
+            </HeaderPill>
+          </>
+        }
+        actions={
+          <button
+            className="inline-flex min-h-10 items-center gap-2 rounded-[10px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-600"
+            onClick={() => void refreshCurrentView()}
+            type="button"
+          >
+            <RefreshCw size={14} />
+            Yenile
+          </button>
+        }
+      />
 
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <SidebarSectionTitle>Aksiyonlar</SidebarSectionTitle>
-            <div className="mt-5 space-y-2">
-              <SidebarActionButton icon={<RefreshCw size={15} />} onClick={() => void refreshCurrentView()}>
-                Veriyi yenile
-              </SidebarActionButton>
-            </div>
-          </div>
-
-          <div className="px-6 py-6">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Bu panel Kalite ekibinin aylık dinleme, değerlendirme ve geri bildirim verilerini manuel olarak girmesi için tasarlanmıştır.
-            </p>
-          </div>
-        </aside>
-
-        <main className="min-w-0 space-y-4">
-          <section className="rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white dark:bg-slate-800 px-8 py-6 shadow-[0_12px_34px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-wrap items-center gap-2">
-              <HeaderPill>QT Manuel Giriş</HeaderPill>
-              <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
-              <HeaderPill tone="success">
-                <span className="inline-flex items-center gap-1.5">
-                  <Headphones size={12} /> Kalite Ekibi
-                </span>
-              </HeaderPill>
-            </div>
-            <h1 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100 sm:text-4xl">
-              Kalite Yönetim Paneli
-            </h1>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              QT kullanıcıları için dinleme saatleri, değerlendirme adetleri ve geri bildirim verilerini bu panelden yönetin.
-            </p>
-          </section>
-
-          <div className="grid gap-6 xl:grid-cols-[0.84fr_1.16fr]">
+      <div className="space-y-6">
+        {activeView === "entry" ? (
             <SurfaceCard
               description="Seçili dönem için QT kullanıcısı adına dinleme, değerlendirme ve geri bildirim değerlerini manuel olarak girin."
               title={canEditQtManualEntry ? "QT manuel girişi" : "QT veri akışı"}
@@ -592,7 +628,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                 </p>
               )}
             </SurfaceCard>
-
+        ) : (
             <SurfaceCard
               description="Seçili döneme ait manuel QT girişleri burada listelenir."
               title="QT kullanıcı girişleri"
@@ -617,10 +653,9 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                 />
               )}
             </SurfaceCard>
-          </div>
-        </main>
+        )}
       </div>
-    </div>
+    </AdminShell>
   );
 }
 

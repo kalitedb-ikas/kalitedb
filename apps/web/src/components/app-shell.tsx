@@ -221,7 +221,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                     Kalite Dashboard
                   </p>
                   {/* Departman sekmeleri — başlığın altında */}
-                  <div className="mt-1 hidden items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100/80 p-0.5 dark:border-slate-600 dark:bg-slate-800/80 xl:inline-flex">
+                  <div className="mt-1 hidden items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100/80 p-0.5 dark:border-slate-600 dark:bg-slate-800/80 2xl:inline-flex">
                     <button
                       className={[
                         "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
@@ -266,7 +266,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
             </div>
 
             {/* Mobil: aktif sayfa başlığı */}
-            <div className="min-w-0 flex-1 xl:hidden">
+            <div className="min-w-0 flex-1 2xl:hidden">
               <p className="truncate font-display text-sm font-semibold tracking-[-0.03em] text-slate-900 dark:text-slate-100">
                 {currentNavigationItem?.label ?? "KaliteDB"}
               </p>
@@ -276,7 +276,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
             </div>
 
             {/* Masaüstü: navigasyon linkleri (ortada) */}
-            <nav className="hidden flex-1 items-center justify-center gap-1 xl:flex">
+            <nav className="hidden flex-1 items-center justify-center gap-1 2xl:flex">
               {activeNavigation.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -307,13 +307,13 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
               <SkyToggle />
               {props.currentUser ? (
                 <>
-                  <div className="hidden items-center xl:flex">
+                  <div className="hidden items-center 2xl:flex">
                     <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.06)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
                       {userInitial}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 xl:hidden">
+                  <div className="flex items-center gap-2 2xl:hidden">
                     <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
                       {userInitial}
                     </div>
@@ -343,7 +343,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                   <button
                     aria-expanded={isDrawerOpen}
                     aria-label="Sayfaları aç"
-                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 xl:hidden"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 2xl:hidden"
                     onClick={() => setIsDrawerOpen(true)}
                     type="button"
                   >
@@ -365,7 +365,7 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
 
       {/* Mobil çekmece menü */}
       {isDrawerOpen ? (
-        <div className="fixed inset-0 z-50 xl:hidden">
+        <div className="fixed inset-0 z-50 2xl:hidden">
           <button
             aria-label="Menüyü kapat"
             className="absolute inset-0 bg-slate-950/28 backdrop-blur-sm"
