@@ -141,21 +141,21 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
       : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[10px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.18)] dark:border-slate-600 dark:bg-slate-800"
+        className="relative flex w-full max-w-3xl max-h-[min(680px,92vh)] flex-col overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_32px_80px_rgba(15,23,42,0.25)] dark:border-slate-600 dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          className="absolute right-4 top-4 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           onClick={onClose}
           type="button"
         >
           <X size={18} />
         </button>
 
-        {/* ── Üst: Foto + İsim ── */}
-        <div className="flex items-center gap-4">
+        {/* ── Üst: Foto + İsim (sticky header) ── */}
+        <div className="flex items-center gap-4 border-b border-slate-200 dark:border-slate-600/60 px-6 py-5">
           {photoSrc ? (
             <div className="size-16 shrink-0 overflow-hidden rounded-[10px] border border-slate-200 dark:border-slate-600">
               <img alt={representative?.displayName ?? ""} className="size-full object-cover" src={photoSrc} />
@@ -180,8 +180,13 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
           </div>
         </div>
 
+        {/* ── Scrollable body: 2 kolon md+ ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-6">
+
         {/* ── İsim + Departman (create veya edit) ── */}
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="text-xs font-medium text-slate-500 dark:text-slate-400">İsim {isCreate && "*"}</label>
             <input
@@ -232,8 +237,10 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
           </div>
         </div>
 
-        {/* ── Kariyer Zaman Çizelgesi ── */}
-        <div className="mt-6">
+            </div>
+
+            {/* ── Kariyer Zaman Çizelgesi (right column) ── */}
+            <div>
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Kariyer Zaman Çizelgesi</h3>
             <button
@@ -356,8 +363,11 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
           </div>
         </div>
 
-        {/* ── Kaydet ── */}
-        <div className="mt-6 flex justify-end border-t border-slate-200 pt-4 dark:border-slate-600">
+          </div>
+        </div>
+
+        {/* ── Kaydet (sticky footer) ── */}
+        <div className="flex justify-end border-t border-slate-200 dark:border-slate-600/60 px-6 py-4 bg-slate-50/60 dark:bg-slate-800/80">
           <button
             className="h-10 rounded-[10px] bg-[#2f6b7a] px-6 text-sm font-semibold text-white shadow-sm hover:bg-[#285d6a] disabled:opacity-50"
             disabled={isSaving || (isCreate && !displayName.trim())}
