@@ -960,7 +960,7 @@ async function saveSalesMeetingsToFirebase(
   // Yeni kayıtları yaz
   const writePromises = meetings.map((meeting) => {
     const id = crypto.randomUUID();
-    const data: SalesMeeting = {
+    const base: SalesMeeting = {
       id,
       periodId,
       date: meeting.date ?? "",
@@ -972,6 +972,11 @@ async function saveSalesMeetingsToFirebase(
       licenseAmount: meeting.licenseAmount ?? null,
       createdAt: now,
       updatedAt: now
+    };
+    const data: SalesMeeting = {
+      ...base,
+      ...(meeting.lossReason ? { lossReason: meeting.lossReason } : {}),
+      ...(meeting.lossNote ? { lossNote: meeting.lossNote } : {})
     };
     return setDoc(doc(firebaseDb!, "reportPeriods", periodId, "salesMeetings", id), data);
   });
