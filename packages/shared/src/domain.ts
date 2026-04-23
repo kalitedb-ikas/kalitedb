@@ -246,6 +246,8 @@ export const salesMeetingSchema = z.object({
   status: salesMeetingStatusSchema.optional(),
   licenseDetail: z.string().optional(),
   licenseAmount: z.number().nullable().optional(),
+  lossReason: z.string().trim().max(60).optional(),
+  lossNote: z.string().trim().max(500).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });

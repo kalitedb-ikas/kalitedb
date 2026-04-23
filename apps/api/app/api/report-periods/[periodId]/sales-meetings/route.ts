@@ -14,7 +14,9 @@ const createSchema = z.object({
   customerName: z.string().min(1),
   status: z.enum(["devam_ediyor", "kapandi", "kaybedildi"]).optional(),
   licenseDetail: z.string().optional(),
-  licenseAmount: z.number().nullable().optional()
+  licenseAmount: z.number().nullable().optional(),
+  lossReason: z.string().trim().max(60).optional(),
+  lossNote: z.string().trim().max(500).optional()
 });
 
 export async function GET(
@@ -68,6 +70,8 @@ export async function POST(
       status: entry.status ?? "devam_ediyor",
       licenseDetail: entry.licenseDetail ?? null,
       licenseAmount: entry.licenseAmount ?? null,
+      ...(entry.lossReason ? { lossReason: entry.lossReason } : {}),
+      ...(entry.lossNote ? { lossNote: entry.lossNote } : {}),
       createdAt: now,
       updatedAt: now
     });
@@ -112,6 +116,8 @@ export async function PUT(
         status: entry.status ?? "devam_ediyor",
         licenseDetail: entry.licenseDetail ?? null,
         licenseAmount: entry.licenseAmount ?? null,
+        ...(entry.lossReason ? { lossReason: entry.lossReason } : {}),
+        ...(entry.lossNote ? { lossNote: entry.lossNote } : {}),
         createdAt: now,
         updatedAt: now
       });
