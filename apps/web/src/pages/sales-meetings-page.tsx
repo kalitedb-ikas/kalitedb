@@ -5,9 +5,13 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+
 import { DataTable } from "../components/data-table";
+import { LossReasonSelect } from "../components/loss-reason-select";
 import { PeriodSelect } from "../components/period-select";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -22,6 +26,8 @@ type MeetingRow = {
   status: string;
   licenseDetail: string;
   licenseAmount: number | null;
+  lossReason: string;
+  lossNote: string;
 };
 
 type MonthlySummary = {
@@ -174,9 +180,141 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", minimumFractionDigits: 2 }).format(value);
 }
 
+function InlineLossReasonEdit(props: {
+  reason: string;
+  note: string;
+  existingReasons: string[];
+  onSave: (data: { reason: string; note: string }) => void;
+  disabled?: boolean | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState(props.reason);
+  const [note, setNote] = useState(props.note);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setReason(props.reason);
+      setNote(props.note);
+    }
+  }, [open, props.reason, props.note]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (popRef.current?.contains(target)) return;
+      if (btnRef.current?.contains(target)) return;
+      // LossReasonSelect kendi portal panelini açar; o panelin içi body altında
+      const el = target as HTMLElement;
+      if (el.closest?.("[data-loss-reason-panel]")) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const POPOVER_WIDTH = 320;
+      const POPOVER_EST_HEIGHT = 260;
+      const MARGIN = 12;
+      const maxLeft = window.innerWidth - POPOVER_WIDTH - MARGIN;
+      const left = Math.max(MARGIN, Math.min(rect.left, maxLeft));
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const top =
+        spaceBelow < POPOVER_EST_HEIGHT + MARGIN && rect.top > POPOVER_EST_HEIGHT + MARGIN
+          ? rect.top - POPOVER_EST_HEIGHT - 4
+          : rect.bottom + 4;
+      setPos({ top, left });
+    }
+    setOpen((o) => !o);
+  };
+
+  const handleSave = () => {
+    props.onSave({ reason: reason.trim(), note: note.trim() });
+    setOpen(false);
+  };
+
+  const hasReason = props.reason.trim().length > 0;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        className={[
+          "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition",
+          hasReason
+            ? "border-rose-200 bg-rose-50 text-rose-700 hover:ring-2 hover:ring-rose-200 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400"
+            : "border-dashed border-slate-300 bg-white text-slate-400 hover:border-slate-400 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-500"
+        ].join(" ")}
+        disabled={props.disabled}
+        onClick={handleOpen}
+        title={props.note || undefined}
+        type="button"
+      >
+        {hasReason ? props.reason : "+ Sebep ekle"}
+      </button>
+
+      {open
+        ? createPortal(
+            <div
+              ref={popRef}
+              className="fixed z-50 w-[320px] rounded-[10px] border border-slate-200 bg-white p-3 shadow-[0_18px_44px_rgba(15,23,42,0.18)] dark:border-slate-600 dark:bg-slate-800"
+              style={{ top: pos.top, left: pos.left }}
+            >
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Kayıp Sebebi</label>
+                <LossReasonSelect
+                  value={reason}
+                  onChange={setReason}
+                  existingReasons={props.existingReasons}
+                />
+                <label className="block pt-1 text-xs font-medium text-slate-600 dark:text-slate-400">Not</label>
+                <textarea
+                  className="min-h-[52px] w-full rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition focus:border-blue-400 focus:outline-none dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-100"
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Opsiyonel detay"
+                  value={note}
+                />
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    className="h-8 rounded-[8px] border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    onClick={() => setOpen(false)}
+                    type="button"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    className="inline-flex h-8 items-center gap-1 rounded-[8px] bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                    onClick={handleSave}
+                    type="button"
+                  >
+                    <Check size={12} />
+                    Kaydet
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
 const columnHelper = createColumnHelper<MeetingRow>();
 
-function buildColumns(onStatusChange?: (rowId: string, status: string) => void, statusUpdating?: boolean) {
+function buildColumns(
+  onStatusChange?: (rowId: string, status: string) => void,
+  statusUpdating?: boolean,
+  onLossSave?: (rowId: string, data: { reason: string; note: string }) => void,
+  lossExistingReasons?: string[],
+  lossUpdating?: boolean
+) {
   return [
     columnHelper.accessor("qualityMember", {
       header: "QT Üyesi",
@@ -221,6 +359,36 @@ function buildColumns(onStatusChange?: (rowId: string, status: string) => void, 
         return val != null && val > 0 ? formatCurrency(val) : "—";
       },
       size: 140
+    }),
+    columnHelper.accessor("lossReason", {
+      header: "Kayıp Sebebi",
+      cell: (info) => {
+        const status = info.row.original.status;
+        if (status !== "kaybedildi") return <span className="text-slate-300">—</span>;
+        if (onLossSave) {
+          return (
+            <InlineLossReasonEdit
+              reason={info.getValue()}
+              note={info.row.original.lossNote}
+              existingReasons={lossExistingReasons ?? []}
+              disabled={lossUpdating}
+              onSave={(data) => onLossSave(info.row.original.id, data)}
+            />
+          );
+        }
+        const reason = info.getValue();
+        if (!reason) return <span className="text-xs text-slate-400">Belirtilmemiş</span>;
+        const note = info.row.original.lossNote;
+        return (
+          <span
+            className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400"
+            title={note || undefined}
+          >
+            {reason}
+          </span>
+        );
+      },
+      size: 180
     })
   ] as unknown as import("@tanstack/react-table").ColumnDef<MeetingRow, unknown>[];
 }
@@ -234,7 +402,9 @@ function toRows(meetings: SalesMeeting[]): MeetingRow[] {
     customerName: m.customerName,
     status: normalizeStatus(m.status),
     licenseDetail: m.licenseDetail ?? "",
-    licenseAmount: m.licenseAmount ?? null
+    licenseAmount: m.licenseAmount ?? null,
+    lossReason: m.lossReason ?? "",
+    lossNote: m.lossNote ?? ""
   }));
 }
 
@@ -246,6 +416,8 @@ type MeetingFormData = {
   status: string;
   licenseDetail: string;
   licenseAmount: string;
+  lossReason: string;
+  lossNote: string;
 };
 
 const emptyMeetingForm: MeetingFormData = {
@@ -255,12 +427,15 @@ const emptyMeetingForm: MeetingFormData = {
   customerName: "",
   status: "",
   licenseDetail: "",
-  licenseAmount: ""
+  licenseAmount: "",
+  lossReason: "",
+  lossNote: ""
 };
 
 function MeetingFormModal(props: {
   open: boolean;
   saving: boolean;
+  existingReasons: string[];
   onClose: () => void;
   onSave: (data: MeetingFormData) => void;
 }) {
@@ -373,6 +548,28 @@ function MeetingFormModal(props: {
               />
             </div>
           </div>
+
+          {form.status === "kaybedildi" ? (
+            <div className="space-y-3 rounded-[10px] border border-rose-200/70 bg-rose-50/40 p-3 dark:border-rose-700/30 dark:bg-rose-950/20">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Kayıp Sebebi</label>
+                <LossReasonSelect
+                  value={form.lossReason}
+                  onChange={(v) => update("lossReason", v)}
+                  existingReasons={props.existingReasons}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Kayıp Notu</label>
+                <textarea
+                  className="min-h-[60px] w-full rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-blue-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  onChange={(e) => update("lossNote", e.target.value)}
+                  placeholder="Opsiyonel detay"
+                  value={form.lossNote}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-2">
@@ -441,16 +638,25 @@ export function SalesMeetingsPage() {
     mutationFn: async ({ meetingId, status }: { meetingId: string; status: string }) => {
       if (!periodId) throw new Error("Dönem seçili değil.");
       const existing = meetingsQuery.data ?? [];
-      const all = existing.map((m) => ({
-        periodId: m.periodId,
-        qualityMember: m.qualityMember,
-        salesRepresentative: m.salesRepresentative,
-        customerName: m.customerName,
-        licenseAmount: m.licenseAmount ?? null,
-        ...(m.date ? { date: m.date } : {}),
-        ...(m.id === meetingId ? { status: status as "devam_ediyor" | "kapandi" | "kaybedildi" } : m.status ? { status: m.status } : {}),
-        ...(m.licenseDetail ? { licenseDetail: m.licenseDetail } : {})
-      }));
+      const all = existing.map((m) => {
+        const isTarget = m.id === meetingId;
+        const newStatus = isTarget
+          ? (status as "devam_ediyor" | "kapandi" | "kaybedildi")
+          : m.status;
+        const stillLost = newStatus === "kaybedildi";
+        return {
+          periodId: m.periodId,
+          qualityMember: m.qualityMember,
+          salesRepresentative: m.salesRepresentative,
+          customerName: m.customerName,
+          licenseAmount: m.licenseAmount ?? null,
+          ...(m.date ? { date: m.date } : {}),
+          ...(newStatus ? { status: newStatus } : {}),
+          ...(m.licenseDetail ? { licenseDetail: m.licenseDetail } : {}),
+          ...(stillLost && m.lossReason ? { lossReason: m.lossReason } : {}),
+          ...(stillLost && m.lossNote ? { lossNote: m.lossNote } : {})
+        };
+      });
       await api.saveSalesMeetings(auth.token, periodId, all);
     },
     onSuccess: () => {
@@ -458,19 +664,24 @@ export function SalesMeetingsPage() {
     }
   });
 
-  const columns = useMemo(
-    () => buildColumns(
-      (rowId, status) => updateStatusMutation.mutate({ meetingId: rowId, status }),
-      updateStatusMutation.isPending
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [updateStatusMutation.isPending]
-  );
+  const updateLossDataMutation = useMutation({
+    mutationFn: async ({ meetingId, reason, note }: { meetingId: string; reason: string; note: string }) => {
+      if (!periodId) throw new Error("Dönem seçili değil.");
+      await api.updateSalesMeeting(auth.token, periodId, meetingId, {
+        lossReason: reason || undefined,
+        lossNote: note || undefined
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["sales-meetings", auth.token, periodId] });
+    }
+  });
 
   const addMeetingMutation = useMutation({
     mutationFn: async (data: MeetingFormData) => {
       if (!periodId) throw new Error("Dönem seçili değil.");
       const existing = meetingsQuery.data ?? [];
+      const isLost = data.status === "kaybedildi";
       const newMeeting = {
         periodId,
         qualityMember: data.qualityMember.trim(),
@@ -479,7 +690,9 @@ export function SalesMeetingsPage() {
         licenseAmount: data.licenseAmount ? Number(data.licenseAmount) : null,
         ...(data.date ? { date: data.date } : {}),
         ...(data.status ? { status: data.status as "devam_ediyor" | "kapandi" | "kaybedildi" } : {}),
-        ...(data.licenseDetail.trim() ? { licenseDetail: data.licenseDetail.trim() } : {})
+        ...(data.licenseDetail.trim() ? { licenseDetail: data.licenseDetail.trim() } : {}),
+        ...(isLost && data.lossReason.trim() ? { lossReason: data.lossReason.trim() } : {}),
+        ...(isLost && data.lossNote.trim() ? { lossNote: data.lossNote.trim() } : {})
       };
       const all = [...existing.map((m) => ({
         periodId: m.periodId,
@@ -489,7 +702,9 @@ export function SalesMeetingsPage() {
         licenseAmount: m.licenseAmount ?? null,
         ...(m.date ? { date: m.date } : {}),
         ...(m.status ? { status: m.status } : {}),
-        ...(m.licenseDetail ? { licenseDetail: m.licenseDetail } : {})
+        ...(m.licenseDetail ? { licenseDetail: m.licenseDetail } : {}),
+        ...(m.status === "kaybedildi" && m.lossReason ? { lossReason: m.lossReason } : {}),
+        ...(m.status === "kaybedildi" && m.lossNote ? { lossNote: m.lossNote } : {})
       })), newMeeting];
       await api.saveSalesMeetings(auth.token, periodId, all);
     },
@@ -501,6 +716,48 @@ export function SalesMeetingsPage() {
 
   const rows = useMemo(() => toRows(meetingsQuery.data ?? []), [meetingsQuery.data]);
   const summary = useMemo(() => computeSummary(rows), [rows]);
+
+  const existingReasons = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (r.lossReason.trim()) set.add(r.lossReason.trim());
+    }
+    return Array.from(set);
+  }, [rows]);
+
+  const lossReasonBreakdown = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      if (r.status !== "kaybedildi") continue;
+      const key = r.lossReason.trim() || "Belirtilmemiş";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [rows]);
+
+  const [reasonFilter, setReasonFilter] = useState<string>("all");
+  const filteredRows = useMemo(() => {
+    if (reasonFilter === "all") return rows;
+    if (reasonFilter === "__unspecified__") {
+      return rows.filter((r) => r.status === "kaybedildi" && !r.lossReason.trim());
+    }
+    return rows.filter((r) => r.status === "kaybedildi" && r.lossReason.trim() === reasonFilter);
+  }, [rows, reasonFilter]);
+
+  const columns = useMemo(
+    () => buildColumns(
+      (rowId, status) => updateStatusMutation.mutate({ meetingId: rowId, status }),
+      updateStatusMutation.isPending,
+      (rowId, data) => updateLossDataMutation.mutate({ meetingId: rowId, reason: data.reason, note: data.note }),
+      existingReasons,
+      updateLossDataMutation.isPending
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [updateStatusMutation.isPending, updateLossDataMutation.isPending, existingReasons]
+  );
 
   const periodLabel = selectedPeriod ? formatPeriodMonth(selectedPeriod.month) : "";
   const licenseDetails = Object.entries(summary.licenseBreakdown)
@@ -550,35 +807,74 @@ export function SalesMeetingsPage() {
         </div>
       </SurfaceCard>
 
+      {/* Kayıp Sebepleri Dağılımı */}
+      {lossReasonBreakdown.length > 0 ? (
+        <SurfaceCard title={`Kayıp Sebepleri — ${periodLabel}`}>
+          <div className="h-64">
+            <ResponsiveContainer height="100%" width="100%">
+              <BarChart data={lossReasonBreakdown} layout="vertical" margin={{ top: 4, right: 32, left: 4, bottom: 4 }}>
+                <CartesianGrid horizontal={false} stroke="currentColor" strokeOpacity={0.08} />
+                <XAxis type="number" allowDecimals={false} stroke="currentColor" strokeOpacity={0.4} fontSize={11} />
+                <YAxis type="category" dataKey="reason" width={160} stroke="currentColor" strokeOpacity={0.6} fontSize={12} />
+                <Tooltip
+                  cursor={{ fill: "currentColor", fillOpacity: 0.05 }}
+                  contentStyle={{ borderRadius: 10, border: "1px solid rgba(148,163,184,0.3)", fontSize: 12 }}
+                  formatter={(value) => [`${value} toplantı`, ""]}
+                />
+                <Bar dataKey="count" fill="#f43f5e" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </SurfaceCard>
+      ) : null}
+
       {/* Tablo */}
       <SurfaceCard
         title="Toplantılar"
         actions={
-          <button
-            className="inline-flex min-h-9 items-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-4 text-sm font-medium text-white shadow transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-            disabled={!periodId}
-            onClick={() => setIsModalOpen(true)}
-            type="button"
-          >
-            <Plus size={14} />
-            Toplantı Ekle
-          </button>
+          <div className="flex items-center gap-2">
+            {existingReasons.length > 0 || lossReasonBreakdown.length > 0 ? (
+              <select
+                className="h-9 rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-700 transition hover:border-slate-300 focus:border-blue-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                onChange={(e) => setReasonFilter(e.target.value)}
+                value={reasonFilter}
+              >
+                <option value="all">Tüm sebepler</option>
+                {existingReasons.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+                <option value="__unspecified__">Belirtilmemiş</option>
+              </select>
+            ) : null}
+            <button
+              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-4 text-sm font-medium text-white shadow transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+              disabled={!periodId}
+              onClick={() => setIsModalOpen(true)}
+              type="button"
+            >
+              <Plus size={14} />
+              Toplantı Ekle
+            </button>
+          </div>
         }
       >
         {meetingsQuery.isLoading ? (
           <div className="flex items-center justify-center py-12">
             <p className="text-sm text-slate-400">Yükleniyor...</p>
           </div>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <div className="flex items-center justify-center py-12">
-            <p className="text-sm text-slate-400">Bu dönem için toplantı verisi bulunmuyor.</p>
+            <p className="text-sm text-slate-400">
+              {rows.length === 0 ? "Bu dönem için toplantı verisi bulunmuyor." : "Seçili filtreye uygun toplantı yok."}
+            </p>
           </div>
         ) : (
-          <DataTable columns={columns} data={rows} />
+          <DataTable columns={columns} data={filteredRows} />
         )}
       </SurfaceCard>
 
       <MeetingFormModal
+        existingReasons={existingReasons}
         open={isModalOpen}
         saving={addMeetingMutation.isPending}
         onClose={() => setIsModalOpen(false)}
