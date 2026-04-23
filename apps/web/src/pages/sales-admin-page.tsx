@@ -16,6 +16,7 @@ import { parseTalkDurationLabelToSeconds } from "../lib/format";
 import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
+import { LossReasonSelect } from "../components/loss-reason-select";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
 
 
@@ -745,17 +746,21 @@ export function SalesAdminPage() {
         status?: "devam_ediyor" | "kapandi" | "kaybedildi";
         licenseDetail?: string;
         licenseAmount?: number | null;
+        lossReason?: string;
+        lossNote?: string;
       }[] = [];
 
       for (let i = 1; i < parsedRows.length; i++) {
         const cols = parsedRows[i]!;
-        // CSV: Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, ...
+        // CSV: Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu
         const date = cols[0]?.trim() ?? "";
         const advisorRaw = cols[1]?.trim() ?? "";
         const customer = cols[2]?.trim() ?? "";
         const statusRaw = cols[3]?.trim() ?? "";
         const licenseDetail = cols[4]?.trim() ?? "";
         const licenseAmountRaw = cols[5]?.trim() ?? "";
+        const lossReasonRaw = cols[6]?.trim() ?? "";
+        const lossNoteRaw = cols[7]?.trim() ?? "";
 
         if (!customer && !advisorRaw) continue;
 
@@ -802,7 +807,9 @@ export function SalesAdminPage() {
           licenseAmount,
           ...(formattedDate ? { date: formattedDate } : {}),
           ...(status ? { status } : {}),
-          ...(licenseDetail ? { licenseDetail } : {})
+          ...(licenseDetail ? { licenseDetail } : {}),
+          ...(status === "kaybedildi" && lossReasonRaw ? { lossReason: lossReasonRaw } : {}),
+          ...(status === "kaybedildi" && lossNoteRaw ? { lossNote: lossNoteRaw } : {})
         });
       }
 
@@ -1988,8 +1995,20 @@ function MeetingsSection(props: {
   const [manualForm, setManualForm] = useState({
     date: "", qualityMember: "", salesRepresentative: "", customerName: "",
     status: "devam_ediyor" as "devam_ediyor" | "kapandi" | "kaybedildi",
-    licenseDetail: "", licenseAmount: ""
+    licenseDetail: "", licenseAmount: "",
+    lossReason: "", lossNote: ""
   });
+
+  const existingLossReasons = useMemo(
+    () => {
+      const set = new Set<string>();
+      for (const m of meetings) {
+        if (m.lossReason && m.lossReason.trim()) set.add(m.lossReason.trim());
+      }
+      return Array.from(set);
+    },
+    [meetings]
+  );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2001,6 +2020,7 @@ function MeetingsSection(props: {
 
   const handleManualAdd = () => {
     if (!manualForm.customerName.trim() || !manualForm.salesRepresentative.trim()) return;
+    const isLost = manualForm.status === "kaybedildi";
     createMeetingMutation.mutate({
       date: manualForm.date || undefined,
       qualityMember: manualForm.qualityMember.trim(),
@@ -2008,9 +2028,11 @@ function MeetingsSection(props: {
       customerName: manualForm.customerName.trim(),
       status: manualForm.status,
       licenseDetail: manualForm.licenseDetail.trim() || undefined,
-      licenseAmount: manualForm.licenseAmount ? Number(manualForm.licenseAmount) : null
+      licenseAmount: manualForm.licenseAmount ? Number(manualForm.licenseAmount) : null,
+      ...(isLost && manualForm.lossReason.trim() ? { lossReason: manualForm.lossReason.trim() } : {}),
+      ...(isLost && manualForm.lossNote.trim() ? { lossNote: manualForm.lossNote.trim() } : {})
     });
-    setManualForm({ date: "", qualityMember: "", salesRepresentative: "", customerName: "", status: "devam_ediyor", licenseDetail: "", licenseAmount: "" });
+    setManualForm({ date: "", qualityMember: "", salesRepresentative: "", customerName: "", status: "devam_ediyor", licenseDetail: "", licenseAmount: "", lossReason: "", lossNote: "" });
   };
 
   const statusLabel = (s: string | undefined) =>
@@ -2057,6 +2079,19 @@ function MeetingsSection(props: {
               </div>
               <MiniInput label="Lisans Detayı" value={manualForm.licenseDetail} onChange={(v) => setManualForm((p) => ({ ...p, licenseDetail: v }))} />
               <MiniInput label="Lisans Tutarı" value={manualForm.licenseAmount} onChange={(v) => setManualForm((p) => ({ ...p, licenseAmount: v }))} type="number" />
+              {manualForm.status === "kaybedildi" ? (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-slate-500">Kayıp Sebebi</span>
+                    <LossReasonSelect
+                      value={manualForm.lossReason}
+                      onChange={(v) => setManualForm((p) => ({ ...p, lossReason: v }))}
+                      existingReasons={existingLossReasons}
+                    />
+                  </div>
+                  <MiniInput label="Kayıp Notu" value={manualForm.lossNote} onChange={(v) => setManualForm((p) => ({ ...p, lossNote: v }))} />
+                </>
+              ) : null}
               <div className="flex items-end">
                 <button
                   className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
@@ -2075,7 +2110,7 @@ function MeetingsSection(props: {
         <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">CSV İçe Aktarım</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-            CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı</code>
+            CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu</code>
           </p>
           <div className="mt-4">
             <label
