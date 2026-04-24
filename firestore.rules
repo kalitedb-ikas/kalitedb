@@ -53,6 +53,12 @@ service cloud.firestore {
       allow create, update, delete: if isAuthed();
     }
 
+    // Sesli rol-play koçu oturumları
+    match /voiceCoachSessions/{sessionId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if isAuthed();
+    }
+
     // Değerlendirme soruları (satış)
     match /reportPeriods/{periodId}/evaluationQuestions/{questionId} {
       allow get, list: if isAuthed();

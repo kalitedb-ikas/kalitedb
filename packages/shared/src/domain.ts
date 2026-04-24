@@ -213,6 +213,77 @@ export const roleplayMetricSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
+/* ── Voice Coach (ElevenLabs Conversational AI) ── */
+
+export const voiceCoachScenarioSchema = z.enum([
+  "objection",
+  "cold_call",
+  "discovery",
+  "ikas_demo"
+]);
+
+export const voiceCoachSessionStatusSchema = z.enum([
+  "in_progress",
+  "completed",
+  "failed"
+]);
+
+export const voiceCoachTranscriptTurnSchema = z.object({
+  role: z.enum(["agent", "user"]),
+  text: z.string(),
+  timestampMs: z.number().int().nonnegative()
+});
+
+export const voiceCoachCoachingSchema = z.object({
+  overallScore: z.number().min(0).max(100),
+  strengths: z.array(z.string()).default([]),
+  improvements: z.array(z.string()).default([]),
+  keyMoments: z
+    .array(
+      z.object({
+        timestampMs: z.number().int().nonnegative(),
+        note: z.string()
+      })
+    )
+    .default([]),
+  summary: z.string().default(""),
+  generatedAt: z.string().datetime()
+});
+
+export const voiceCoachSessionSchema = z.object({
+  sessionId: z.string(),
+  periodId: z.string().optional(),
+  repEmail: z.string().email(),
+  repUid: z.string(),
+  repName: z.string().min(1),
+  scenario: voiceCoachScenarioSchema,
+  agentId: z.string().optional(),
+  elevenlabsConversationId: z.string().optional(),
+  status: voiceCoachSessionStatusSchema,
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime().optional(),
+  durationSec: z.number().int().nonnegative().optional(),
+  transcript: z.array(voiceCoachTranscriptTurnSchema).default([]),
+  coaching: voiceCoachCoachingSchema.optional(),
+  audioStoragePath: z.string().optional(),
+  audioUrl: z.string().optional(),
+  audioDurationSec: z.number().nonnegative().optional(),
+  updatedAt: z.string().datetime()
+});
+
+export type VoiceCoachScenario = z.infer<typeof voiceCoachScenarioSchema>;
+export type VoiceCoachSessionStatus = z.infer<typeof voiceCoachSessionStatusSchema>;
+export type VoiceCoachTranscriptTurn = z.infer<typeof voiceCoachTranscriptTurnSchema>;
+export type VoiceCoachCoaching = z.infer<typeof voiceCoachCoachingSchema>;
+export type VoiceCoachSession = z.infer<typeof voiceCoachSessionSchema>;
+
+export const VOICE_COACH_SCENARIO_LABELS: Record<VoiceCoachScenario, string> = {
+  objection: "İtiraz karşılama",
+  cold_call: "Soğuk arama",
+  discovery: "Keşif / ihtiyaç analizi",
+  ikas_demo: "ikas demo"
+};
+
 export const trainingEventSchema = z.object({
   id: z.string(),
   title: z.string().min(1),
