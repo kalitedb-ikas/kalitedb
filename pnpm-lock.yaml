@@ -62,6 +62,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@elevenlabs/elevenlabs-js':
+        specifier: ^2.44.0
+        version: 2.44.0
       '@kalitedb/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -83,6 +86,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@elevenlabs/client':
+        specifier: ^1.3.1
+        version: 1.3.1(@types/dom-mediacapture-record@1.0.22)
+      '@elevenlabs/react':
+        specifier: ^1.2.1
+        version: 1.2.1(@types/dom-mediacapture-record@1.0.22)(react@19.2.4)
       '@hookform/resolvers':
         specifier: ^5.2.1
         version: 5.2.2(react-hook-form@7.71.2(react@19.2.4))
@@ -274,6 +283,9 @@ packages:
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
 
+  '@bufbuild/protobuf@1.10.1':
+    resolution: {integrity: sha512-wJ8ReQbHxsAfXhrf9ixl0aYbZorRuOWpBNzm8pL8ftmSxQx/wnJD5Eg861NwJU/czy2VXFIebCeZnZrI9rktIQ==}
+
   '@csstools/color-helpers@6.0.2':
     resolution: {integrity: sha512-LMGQLS9EuADloEFkcTBR3BwV/CGHV7zyDxVRtVDTwdI2Ca4it0CCVTT9wCkxSgokjE5Ho41hEPgb8OEUwoXr6Q==}
     engines: {node: '>=20.19.0'}
@@ -304,6 +316,21 @@ packages:
   '@csstools/css-tokenizer@4.0.0':
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
+
+  '@elevenlabs/client@1.3.1':
+    resolution: {integrity: sha512-bQUxA/X7TZRSSZ6UM6a6A+1qQy5Wh7vMn+zbZP6Yl1WrupxHL4M0XMnl/n9+fsol1Ib4tN/2Nhx1E5JDS7QdKw==}
+
+  '@elevenlabs/elevenlabs-js@2.44.0':
+    resolution: {integrity: sha512-qmggk9IvAQTkepA+A1d2VBIIiYXszrUaCDx0dJk2KeCMABFHOo7iHzLCG0bjzXO7YwF4ksc44ubkwMKYsqn26A==}
+    engines: {node: '>=18.0.0'}
+
+  '@elevenlabs/react@1.2.1':
+    resolution: {integrity: sha512-7cx+WGsbrNlKDtMuafFGMjCwg0h4rqtV4JKoIEHSJ32F2kcyCU5/MgA+01dP1cA1LrLYY9lO/kkghPAxsQYUug==}
+    peerDependencies:
+      react: '>=16.8.0'
+
+  '@elevenlabs/types@0.9.1':
+    resolution: {integrity: sha512-lkWAMaFJLsGNWcblryBRHbtozMh7wHy0YsqURLwQwjhpvycuFN5qUa94CZtVU01jFwrfr5h1ca24+nYEkKf0Ew==}
 
   '@emnapi/runtime@1.8.1':
     resolution: {integrity: sha512-mehfKSMWjjNol8659Z8KxEMrdSJDDot5SXMq00dM8BN4o+CLNXQ0xH2V7EchNHV4RmbZLmmPdEaXZc5H2FXmDg==}
@@ -943,6 +970,12 @@ packages:
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
+  '@livekit/mutex@1.1.1':
+    resolution: {integrity: sha512-EsshAucklmpuUAfkABPxJNhzj9v2sG7JuzFDL4ML1oJQSV14sqrpTYnsaOudMAw9yOaW53NU3QQTlUQoRs4czw==}
+
+  '@livekit/protocol@1.45.3':
+    resolution: {integrity: sha512-WmMxBTsy4dRBqcrswFwUUlgq3Z0nnhOqKR6tX749Rb/PcB1yBMUtrHxZvcsS6qi3/5+86zHeVG+exmu1sZqfJg==}
+
   '@next/env@15.5.12':
     resolution: {integrity: sha512-pUvdJN1on574wQHjaBfNGDt9Mz5utDSZFsIIQkMzPgNS8ZvT4H2mwOrOIClwsQOb6EGx5M76/CZr6G8i6pSpLg==}
 
@@ -1297,6 +1330,9 @@ packages:
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
 
+  '@types/dom-mediacapture-record@1.0.22':
+    resolution: {integrity: sha512-mUMZLK3NvwRLcAAT9qmcK+9p7tpU2FHdDsntR3YI4+GY88XrgG4XiE7u1Q2LAN2/FZOz/tdMDC3GQCR4T8nFuw==}
+
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
@@ -1622,6 +1658,9 @@ packages:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
 
+  command-exists@1.2.9:
+    resolution: {integrity: sha512-LTQ/SGc+s0Xc0Fu5WaKnR0YiygZkm9eKFvyS+fRsU7/ZWFF8ykFM6Pc9aCVf1+xasOOZpO3BAVgVrKvsqKHV7w==}
+
   commander@4.1.1:
     resolution: {integrity: sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA==}
     engines: {node: '>= 6'}
@@ -1887,6 +1926,10 @@ packages:
 
   eventemitter3@5.0.4:
     resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
+
+  events@3.3.0:
+    resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
+    engines: {node: '>=0.8.x'}
 
   expect-type@1.3.0:
     resolution: {integrity: sha512-knvyeauYhqjOYvQ66MznSMs83wmHrCycNEN6Ao+2AeYEfxUIkuiVxdEa1qlGEPK+We3n0THiDciYSsCcgW/DoA==}
@@ -2199,6 +2242,9 @@ packages:
   jose@4.15.9:
     resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
 
+  jose@6.2.2:
+    resolution: {integrity: sha512-d7kPDd34KO/YnzaDOlikGpOurfF0ByC2sEV4cANCtdqLlTfBlw2p14O/5d/zv40gJPbIQxfES3nSx1/oYNyuZQ==}
+
   js-sha256@0.11.1:
     resolution: {integrity: sha512-o6WSo/LUvY2uC4j7mO50a2ms7E/EAdbP0swigLV+nzHKTTaYnaLIWJ02VdXrsJX0vGedDESQnLsOekr94ryfjg==}
 
@@ -2274,6 +2320,11 @@ packages:
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
 
+  livekit-client@2.18.6:
+    resolution: {integrity: sha512-JTOSWkRrFC9KayPvasbnXpAmt+J/ILk5c8f3xUmjqazZk7j9QTyj0qhDHIgdyy/5KFqjqaRmtPu/InMB+WlkPA==}
+    peerDependencies:
+      '@types/dom-mediacapture-record': ^1
+
   locate-path@6.0.0:
     resolution: {integrity: sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw==}
     engines: {node: '>=10'}
@@ -2307,6 +2358,10 @@ packages:
 
   lodash.once@4.1.1:
     resolution: {integrity: sha512-Sb487aTOCr9drQVL8pIxOzVhafOjZN9UU54hiN8PU3uAiSV7lx1yYNpbNmex2PK6dSJoNTSJUUswT651yww3Mg==}
+
+  loglevel@1.9.2:
+    resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
+    engines: {node: '>= 0.6.0'}
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
@@ -2744,6 +2799,9 @@ packages:
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
 
+  rxjs@7.8.2:
+    resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
+
   safe-buffer@5.2.1:
     resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
 
@@ -2753,6 +2811,13 @@ packages:
 
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
+
+  sdp-transform@2.15.0:
+    resolution: {integrity: sha512-KrOH82c/W+GYQ0LHqtr3caRpM3ITglq3ljGUIb8LTki7ByacJZ9z+piSGiwZDsRyhQbYBOBJgr2k6X4BZXi3Kw==}
+    hasBin: true
+
+  sdp@3.2.2:
+    resolution: {integrity: sha512-xZocWwfyp4hkbN4hLWxMjmv2Q8aNa9MhmOZ7L9aCZPT+dZsgRr6wZRrSYE3HTdyk/2pZKPSgqI7ns7Een1xMSA==}
 
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
@@ -2945,6 +3010,9 @@ packages:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
 
+  typed-emitter@2.1.0:
+    resolution: {integrity: sha512-g/KzbYKbH5C2vPkaXGu8DJlHrGKHLsM25Zg9WuC9pMGfuvT+X25tZQWo5fK1BjBm8+UrVE9LDCvaY0CQk+fXDA==}
+
   typescript-eslint@8.56.1:
     resolution: {integrity: sha512-U4lM6pjmBX7J5wk4szltF7I1cGBHXZopnAXCMXb3+fZ3B/0Z3hq3wS/CCUB2NZBNAExK92mCU2tEohWuwVMsDQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -3082,6 +3150,10 @@ packages:
   webidl-conversions@8.0.1:
     resolution: {integrity: sha512-BMhLD/Sw+GbJC21C/UgyaZX41nPt8bUTg+jWyDeg7e7YN4xOM05YPSIXceACnXVtqyEw/LMClUQMtMZ+PGGpqQ==}
     engines: {node: '>=20'}
+
+  webrtc-adapter@9.0.5:
+    resolution: {integrity: sha512-U9vjByy/sK2OMXu5mmfuZFKTMIUQe34c0JXRO+oDrxJTsntdYT2iIFwYMOV7HhMTuktcZLGf2W1N/OcSf9ssWg==}
+    engines: {node: '>=6.0.0', npm: '>=3.10.0'}
 
   websocket-driver@0.7.4:
     resolution: {integrity: sha512-b17KeDIQVjvb0ssuSDF2cYXSg2iztliJ4B9WdsuB6J952qCPKmnVq4DyW5motImXHDC1cBT/1UezrJVsKw5zjg==}
@@ -3315,6 +3387,8 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
+  '@bufbuild/protobuf@1.10.1': {}
+
   '@csstools/color-helpers@6.0.2': {}
 
   '@csstools/css-calc@3.1.1(@csstools/css-parser-algorithms@4.0.0(@csstools/css-tokenizer@4.0.0))(@csstools/css-tokenizer@4.0.0)':
@@ -3336,6 +3410,32 @@ snapshots:
   '@csstools/css-syntax-patches-for-csstree@1.1.0': {}
 
   '@csstools/css-tokenizer@4.0.0': {}
+
+  '@elevenlabs/client@1.3.1(@types/dom-mediacapture-record@1.0.22)':
+    dependencies:
+      '@elevenlabs/types': 0.9.1
+      livekit-client: 2.18.6(@types/dom-mediacapture-record@1.0.22)
+    transitivePeerDependencies:
+      - '@types/dom-mediacapture-record'
+
+  '@elevenlabs/elevenlabs-js@2.44.0':
+    dependencies:
+      command-exists: 1.2.9
+      node-fetch: 2.7.0
+      ws: 8.19.0
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - utf-8-validate
+
+  '@elevenlabs/react@1.2.1(@types/dom-mediacapture-record@1.0.22)(react@19.2.4)':
+    dependencies:
+      '@elevenlabs/client': 1.3.1(@types/dom-mediacapture-record@1.0.22)
+      react: 19.2.4
+    transitivePeerDependencies:
+      - '@types/dom-mediacapture-record'
+
+  '@elevenlabs/types@0.9.1': {}
 
   '@emnapi/runtime@1.8.1':
     dependencies:
@@ -4004,6 +4104,12 @@ snapshots:
   '@js-sdsl/ordered-map@4.4.2':
     optional: true
 
+  '@livekit/mutex@1.1.1': {}
+
+  '@livekit/protocol@1.45.3':
+    dependencies:
+      '@bufbuild/protobuf': 1.10.1
+
   '@next/env@15.5.12': {}
 
   '@next/swc-darwin-arm64@15.5.12':
@@ -4278,6 +4384,8 @@ snapshots:
   '@types/d3-timer@3.0.2': {}
 
   '@types/deep-eql@4.0.2': {}
+
+  '@types/dom-mediacapture-record@1.0.22': {}
 
   '@types/estree@1.0.8': {}
 
@@ -4652,6 +4760,8 @@ snapshots:
       delayed-stream: 1.0.0
     optional: true
 
+  command-exists@1.2.9: {}
+
   commander@4.1.1: {}
 
   concat-map@0.0.1: {}
@@ -4933,6 +5043,8 @@ snapshots:
     optional: true
 
   eventemitter3@5.0.4: {}
+
+  events@3.3.0: {}
 
   expect-type@1.3.0: {}
 
@@ -5343,6 +5455,8 @@ snapshots:
 
   jose@4.15.9: {}
 
+  jose@6.2.2: {}
+
   js-sha256@0.11.1: {}
 
   js-tokens@4.0.0: {}
@@ -5444,6 +5558,19 @@ snapshots:
 
   lines-and-columns@1.2.4: {}
 
+  livekit-client@2.18.6(@types/dom-mediacapture-record@1.0.22):
+    dependencies:
+      '@livekit/mutex': 1.1.1
+      '@livekit/protocol': 1.45.3
+      '@types/dom-mediacapture-record': 1.0.22
+      events: 3.3.0
+      jose: 6.2.2
+      loglevel: 1.9.2
+      sdp-transform: 2.15.0
+      tslib: 2.8.1
+      typed-emitter: 2.1.0
+      webrtc-adapter: 9.0.5
+
   locate-path@6.0.0:
     dependencies:
       p-locate: 5.0.0
@@ -5467,6 +5594,8 @@ snapshots:
   lodash.merge@4.6.2: {}
 
   lodash.once@4.1.1: {}
+
+  loglevel@1.9.2: {}
 
   long@5.3.2: {}
 
@@ -5580,7 +5709,6 @@ snapshots:
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
-    optional: true
 
   node-fetch@3.3.2:
     dependencies:
@@ -5894,6 +6022,11 @@ snapshots:
     dependencies:
       queue-microtask: 1.2.3
 
+  rxjs@7.8.2:
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+
   safe-buffer@5.2.1: {}
 
   saxes@6.0.0:
@@ -5901,6 +6034,10 @@ snapshots:
       xmlchars: 2.2.0
 
   scheduler@0.27.0: {}
+
+  sdp-transform@2.15.0: {}
+
+  sdp@3.2.2: {}
 
   semver@6.3.1: {}
 
@@ -6109,8 +6246,7 @@ snapshots:
     dependencies:
       tldts: 7.0.24
 
-  tr46@0.0.3:
-    optional: true
+  tr46@0.0.3: {}
 
   tr46@6.0.0:
     dependencies:
@@ -6127,6 +6263,10 @@ snapshots:
   type-check@0.4.0:
     dependencies:
       prelude-ls: 1.2.1
+
+  typed-emitter@2.1.0:
+    optionalDependencies:
+      rxjs: 7.8.2
 
   typescript-eslint@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3):
     dependencies:
@@ -6268,10 +6408,13 @@ snapshots:
 
   web-vitals@4.2.4: {}
 
-  webidl-conversions@3.0.1:
-    optional: true
+  webidl-conversions@3.0.1: {}
 
   webidl-conversions@8.0.1: {}
+
+  webrtc-adapter@9.0.5:
+    dependencies:
+      sdp: 3.2.2
 
   websocket-driver@0.7.4:
     dependencies:
@@ -6294,7 +6437,6 @@ snapshots:
     dependencies:
       tr46: 0.0.3
       webidl-conversions: 3.0.1
-    optional: true
 
   which@2.0.2:
     dependencies:

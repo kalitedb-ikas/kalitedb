@@ -17,7 +17,11 @@ import type {
   ThresholdConfig,
   TrainingEvent,
   UserRoleAssignment,
-  UserRoleEntry
+  UserRoleEntry,
+  VoiceCoachCoaching,
+  VoiceCoachScenario,
+  VoiceCoachSession,
+  VoiceCoachTranscriptTurn
 } from "@kalitedb/shared";
 import {
   agentMetricSchema,
@@ -2130,5 +2134,57 @@ export const api = {
       method: "POST",
       body: {}
     });
+  },
+  async getVoiceCoachEntitlement(
+    token: string | null
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    return request<{ allowed: boolean; reason?: string }>("/api/voice-coach/entitlement", { token });
+  },
+  async requestVoiceCoachSignedUrl(
+    token: string | null,
+    scenario: VoiceCoachScenario
+  ): Promise<{
+    signedUrl: string;
+    sessionId: string;
+    agentId: string;
+    dynamicVariables: Record<string, string | number | boolean>;
+  }> {
+    return request("/api/voice-coach/signed-url", {
+      token,
+      method: "POST",
+      body: { scenario }
+    });
+  },
+  async finalizeVoiceCoachSession(
+    token: string | null,
+    sessionId: string,
+    payload: {
+      transcript: VoiceCoachTranscriptTurn[];
+      elevenlabsConversationId?: string;
+      durationSec?: number;
+      status: "completed" | "failed";
+      coaching?: VoiceCoachCoaching;
+    }
+  ): Promise<VoiceCoachSession> {
+    return request<VoiceCoachSession>(
+      `/api/voice-coach/sessions/${encodeURIComponent(sessionId)}/finalize`,
+      { token, method: "POST", body: payload }
+    );
+  },
+  async listVoiceCoachSessions(
+    token: string | null,
+    params?: { repEmail?: string; limit?: number }
+  ): Promise<VoiceCoachSession[]> {
+    const query = new URLSearchParams();
+    if (params?.repEmail) query.set("repEmail", params.repEmail);
+    if (params?.limit) query.set("limit", String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<VoiceCoachSession[]>(`/api/voice-coach/sessions${suffix}`, { token });
+  },
+  async getVoiceCoachSession(token: string | null, sessionId: string): Promise<VoiceCoachSession> {
+    return request<VoiceCoachSession>(
+      `/api/voice-coach/sessions/${encodeURIComponent(sessionId)}`,
+      { token }
+    );
   }
 };

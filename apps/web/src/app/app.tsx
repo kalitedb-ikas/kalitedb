@@ -22,6 +22,7 @@ import { SalesEvaluationQuestionsPage } from "../pages/sales-evaluation-question
 import { SalesKpiPage } from "../pages/sales-kpi-page";
 import { SalesMeetingsPage } from "../pages/sales-meetings-page";
 import { SalesRepresentativesPage } from "../pages/sales-representatives-page";
+import { SalesRoleplayPage } from "../pages/sales-roleplay-page";
 import { SalesSuccessIndexPage } from "../pages/sales-success-index-page";
 import { SalesTargetCalibrationPage } from "../pages/sales-target-calibration-page";
 import { CsComparePage } from "../pages/cs-compare-page";
@@ -96,6 +97,7 @@ function AppRoutes() {
         <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
         <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
         <Route element={<SalesRepresentativesPage />} path="/sales/representatives" />
+        <Route element={<SalesRoleplayPage />} path="/sales/roleplay" />
         <Route element={<SalesComparePage />} path="/sales/compare" />
         <Route element={<SalesCompanyComparePage />} path="/sales/kpi/compare" />
         <Route element={<SalesTargetCalibrationPage />} path="/sales/kpi/target-calibration" />
