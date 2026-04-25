@@ -55,6 +55,9 @@ export function LoginPage() {
             <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
               Devam etmek için kurum hesabınızla oturum açın.
             </p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              Yalnızca <span className="font-semibold text-slate-700">@ikas.com</span> Google hesapları erişebilir.
+            </p>
 
             {auth.authMode === "dev" && !hasFirebaseUser ? (
               <div className="mt-6 rounded-[10px] border border-sky-200 bg-sky-50/90 p-4 text-sm text-sky-900">

@@ -13,6 +13,8 @@ export const roleSchema = z.enum([
   "quality",
   "representative",
   "viewer",
+  // Role-play içerik yönetimi (senaryo + bilgi bankası)
+  "roleplay_admin",
   // Eski roller (geriye dönük uyumluluk)
   "team",
   "ceo",
@@ -215,12 +217,14 @@ export const roleplayMetricSchema = z.object({
 
 /* ── Voice Coach (ElevenLabs Conversational AI) ── */
 
-export const voiceCoachScenarioSchema = z.enum([
-  "competitor_compare",
-  "price_roi",
-  "technical",
-  "hesitant"
-]);
+// Senaryo slug'ı artık serbest string. İçerikler Firestore'dan okunur
+// (`roleplayScenarios` koleksiyonu). Eski sabit slug'lar (competitor_compare
+// vb.) seed scriptiyle aynı isimle taşınmıştır; bu sebeple eski oturum
+// kayıtları kırılmaz.
+export const voiceCoachScenarioSchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/, "Geçersiz senaryo slug formatı");
 
 export const voiceCoachSessionStatusSchema = z.enum([
   "in_progress",
@@ -277,11 +281,109 @@ export type VoiceCoachTranscriptTurn = z.infer<typeof voiceCoachTranscriptTurnSc
 export type VoiceCoachCoaching = z.infer<typeof voiceCoachCoachingSchema>;
 export type VoiceCoachSession = z.infer<typeof voiceCoachSessionSchema>;
 
-export const VOICE_COACH_SCENARIO_LABELS: Record<VoiceCoachScenario, string> = {
+// Mevcut 4 senaryo için fallback label haritası. Yeni senaryolar Firestore'dan
+// `title` alanı ile gelir; bu sabit yalnızca eski oturum kayıtlarının
+// göstergeleri için kullanılır.
+export const VOICE_COACH_SCENARIO_LABELS: Record<string, string> = {
   competitor_compare: "Rakip Karşılaştırmacı",
   price_roi: "Fiyat & ROI Odaklı",
   technical: "Teknik Sorgulayıcı",
   hesitant: "Kararsız & Pasif Dirençli"
+};
+
+/* ── Role-play Senaryolar (CMS) ── */
+
+export const roleplayDifficultySchema = z.enum(["Kolay", "Orta", "Zor"]);
+
+export const roleplayScenarioSchema = z.object({
+  id: z.string(),
+  slug: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9][a-z0-9_-]*$/, "Slug yalnızca küçük harf, rakam, _ ve - içerebilir"),
+  title: z.string().min(1).max(120),
+  description: z.string().min(1).max(500),
+  difficulty: roleplayDifficultySchema,
+  persona: z.string().min(1),
+  opening: z.string().min(1),
+  context: z.string().optional().default(""),
+  goals: z.array(z.string().min(1)).default([]),
+  active: z.boolean().default(true),
+  sortOrder: z.number().int().default(0),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  createdBy: z.string().email().optional()
+});
+
+export const roleplayScenarioInputSchema = roleplayScenarioSchema
+  .pick({
+    slug: true,
+    title: true,
+    description: true,
+    difficulty: true,
+    persona: true,
+    opening: true,
+    context: true,
+    goals: true,
+    active: true,
+    sortOrder: true
+  })
+  .partial({ context: true, goals: true, active: true, sortOrder: true });
+
+export type RoleplayDifficulty = z.infer<typeof roleplayDifficultySchema>;
+export type RoleplayScenario = z.infer<typeof roleplayScenarioSchema>;
+export type RoleplayScenarioInput = z.infer<typeof roleplayScenarioInputSchema>;
+
+/* ── Role-play Knowledge Base (ikas hakkında bilgiler) ── */
+
+export const roleplayKnowledgeCategorySchema = z.enum([
+  "product",
+  "pricing",
+  "case_study",
+  "competitor",
+  "faq",
+  "other"
+]);
+
+export const roleplayKnowledgeSyncStatusSchema = z.enum(["pending", "synced", "error"]);
+
+export const roleplayKnowledgeDocSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1).max(120),
+  category: roleplayKnowledgeCategorySchema,
+  body: z.string().min(1),
+  elevenlabsDocId: z.string().optional(),
+  syncStatus: roleplayKnowledgeSyncStatusSchema.default("pending"),
+  syncError: z.string().optional(),
+  active: z.boolean().default(true),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  syncedAt: z.string().datetime().optional(),
+  createdBy: z.string().email().optional()
+});
+
+export const roleplayKnowledgeDocInputSchema = roleplayKnowledgeDocSchema
+  .pick({
+    title: true,
+    category: true,
+    body: true,
+    active: true
+  })
+  .partial({ active: true });
+
+export type RoleplayKnowledgeCategory = z.infer<typeof roleplayKnowledgeCategorySchema>;
+export type RoleplayKnowledgeSyncStatus = z.infer<typeof roleplayKnowledgeSyncStatusSchema>;
+export type RoleplayKnowledgeDoc = z.infer<typeof roleplayKnowledgeDocSchema>;
+export type RoleplayKnowledgeDocInput = z.infer<typeof roleplayKnowledgeDocInputSchema>;
+
+export const ROLEPLAY_KNOWLEDGE_CATEGORY_LABELS: Record<RoleplayKnowledgeCategory, string> = {
+  product: "Ürün",
+  pricing: "Fiyatlandırma",
+  case_study: "Vaka Çalışması",
+  competitor: "Rakip Analizi",
+  faq: "Sıkça Sorulanlar",
+  other: "Diğer"
 };
 
 export const trainingEventSchema = z.object({

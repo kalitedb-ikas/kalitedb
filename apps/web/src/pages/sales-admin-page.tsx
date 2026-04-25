@@ -3,7 +3,7 @@ import { normalizeKey } from "@kalitedb/shared";
 import type { Representative, SalesMeeting, SalesKpiData } from "@kalitedb/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, FileQuestion, Handshake, LogOut, MessageSquare, MessageSquarePlus, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, Users, X } from "lucide-react";
+import { BookOpen, ClipboardCheck, FileQuestion, Handshake, LogOut, MessageSquare, MessageSquarePlus, Mic, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, Users, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -18,9 +18,20 @@ import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { LossReasonSelect } from "../components/loss-reason-select";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
+import { RoleplayScenariosAdmin } from "../components/roleplay-scenarios-admin";
+import { RoleplayKnowledgeAdmin } from "../components/roleplay-knowledge-admin";
 
 
-type AdminSection = "audit" | "roleplay" | "evaluation" | "meetings" | "kpi" | "representatives" | "ramp";
+type AdminSection =
+  | "audit"
+  | "roleplay"
+  | "roleplay-scenarios"
+  | "roleplay-knowledge"
+  | "evaluation"
+  | "meetings"
+  | "kpi"
+  | "representatives"
+  | "ramp";
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
   const value = String(index + 1).padStart(2, "0");
@@ -113,6 +124,18 @@ export function SalesAdminPage() {
   const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
 
   const activePeriodMonth = `${selectedYear}-${selectedMonthValue}`;
+
+  const meQuery = useQuery({
+    queryKey: ["me", auth.token],
+    queryFn: () => api.getMe(auth.token),
+    enabled: Boolean(auth.token),
+    staleTime: 5 * 60 * 1000
+  });
+  const me = meQuery.data ?? null;
+  const canManageRoleplayContent =
+    me?.role === "admin" ||
+    me?.role === "roleplay_admin" ||
+    (me?.roles ?? []).some((entry: { role: string }) => entry.role === "roleplay_admin");
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -1204,6 +1227,8 @@ export function SalesAdminPage() {
   const sectionMeta: Record<AdminSection, { label: string; description: string; icon: ReactNode }> = {
     audit: { label: "Audit Girişi", description: "Temsilci bazlı audit skorlarını CSV ile veya manuel ekleyin.", icon: <ClipboardCheck size={14} /> },
     roleplay: { label: "Role-Play Girişi", description: "Role-play ve RevOps çalışma sayıları ile notları yönetin.", icon: <Play size={14} /> },
+    "roleplay-scenarios": { label: "Role-Play Senaryoları", description: "Sesli role-play senaryolarını panelden yönet.", icon: <Mic size={14} /> },
+    "roleplay-knowledge": { label: "ikas Bilgi Bankası", description: "Role-play ajanına gidecek ikas bilgi dokümanlarını yönet.", icon: <BookOpen size={14} /> },
     evaluation: { label: "Değerlendirme Soruları", description: "Dönem değerlendirme sorularını ve cevap skorlarını tanımlayın.", icon: <FileQuestion size={14} /> },
     kpi: { label: "KPI Verileri", description: "Hedefler, temsilci performans verileri ve lisans özetini yönetin.", icon: <Target size={14} /> },
     meetings: { label: "Satış Toplantıları", description: "Toplantı listesini yönetin; CSV import ve satır düzenleme.", icon: <Handshake size={14} /> },
@@ -1249,7 +1274,23 @@ export function SalesAdminPage() {
         active: activeSection === id,
         onClick: () => setActiveSection(id)
       }))
-    }
+    },
+    ...(canManageRoleplayContent
+      ? [
+          {
+            id: "roleplay-cms",
+            label: "Role-Play CMS",
+            items: (["roleplay-scenarios", "roleplay-knowledge"] as const).map((id) => ({
+              id,
+              label: sectionMeta[id].label,
+              description: sectionMeta[id].description,
+              icon: sectionMeta[id].icon,
+              active: activeSection === id,
+              onClick: () => setActiveSection(id)
+            }))
+          }
+        ]
+      : [])
   ];
 
   const showSaveAction = activeSection === "audit" || activeSection === "roleplay" || activeSection === "evaluation";
@@ -1481,6 +1522,18 @@ export function SalesAdminPage() {
                 />
               ) : null}
             </div>
+          ) : activeSection === "roleplay-scenarios" ? (
+            canManageRoleplayContent ? (
+              <RoleplayScenariosAdmin />
+            ) : (
+              <p className="text-sm text-slate-500">Bu alanı yalnızca role-play yöneticileri görebilir.</p>
+            )
+          ) : activeSection === "roleplay-knowledge" ? (
+            canManageRoleplayContent ? (
+              <RoleplayKnowledgeAdmin />
+            ) : (
+              <p className="text-sm text-slate-500">Bu alanı yalnızca role-play yöneticileri görebilir.</p>
+            )
           ) : activeSection === "ramp" ? (
             <RampSection selectedPeriodId={selectedPeriodId} activePeriodMonth={activePeriodMonth} kpiAgents={(kpiDataQuery.data as any)?.agents ?? []} />
           ) : (

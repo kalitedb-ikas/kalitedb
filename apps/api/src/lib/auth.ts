@@ -37,6 +37,29 @@ export function canEnterData(user: AuthUser, department?: Department): boolean {
   return hasRoleInDepartment(user, department, qualityRoles);
 }
 
+export function canManageRoleplayContent(user: AuthUser): boolean {
+  if (isAdmin(user)) return true;
+  if (user.role === "roleplay_admin") return true;
+  return user.roles.some((entry) => entry.role === "roleplay_admin");
+}
+
+const DEFAULT_ALLOWED_EMAIL_DOMAINS = ["ikas.com"] as const;
+
+function getAllowedEmailDomains(): string[] {
+  const raw = process.env.ALLOWED_EMAIL_DOMAINS;
+  if (!raw) return [...DEFAULT_ALLOWED_EMAIL_DOMAINS];
+  const parsed = raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  return parsed.length > 0 ? parsed : [...DEFAULT_ALLOWED_EMAIL_DOMAINS];
+}
+
+function isEmailDomainAllowed(email: string): boolean {
+  const lower = email.toLowerCase();
+  return getAllowedEmailDomains().some((domain) => lower.endsWith(`@${domain}`));
+}
+
 function getBearerToken(request: NextRequest) {
   const authorization = request.headers.get("authorization");
   if (!authorization?.startsWith("Bearer ")) {
@@ -114,6 +137,10 @@ async function authenticateToken(token: string): Promise<AuthUser> {
   const email = decoded.email;
   if (!email) {
     throw new ApiError(401, "E-posta bilgisi bulunamadı.");
+  }
+
+  if (!isEmailDomainAllowed(email)) {
+    throw new ApiError(403, "Bu uygulamaya yalnızca @ikas.com hesapları erişebilir.");
   }
 
   const repository = await getRepository();
