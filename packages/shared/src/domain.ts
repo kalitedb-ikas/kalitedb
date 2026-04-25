@@ -216,10 +216,10 @@ export const roleplayMetricSchema = z.object({
 /* ── Voice Coach (ElevenLabs Conversational AI) ── */
 
 export const voiceCoachScenarioSchema = z.enum([
-  "objection",
-  "cold_call",
-  "discovery",
-  "ikas_demo"
+  "competitor_compare",
+  "price_roi",
+  "technical",
+  "hesitant"
 ]);
 
 export const voiceCoachSessionStatusSchema = z.enum([
@@ -278,10 +278,10 @@ export type VoiceCoachCoaching = z.infer<typeof voiceCoachCoachingSchema>;
 export type VoiceCoachSession = z.infer<typeof voiceCoachSessionSchema>;
 
 export const VOICE_COACH_SCENARIO_LABELS: Record<VoiceCoachScenario, string> = {
-  objection: "İtiraz karşılama",
-  cold_call: "Soğuk arama",
-  discovery: "Keşif / ihtiyaç analizi",
-  ikas_demo: "ikas demo"
+  competitor_compare: "Rakip Karşılaştırmacı",
+  price_roi: "Fiyat & ROI Odaklı",
+  technical: "Teknik Sorgulayıcı",
+  hesitant: "Kararsız & Pasif Dirençli"
 };
 
 export const trainingEventSchema = z.object({
