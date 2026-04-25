@@ -10,7 +10,6 @@ import {
   PhoneOff,
   Play,
   Search,
-  Sparkles,
   Target,
   TrendingUp,
   Zap
@@ -44,9 +43,9 @@ type ScenarioMeta = {
 
 const SCENARIOS: ScenarioMeta[] = [
   {
-    key: "objection",
-    label: VOICE_COACH_SCENARIO_LABELS.objection,
-    description: "Fiyat, rakip, zaman gibi zor itirazlara karşı pratik yap.",
+    key: "competitor_compare",
+    label: VOICE_COACH_SCENARIO_LABELS.competitor_compare,
+    description: "Ticimax/Shopify ile karşılaştırma yapan analitik müşteriye somut argüman üret.",
     icon: Target,
     difficulty: "Zor",
     accent: {
@@ -58,11 +57,11 @@ const SCENARIOS: ScenarioMeta[] = [
     }
   },
   {
-    key: "cold_call",
-    label: VOICE_COACH_SCENARIO_LABELS.cold_call,
-    description: "İlgisiz veya meşgul bir müşteriyle ilk teması aç.",
-    icon: Handshake,
-    difficulty: "Orta",
+    key: "price_roi",
+    label: VOICE_COACH_SCENARIO_LABELS.price_roi,
+    description: "Fiyat, gizli maliyet ve ROI sorularına karşı net rakamlarla cevap ver.",
+    icon: Gauge,
+    difficulty: "Zor",
     accent: {
       chip: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
       gradient: "from-amber-500/20 via-yellow-400/10 to-transparent",
@@ -72,11 +71,11 @@ const SCENARIOS: ScenarioMeta[] = [
     }
   },
   {
-    key: "discovery",
-    label: VOICE_COACH_SCENARIO_LABELS.discovery,
-    description: "Doğru sorularla müşteri ihtiyacını derinleştir.",
+    key: "technical",
+    label: VOICE_COACH_SCENARIO_LABELS.technical,
+    description: "API, entegrasyon ve ölçeklenebilirlik soran teknik müşteriyi yönet.",
     icon: Search,
-    difficulty: "Orta",
+    difficulty: "Zor",
     accent: {
       chip: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300",
       gradient: "from-indigo-500/20 via-sky-400/10 to-transparent",
@@ -86,11 +85,11 @@ const SCENARIOS: ScenarioMeta[] = [
     }
   },
   {
-    key: "ikas_demo",
-    label: VOICE_COACH_SCENARIO_LABELS.ikas_demo,
-    description: "ikas platformunu potansiyel müşteriye tanıt.",
-    icon: Sparkles,
-    difficulty: "Kolay",
+    key: "hesitant",
+    label: VOICE_COACH_SCENARIO_LABELS.hesitant,
+    description: "Karar veremeyen, çekingen müşteriyi empatiyle yönlendir ve harekete geçir.",
+    icon: Handshake,
+    difficulty: "Orta",
     accent: {
       chip: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
       gradient: "from-emerald-500/20 via-teal-400/10 to-transparent",
