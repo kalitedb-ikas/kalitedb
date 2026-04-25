@@ -1,4 +1,9 @@
 {
+  "apphosting": {
+    "backendId": "kalitedb-api",
+    "rootDir": "apps/api",
+    "ignore": ["node_modules", ".git", "**/.next", "**/dist", "**/.turbo"]
+  },
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

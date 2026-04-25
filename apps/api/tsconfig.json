@@ -5,6 +5,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@kalitedb/shared": [
+        "./src/_shared/index.ts"
       ]
     },
     "plugins": [
