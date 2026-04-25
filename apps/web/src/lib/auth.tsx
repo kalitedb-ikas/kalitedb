@@ -28,6 +28,16 @@ const DEV_TOKEN_KEY = "kalitedb.devToken";
 /** Firebase ID tokens expire after 60 min — refresh 5 min early. */
 const TOKEN_REFRESH_INTERVAL_MS = 55 * 60 * 1000;
 
+const ALLOWED_EMAIL_DOMAINS = ["ikas.com"];
+const ALLOWED_DOMAIN_ERROR_MESSAGE =
+  "Bu uygulama yalnızca @ikas.com Google hesaplarına açık. Lütfen iş hesabınızla giriş yapın.";
+
+function isAllowedEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const lower = email.toLowerCase();
+  return ALLOWED_EMAIL_DOMAINS.some((domain) => lower.endsWith(`@${domain}`));
+}
+
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
@@ -67,11 +77,30 @@ export function AuthProvider(props: { children: ReactNode }) {
       setLoading(false);
       return;
     }
+    const authInstance = firebaseAuth;
 
-    // Redirect dönüşünü yakala (canlıda signInWithRedirect kullanıldığında)
-    getRedirectResult(firebaseAuth).catch(() => {});
+    // Redirect dönüşünü yakala (canlıda signInWithRedirect kullanıldığında).
+    // Eğer dönen kullanıcı izinli domain dışındaysa anında oturumu kapat.
+    getRedirectResult(authInstance)
+      .then(async (result) => {
+        if (result?.user && !isAllowedEmail(result.user.email)) {
+          await signOut(authInstance);
+          window.alert(ALLOWED_DOMAIN_ERROR_MESSAGE);
+        }
+      })
+      .catch(() => {});
 
-    const unsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
+    const unsubscribe = onAuthStateChanged(authInstance, async (nextUser) => {
+      // Defansif: bir şekilde izinli olmayan bir oturum oluştuysa hemen kapat.
+      if (nextUser && !isAllowedEmail(nextUser.email)) {
+        await signOut(authInstance);
+        setUser(null);
+        setToken(null);
+        clearRefreshTimer();
+        setLoading(false);
+        return;
+      }
+
       const wasLoggedOut = !user;
       setUser(nextUser);
       if (nextUser) {
@@ -112,8 +141,9 @@ export function AuthProvider(props: { children: ReactNode }) {
         }
 
         // Popup dene — COOP yüzünden patlarsa redirect'e düş.
+        let result;
         try {
-          await signInWithPopup(firebaseAuth, googleProvider);
+          result = await signInWithPopup(firebaseAuth, googleProvider);
         } catch (err: any) {
           if (err?.code === "auth/popup-blocked" ||
               err?.code === "auth/popup-closed-by-user" ||
@@ -124,6 +154,11 @@ export function AuthProvider(props: { children: ReactNode }) {
             return;
           }
           throw err;
+        }
+
+        if (!isAllowedEmail(result.user.email)) {
+          await signOut(firebaseAuth);
+          throw new Error(ALLOWED_DOMAIN_ERROR_MESSAGE);
         }
       },
       loginAsDev(role) {

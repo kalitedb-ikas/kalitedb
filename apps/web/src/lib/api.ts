@@ -21,7 +21,11 @@ import type {
   VoiceCoachCoaching,
   VoiceCoachScenario,
   VoiceCoachSession,
-  VoiceCoachTranscriptTurn
+  VoiceCoachTranscriptTurn,
+  RoleplayScenario,
+  RoleplayScenarioInput,
+  RoleplayKnowledgeDoc,
+  RoleplayKnowledgeDocInput
 } from "@kalitedb/shared";
 import {
   agentMetricSchema,
@@ -2142,7 +2146,7 @@ export const api = {
   },
   async requestVoiceCoachSignedUrl(
     token: string | null,
-    scenario: VoiceCoachScenario
+    scenarioId: string
   ): Promise<{
     signedUrl: string;
     sessionId: string;
@@ -2152,7 +2156,7 @@ export const api = {
     return request("/api/voice-coach/signed-url", {
       token,
       method: "POST",
-      body: { scenario }
+      body: { scenarioId }
     });
   },
   async finalizeVoiceCoachSession(
@@ -2185,6 +2189,73 @@ export const api = {
     return request<VoiceCoachSession>(
       `/api/voice-coach/sessions/${encodeURIComponent(sessionId)}`,
       { token }
+    );
+  },
+  async listRoleplayScenarios(token: string | null): Promise<RoleplayScenario[]> {
+    return request<RoleplayScenario[]>("/api/roleplay/scenarios", { token });
+  },
+  async createRoleplayScenario(
+    token: string | null,
+    input: RoleplayScenarioInput
+  ): Promise<RoleplayScenario> {
+    return request<RoleplayScenario>("/api/roleplay/scenarios", {
+      token,
+      method: "POST",
+      body: input
+    });
+  },
+  async updateRoleplayScenario(
+    token: string | null,
+    scenarioId: string,
+    patch: Partial<RoleplayScenarioInput>
+  ): Promise<RoleplayScenario> {
+    return request<RoleplayScenario>(
+      `/api/roleplay/scenarios/${encodeURIComponent(scenarioId)}`,
+      { token, method: "PATCH", body: patch }
+    );
+  },
+  async deleteRoleplayScenario(token: string | null, scenarioId: string): Promise<void> {
+    await request<{ deleted: true }>(
+      `/api/roleplay/scenarios/${encodeURIComponent(scenarioId)}`,
+      { token, method: "DELETE" }
+    );
+  },
+  async listRoleplayKnowledgeDocs(token: string | null): Promise<RoleplayKnowledgeDoc[]> {
+    return request<RoleplayKnowledgeDoc[]>("/api/roleplay/knowledge-docs", { token });
+  },
+  async createRoleplayKnowledgeDoc(
+    token: string | null,
+    input: RoleplayKnowledgeDocInput
+  ): Promise<RoleplayKnowledgeDoc> {
+    return request<RoleplayKnowledgeDoc>("/api/roleplay/knowledge-docs", {
+      token,
+      method: "POST",
+      body: input
+    });
+  },
+  async updateRoleplayKnowledgeDoc(
+    token: string | null,
+    docId: string,
+    patch: Partial<RoleplayKnowledgeDocInput>
+  ): Promise<RoleplayKnowledgeDoc> {
+    return request<RoleplayKnowledgeDoc>(
+      `/api/roleplay/knowledge-docs/${encodeURIComponent(docId)}`,
+      { token, method: "PATCH", body: patch }
+    );
+  },
+  async deleteRoleplayKnowledgeDoc(token: string | null, docId: string): Promise<void> {
+    await request<{ deleted: true }>(
+      `/api/roleplay/knowledge-docs/${encodeURIComponent(docId)}`,
+      { token, method: "DELETE" }
+    );
+  },
+  async syncRoleplayKnowledgeDoc(
+    token: string | null,
+    docId: string
+  ): Promise<RoleplayKnowledgeDoc> {
+    return request<RoleplayKnowledgeDoc>(
+      `/api/roleplay/knowledge-docs/${encodeURIComponent(docId)}/sync`,
+      { token, method: "POST", body: {} }
     );
   }
 };

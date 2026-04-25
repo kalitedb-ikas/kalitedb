@@ -12,6 +12,10 @@ service cloud.firestore {
       return isAuthed() && request.auth.token.role == 'admin';
     }
 
+    function canManageRoleplayContent() {
+      return isAuthed() && request.auth.token.role in ['admin', 'roleplay_admin'];
+    }
+
     // ─── Koleksiyon kuralları ────────────────────────────────────────────────
     // Tüm rollere admin yetkisi verildi — giriş yapan herkes okuyabilir/yazabilir.
     // Yalnızca userRoles ve users koleksiyonları admin ile sınırlandırıldı
@@ -57,6 +61,18 @@ service cloud.firestore {
     match /voiceCoachSessions/{sessionId} {
       allow get, list: if isAuthed();
       allow create, update, delete: if isAuthed();
+    }
+
+    // Rol-play senaryoları (CMS) — herkes okur, yalnızca roleplay_admin/admin yazar
+    match /roleplayScenarios/{scenarioId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canManageRoleplayContent();
+    }
+
+    // Rol-play bilgi bankası dokümanları (ikas hakkında bilgiler)
+    match /roleplayKnowledgeDocs/{docId} {
+      allow get, list: if isAuthed();
+      allow create, update, delete: if canManageRoleplayContent();
     }
 
     // Değerlendirme soruları (satış)

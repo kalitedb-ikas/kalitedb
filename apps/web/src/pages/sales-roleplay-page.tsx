@@ -17,7 +17,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   VOICE_COACH_SCENARIO_LABELS,
-  type VoiceCoachScenario,
+  type RoleplayScenario,
   type VoiceCoachSession,
   type VoiceCoachTranscriptTurn
 } from "@kalitedb/shared";
@@ -26,12 +26,8 @@ import { PageHeader, SurfaceCard } from "@kalitedb/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
-type ScenarioMeta = {
-  key: VoiceCoachScenario;
-  label: string;
-  description: string;
+type ScenarioVisual = {
   icon: typeof Gauge;
-  difficulty: "Kolay" | "Orta" | "Zor";
   accent: {
     chip: string;
     gradient: string;
@@ -41,13 +37,18 @@ type ScenarioMeta = {
   };
 };
 
-const SCENARIOS: ScenarioMeta[] = [
-  {
-    key: "competitor_compare",
-    label: VOICE_COACH_SCENARIO_LABELS.competitor_compare,
-    description: "Ticimax/Shopify ile karşılaştırma yapan analitik müşteriye somut argüman üret.",
+type ScenarioMeta = ScenarioVisual & {
+  scenarioId: string;
+  slug: string;
+  label: string;
+  description: string;
+  difficulty: "Kolay" | "Orta" | "Zor";
+};
+
+// Görsel preset'ler — slug bazında. Yeni senaryolar için neutral fallback kullanılır.
+const VISUAL_PRESETS: Record<string, ScenarioVisual> = {
+  competitor_compare: {
     icon: Target,
-    difficulty: "Zor",
     accent: {
       chip: "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
       gradient: "from-rose-500/20 via-orange-400/10 to-transparent",
@@ -56,12 +57,8 @@ const SCENARIOS: ScenarioMeta[] = [
       icon: "bg-rose-500 text-white"
     }
   },
-  {
-    key: "price_roi",
-    label: VOICE_COACH_SCENARIO_LABELS.price_roi,
-    description: "Fiyat, gizli maliyet ve ROI sorularına karşı net rakamlarla cevap ver.",
+  price_roi: {
     icon: Gauge,
-    difficulty: "Zor",
     accent: {
       chip: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
       gradient: "from-amber-500/20 via-yellow-400/10 to-transparent",
@@ -70,12 +67,8 @@ const SCENARIOS: ScenarioMeta[] = [
       icon: "bg-amber-500 text-white"
     }
   },
-  {
-    key: "technical",
-    label: VOICE_COACH_SCENARIO_LABELS.technical,
-    description: "API, entegrasyon ve ölçeklenebilirlik soran teknik müşteriyi yönet.",
+  technical: {
     icon: Search,
-    difficulty: "Zor",
     accent: {
       chip: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300",
       gradient: "from-indigo-500/20 via-sky-400/10 to-transparent",
@@ -84,12 +77,8 @@ const SCENARIOS: ScenarioMeta[] = [
       icon: "bg-indigo-500 text-white"
     }
   },
-  {
-    key: "hesitant",
-    label: VOICE_COACH_SCENARIO_LABELS.hesitant,
-    description: "Karar veremeyen, çekingen müşteriyi empatiyle yönlendir ve harekete geçir.",
+  hesitant: {
     icon: Handshake,
-    difficulty: "Orta",
     accent: {
       chip: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
       gradient: "from-emerald-500/20 via-teal-400/10 to-transparent",
@@ -98,9 +87,47 @@ const SCENARIOS: ScenarioMeta[] = [
       icon: "bg-emerald-500 text-white"
     }
   }
-];
+};
 
-const SCENARIO_MAP = Object.fromEntries(SCENARIOS.map((s) => [s.key, s])) as Record<VoiceCoachScenario, ScenarioMeta>;
+const DEFAULT_VISUAL: ScenarioVisual = {
+  icon: Mic,
+  accent: {
+    chip: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    gradient: "from-slate-500/15 via-slate-400/10 to-transparent",
+    ring: "ring-slate-200 dark:ring-slate-700",
+    glow: "shadow-[0_28px_80px_rgba(15,23,42,0.16)]",
+    icon: "bg-slate-700 text-white"
+  }
+};
+
+function getVisualForSlug(slug: string): ScenarioVisual {
+  return VISUAL_PRESETS[slug] ?? DEFAULT_VISUAL;
+}
+
+function buildScenarioMeta(scenario: RoleplayScenario): ScenarioMeta {
+  return {
+    ...getVisualForSlug(scenario.slug),
+    scenarioId: scenario.id,
+    slug: scenario.slug,
+    label: scenario.title,
+    description: scenario.description,
+    difficulty: scenario.difficulty
+  };
+}
+
+function buildSessionMeta(slug: string, scenarios: RoleplayScenario[]): ScenarioMeta {
+  const live = scenarios.find((s) => s.slug === slug);
+  if (live) return buildScenarioMeta(live);
+  const fallbackLabel = VOICE_COACH_SCENARIO_LABELS[slug] ?? slug;
+  return {
+    ...getVisualForSlug(slug),
+    scenarioId: "",
+    slug,
+    label: fallbackLabel,
+    description: "",
+    difficulty: "Orta"
+  };
+}
 
 function formatDuration(sec: number | undefined) {
   if (sec === undefined || Number.isNaN(sec)) return "—";
@@ -261,7 +288,8 @@ function Waveform({ getBytes, active, variant }: { getBytes: () => Uint8Array; a
 
 type RoleplayActiveState = {
   sessionId: string;
-  scenario: VoiceCoachScenario;
+  scenarioId: string;
+  scenarioSlug: string;
   startedAt: number;
 };
 
@@ -269,7 +297,7 @@ function RoleplayStudio() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const [active, setActive] = useState<RoleplayActiveState | null>(null);
-  const [pendingScenario, setPendingScenario] = useState<VoiceCoachScenario | null>(null);
+  const [pendingScenarioId, setPendingScenarioId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -302,10 +330,10 @@ function RoleplayStudio() {
   });
 
   const startMutation = useMutation({
-    mutationFn: async (scenario: VoiceCoachScenario) => {
-      setPendingScenario(scenario);
+    mutationFn: async (scenario: RoleplayScenario) => {
+      setPendingScenarioId(scenario.id);
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const res = await api.requestVoiceCoachSignedUrl(auth.token, scenario);
+      const res = await api.requestVoiceCoachSignedUrl(auth.token, scenario.id);
       transcriptRef.current = [];
       conversationIdRef.current = undefined;
       conversation.startSession({
@@ -315,11 +343,16 @@ function RoleplayStudio() {
       return { scenario, sessionId: res.sessionId };
     },
     onSuccess: ({ scenario, sessionId }) => {
-      setActive({ sessionId, scenario, startedAt: Date.now() });
-      setPendingScenario(null);
+      setActive({
+        sessionId,
+        scenarioId: scenario.id,
+        scenarioSlug: scenario.slug,
+        startedAt: Date.now()
+      });
+      setPendingScenarioId(null);
     },
     onError: (err: unknown) => {
-      setPendingScenario(null);
+      setPendingScenarioId(null);
       setErrorMessage(err instanceof Error ? err.message : "Oturum başlatılamadı.");
     }
   });
@@ -358,6 +391,18 @@ function RoleplayStudio() {
     staleTime: 30 * 1000
   });
 
+  const scenariosQuery = useQuery({
+    queryKey: ["roleplay-scenarios", auth.token],
+    queryFn: () => api.listRoleplayScenarios(auth.token),
+    enabled: Boolean(auth.token),
+    staleTime: 5 * 60 * 1000
+  });
+  const scenarios = useMemo(
+    () => (scenariosQuery.data ?? []).filter((s) => s.active),
+    [scenariosQuery.data]
+  );
+  const allScenarios = scenariosQuery.data ?? [];
+
   const entitlementQuery = useQuery({
     queryKey: ["voice-coach-entitlement", auth.token],
     queryFn: () => api.getVoiceCoachEntitlement(auth.token),
@@ -384,7 +429,7 @@ function RoleplayStudio() {
   }, [sessions]);
 
   const elapsedSec = active ? Math.floor((Date.now() - active.startedAt) / 1000) : 0;
-  const activeMeta = active ? SCENARIO_MAP[active.scenario] : null;
+  const activeMeta = active ? buildSessionMeta(active.scenarioSlug, allScenarios) : null;
 
   return (
     <div className="grid gap-6">
@@ -433,48 +478,57 @@ function RoleplayStudio() {
               <p>{gateReason ?? "Ses kredisi sınırlı olduğu için görüşme başlatma şu an kapalı."}</p>
             </div>
           ) : null}
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {SCENARIOS.map((s) => {
-              const Icon = s.icon;
-              const isPending = pendingScenario === s.key && startMutation.isPending;
-              const disabled = startMutation.isPending || !canStart;
-              return (
-                <button
-                  className={`group relative overflow-hidden rounded-[14px] border border-slate-200 bg-white p-0 text-left transition duration-300 hover:-translate-y-1 hover:border-transparent hover:${s.accent.glow} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 dark:border-slate-700 dark:bg-slate-900`}
-                  disabled={disabled}
-                  key={s.key}
-                  onClick={() => startMutation.mutate(s.key)}
-                  type="button"
-                >
-                  <div className={`absolute inset-0 bg-gradient-to-br opacity-0 transition duration-300 group-hover:opacity-100 ${s.accent.gradient}`} />
-                  <div className="relative grid gap-4 p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className={`flex size-11 items-center justify-center rounded-[12px] ${s.accent.icon} shadow-[0_12px_28px_rgba(15,23,42,0.18)]`}>
-                        <Icon size={20} strokeWidth={1.9} />
+          {scenariosQuery.isPending ? (
+            <p className="text-sm text-slate-500">Senaryolar yükleniyor…</p>
+          ) : scenarios.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              Henüz aktif senaryo yok. Bir yöneticinin "Satış Yönetimi → Senaryolar" üzerinden senaryo eklemesi gerekiyor.
+            </p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {scenarios.map((scenario) => {
+                const meta = buildScenarioMeta(scenario);
+                const Icon = meta.icon;
+                const isPending = pendingScenarioId === scenario.id && startMutation.isPending;
+                const disabled = startMutation.isPending || !canStart;
+                return (
+                  <button
+                    className={`group relative overflow-hidden rounded-[14px] border border-slate-200 bg-white p-0 text-left transition duration-300 hover:-translate-y-1 hover:border-transparent hover:${meta.accent.glow} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 dark:border-slate-700 dark:bg-slate-900`}
+                    disabled={disabled}
+                    key={scenario.id}
+                    onClick={() => startMutation.mutate(scenario)}
+                    type="button"
+                  >
+                    <div className={`absolute inset-0 bg-gradient-to-br opacity-0 transition duration-300 group-hover:opacity-100 ${meta.accent.gradient}`} />
+                    <div className="relative grid gap-4 p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className={`flex size-11 items-center justify-center rounded-[12px] ${meta.accent.icon} shadow-[0_12px_28px_rgba(15,23,42,0.18)]`}>
+                          <Icon size={20} strokeWidth={1.9} />
+                        </div>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${meta.accent.chip}`}>
+                          {meta.difficulty}
+                        </span>
                       </div>
-                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${s.accent.chip}`}>
-                        {s.difficulty}
-                      </span>
+                      <div>
+                        <p className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">{meta.label}</p>
+                        <p className="mt-1.5 text-sm leading-6 text-slate-600 dark:text-slate-400">{meta.description}</p>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">~3-4 dk</span>
+                        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-900 transition group-hover:translate-x-0.5 dark:text-slate-100">
+                          {!canStart ? (
+                            <><Lock size={12} strokeWidth={2} /> Kilitli</>
+                          ) : isPending ? "Başlatılıyor…" : (
+                            <>Başlat <Play fill="currentColor" size={12} strokeWidth={0} /></>
+                          )}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">{s.label}</p>
-                      <p className="mt-1.5 text-sm leading-6 text-slate-600 dark:text-slate-400">{s.description}</p>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">~3-4 dk</span>
-                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-900 transition group-hover:translate-x-0.5 dark:text-slate-100">
-                        {!canStart ? (
-                          <><Lock size={12} strokeWidth={2} /> Kilitli</>
-                        ) : isPending ? "Başlatılıyor…" : (
-                          <>Başlat <Play fill="currentColor" size={12} strokeWidth={0} /></>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </SurfaceCard>
       )}
 
@@ -490,6 +544,7 @@ function RoleplayStudio() {
                 isSelected={s.sessionId === selectedSessionId}
                 key={s.sessionId}
                 onSelect={() => setSelectedSessionId(s.sessionId === selectedSessionId ? null : s.sessionId)}
+                scenarios={allScenarios}
                 session={s}
               />
             ))}
@@ -497,7 +552,7 @@ function RoleplayStudio() {
         )}
       </SurfaceCard>
 
-      {selectedSession ? <DetailPanel session={selectedSession} /> : null}
+      {selectedSession ? <DetailPanel scenarios={allScenarios} session={selectedSession} /> : null}
     </div>
   );
 }
@@ -641,13 +696,15 @@ function ActiveSessionPanel({
 function SessionCard({
   isSelected,
   onSelect,
+  scenarios,
   session
 }: {
   isSelected: boolean;
   onSelect: () => void;
+  scenarios: RoleplayScenario[];
   session: VoiceCoachSession;
 }) {
-  const meta = SCENARIO_MAP[session.scenario];
+  const meta = buildSessionMeta(session.scenario, scenarios);
   const Icon = meta.icon;
   const score = session.coaching?.overallScore;
   const statusLabel = session.status === "completed" ? "Tamamlandı" : session.status === "failed" ? "Hata" : "Sürüyor";
@@ -708,8 +765,14 @@ function SessionCard({
   );
 }
 
-function DetailPanel({ session }: { session: VoiceCoachSession }) {
-  const meta = SCENARIO_MAP[session.scenario];
+function DetailPanel({
+  scenarios,
+  session
+}: {
+  scenarios: RoleplayScenario[];
+  session: VoiceCoachSession;
+}) {
+  const meta = buildSessionMeta(session.scenario, scenarios);
   const Icon = meta.icon;
   const coaching = session.coaching;
 
