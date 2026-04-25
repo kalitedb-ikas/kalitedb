@@ -28,10 +28,11 @@ export function parseAllowedEmails(): string[] {
 }
 
 export function canStartSession(user: { email: string; role: string }): { allowed: boolean; reason?: string } {
+  if (user.role === "admin") return { allowed: true };
+
   const allowed = parseAllowedEmails();
   const normalized = user.email.trim().toLocaleLowerCase("tr-TR");
   if (allowed.length === 0) {
-    if (user.role === "admin") return { allowed: true };
     return {
       allowed: false,
       reason: "Ses kredisi sınırlı — şu an yalnızca admin rolü görüşme başlatabilir."
