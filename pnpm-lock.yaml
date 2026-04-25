@@ -65,15 +65,18 @@ importers:
       '@elevenlabs/elevenlabs-js':
         specifier: ^2.44.0
         version: 2.44.0
-      '@kalitedb/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       firebase-admin:
         specifier: ^13.4.0
         version: 13.7.0
+      js-sha256:
+        specifier: ^0.11.1
+        version: 0.11.1
       next:
         specifier: ^15.5.2
         version: 15.5.12(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      papaparse:
+        specifier: ^5.5.3
+        version: 5.5.3
       react:
         specifier: ^19.1.1
         version: 19.2.4
