@@ -1,0 +1,44 @@
+runConfig:
+  cpu: 1
+  memoryMiB: 512
+  maxInstances: 3
+  minInstances: 0
+  concurrency: 80
+
+env:
+  - variable: APP_DATA_DRIVER
+    value: auto
+    availability:
+      - RUNTIME
+  - variable: APP_AUTH_BYPASS
+    value: "false"
+    availability:
+      - RUNTIME
+  - variable: APP_ALLOW_FIRST_ADMIN_BOOTSTRAP
+    value: "false"
+    availability:
+      - RUNTIME
+  - variable: APP_WEB_ORIGIN
+    value: https://kalitedb-ikas.github.io
+    availability:
+      - RUNTIME
+  - variable: FIREBASE_PROJECT_ID
+    value: kalitedb-5a7eb
+    availability:
+      - RUNTIME
+  - variable: FIREBASE_STORAGE_BUCKET
+    value: kalitedb-5a7eb.firebasestorage.app
+    availability:
+      - RUNTIME
+  - variable: ELEVENLABS_AGENT_ID
+    value: agent_5101kpzzhbcxf2dbhwpwaa2wa6v4
+    availability:
+      - RUNTIME
+  - variable: ELEVENLABS_ALLOWED_EMAILS
+    value: zafer.coban@ikas.com
+    availability:
+      - RUNTIME
+  - variable: ELEVENLABS_API_KEY
+    secret: ELEVENLABS_API_KEY
+    availability:
+      - RUNTIME
