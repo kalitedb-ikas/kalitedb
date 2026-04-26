@@ -2,9 +2,6 @@ import type {
   AgentMetric,
   AuditMetric,
   Department,
-  Plan,
-  PlanLimits,
-  PlanUsage,
   Representative,
   Role,
   RoleplayMetric,
@@ -35,8 +32,6 @@ import {
   auditMetricSchema,
   buildDashboardSnapshot,
   DEFAULT_THRESHOLDS as DEFAULT_THRESHOLD_MAP,
-  PLANS,
-  ZERO_PLAN_USAGE,
   questionPerformanceSchema,
   qtManualEntrySchema,
   qtMetricSchema,
@@ -73,9 +68,6 @@ export type AuthenticatedUser = {
   displayName: string;
   role: Role;
   roles?: UserRoleEntry[];
-  plan?: Plan;
-  limits?: PlanLimits;
-  usage?: PlanUsage;
 };
 
 type ResetDatasetResponse = {
@@ -252,10 +244,7 @@ async function getMeFromFirebase(): Promise<AuthenticatedUser> {
     uid: currentUser.uid,
     email: currentUser.email!,
     displayName: currentUser.displayName ?? currentUser.email!,
-    role,
-    plan: "starter",
-    limits: PLANS.starter,
-    usage: ZERO_PLAN_USAGE
+    role
   };
 }
 
