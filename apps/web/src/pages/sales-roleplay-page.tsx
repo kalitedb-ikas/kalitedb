@@ -11,10 +11,11 @@ import {
   Play,
   Search,
   Target,
+  Trash2,
   TrendingUp,
   Zap
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   VOICE_COACH_SCENARIO_LABELS,
   type RoleplayScenario,
@@ -293,6 +294,8 @@ type RoleplayActiveState = {
   startedAt: number;
 };
 
+const SUPER_ADMIN_EMAIL = "zafer.coban@ikas.com";
+
 function RoleplayStudio() {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -301,6 +304,7 @@ function RoleplayStudio() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const canDeleteSessions = auth.user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
 
   const transcriptRef = useRef<VoiceCoachTranscriptTurn[]>([]);
   const conversationIdRef = useRef<string | undefined>(undefined);
@@ -373,6 +377,27 @@ function RoleplayStudio() {
       void queryClient.invalidateQueries({ queryKey: ["voice-coach-sessions"] });
     }
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      await api.deleteVoiceCoachSession(auth.token, sessionId);
+      return sessionId;
+    },
+    onSuccess: (deletedId) => {
+      setSelectedSessionId((current) => (current === deletedId ? null : current));
+      void queryClient.invalidateQueries({ queryKey: ["voice-coach-sessions"] });
+    },
+    onError: (err: unknown) => {
+      setErrorMessage(err instanceof Error ? err.message : "Oturum silinemedi.");
+    }
+  });
+
+  const handleDeleteSession = (sessionId: string, label: string) => {
+    if (deleteMutation.isPending) return;
+    const ok = window.confirm(`"${label}" oturumunu kalıcı olarak silmek istiyor musun? Ses kaydı ve transkript geri getirilemez.`);
+    if (!ok) return;
+    deleteMutation.mutate(sessionId);
+  };
 
   const stop = () => {
     conversation.endSession();
@@ -541,8 +566,11 @@ function RoleplayStudio() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {sessions.map((s) => (
               <SessionCard
+                canDelete={canDeleteSessions}
+                isDeleting={deleteMutation.isPending && deleteMutation.variables === s.sessionId}
                 isSelected={s.sessionId === selectedSessionId}
                 key={s.sessionId}
+                onDelete={(label) => handleDeleteSession(s.sessionId, label)}
                 onSelect={() => setSelectedSessionId(s.sessionId === selectedSessionId ? null : s.sessionId)}
                 scenarios={allScenarios}
                 session={s}
@@ -694,12 +722,18 @@ function ActiveSessionPanel({
 }
 
 function SessionCard({
+  canDelete,
+  isDeleting,
   isSelected,
+  onDelete,
   onSelect,
   scenarios,
   session
 }: {
+  canDelete: boolean;
+  isDeleting: boolean;
   isSelected: boolean;
+  onDelete: (label: string) => void;
   onSelect: () => void;
   scenarios: RoleplayScenario[];
   session: VoiceCoachSession;
@@ -714,17 +748,42 @@ function SessionCard({
       ? "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
       : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300";
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect();
+    }
+  };
+
   return (
-    <button
-      className={`group relative overflow-hidden rounded-[14px] border bg-white p-0 text-left transition duration-300 hover:-translate-y-0.5 dark:bg-slate-900 ${
+    <div
+      aria-pressed={isSelected}
+      className={`group relative cursor-pointer overflow-hidden rounded-[14px] border bg-white p-0 text-left transition duration-300 hover:-translate-y-0.5 dark:bg-slate-900 ${
         isSelected
           ? "border-sky-400 shadow-[0_18px_40px_rgba(14,165,233,0.18)] dark:border-sky-500"
           : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
       }`}
       onClick={onSelect}
-      type="button"
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
     >
       <div className={`absolute inset-0 bg-gradient-to-br opacity-0 transition duration-300 group-hover:opacity-100 ${meta.accent.gradient}`} />
+      {canDelete ? (
+        <button
+          aria-label="Oturumu sil"
+          className="absolute right-3 top-3 z-10 inline-flex size-8 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-500 opacity-0 shadow-sm backdrop-blur transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-400 dark:hover:border-rose-700 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
+          disabled={isDeleting}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete(meta.label);
+          }}
+          title="Oturumu sil"
+          type="button"
+        >
+          <Trash2 size={14} strokeWidth={2} />
+        </button>
+      ) : null}
       <div className="relative grid gap-4 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -761,7 +820,7 @@ function SessionCard({
           ) : null}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
