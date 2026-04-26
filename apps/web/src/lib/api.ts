@@ -2191,6 +2191,12 @@ export const api = {
       { token }
     );
   },
+  async deleteVoiceCoachSession(token: string | null, sessionId: string): Promise<void> {
+    await request<{ deleted: true }>(
+      `/api/voice-coach/sessions/${encodeURIComponent(sessionId)}`,
+      { token, method: "DELETE" }
+    );
+  },
   async listRoleplayScenarios(token: string | null): Promise<RoleplayScenario[]> {
     return request<RoleplayScenario[]>("/api/roleplay/scenarios", { token });
   },
