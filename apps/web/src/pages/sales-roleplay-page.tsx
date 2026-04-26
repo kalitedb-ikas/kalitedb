@@ -1,6 +1,8 @@
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
+  CheckCircle2,
   Clock,
   Gauge,
   Handshake,
@@ -13,6 +15,7 @@ import {
   Target,
   Trash2,
   TrendingUp,
+  X,
   Zap
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
@@ -304,6 +307,8 @@ function RoleplayStudio() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ sessionId: string; label: string } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const canDeleteSessions = auth.user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
 
   const transcriptRef = useRef<VoiceCoachTranscriptTurn[]>([]);
@@ -385,19 +390,37 @@ function RoleplayStudio() {
     },
     onSuccess: (deletedId) => {
       setSelectedSessionId((current) => (current === deletedId ? null : current));
+      setPendingDelete(null);
+      setToastMessage("Oturum silindi.");
       void queryClient.invalidateQueries({ queryKey: ["voice-coach-sessions"] });
     },
     onError: (err: unknown) => {
+      setPendingDelete(null);
       setErrorMessage(err instanceof Error ? err.message : "Oturum silinemedi.");
     }
   });
 
   const handleDeleteSession = (sessionId: string, label: string) => {
     if (deleteMutation.isPending) return;
-    const ok = window.confirm(`"${label}" oturumunu kalıcı olarak silmek istiyor musun? Ses kaydı ve transkript geri getirilemez.`);
-    if (!ok) return;
-    deleteMutation.mutate(sessionId);
+    setPendingDelete({ sessionId, label });
   };
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), 2000);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  useEffect(() => {
+    if (!pendingDelete) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape" && !deleteMutation.isPending) {
+        setPendingDelete(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pendingDelete, deleteMutation.isPending]);
 
   const stop = () => {
     conversation.endSession();
@@ -581,6 +604,113 @@ function RoleplayStudio() {
       </SurfaceCard>
 
       {selectedSession ? <DetailPanel scenarios={allScenarios} session={selectedSession} /> : null}
+
+      {pendingDelete ? (
+        <DeleteSessionDialog
+          isPending={deleteMutation.isPending}
+          label={pendingDelete.label}
+          onCancel={() => {
+            if (deleteMutation.isPending) return;
+            setPendingDelete(null);
+          }}
+          onConfirm={() => deleteMutation.mutate(pendingDelete.sessionId)}
+        />
+      ) : null}
+
+      <Toast message={toastMessage} />
+    </div>
+  );
+}
+
+function DeleteSessionDialog({
+  isPending,
+  label,
+  onCancel,
+  onConfirm
+}: {
+  isPending: boolean;
+  label: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      aria-labelledby="delete-session-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+      onClick={onCancel}
+      role="dialog"
+    >
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_40px_80px_rgba(2,6,23,0.45)] dark:border-slate-700 dark:bg-slate-900"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          aria-label="Kapat"
+          className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          disabled={isPending}
+          onClick={onCancel}
+          type="button"
+        >
+          <X size={18} strokeWidth={2} />
+        </button>
+
+        <div className="grid gap-4 p-6">
+          <div className="flex size-12 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300">
+            <AlertTriangle size={22} strokeWidth={2} />
+          </div>
+          <div className="grid gap-1.5">
+            <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100" id="delete-session-title">
+              Oturumu sil?
+            </h3>
+            <p className="text-sm leading-6 text-slate-600 dark:text-slate-400">
+              <span className="font-medium text-slate-900 dark:text-slate-200">"{label}"</span>{" "}
+              oturumu kalıcı olarak silinecek. Ses kaydı ve transkript geri getirilemez.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40">
+          <button
+            className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            disabled={isPending}
+            onClick={onCancel}
+            type="button"
+          >
+            Vazgeç
+          </button>
+          <button
+            className="inline-flex min-h-9 items-center gap-2 rounded-full bg-rose-600 px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(244,63,94,0.35)] transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isPending}
+            onClick={onConfirm}
+            type="button"
+          >
+            <Trash2 size={14} strokeWidth={2} />
+            {isPending ? "Siliniyor…" : "Evet, sil"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Toast({ message }: { message: string | null }) {
+  return (
+    <div
+      aria-live="polite"
+      className={`pointer-events-none fixed bottom-6 right-6 z-50 transition duration-300 ease-out ${
+        message ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0"
+      }`}
+      role="status"
+    >
+      {message ? (
+        <div className="flex items-center gap-3 rounded-full border border-emerald-200 bg-white px-4 py-2.5 shadow-[0_18px_40px_rgba(16,185,129,0.25)] dark:border-emerald-900/60 dark:bg-slate-900">
+          <span className="flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white">
+            <CheckCircle2 size={16} strokeWidth={2.4} />
+          </span>
+          <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{message}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
