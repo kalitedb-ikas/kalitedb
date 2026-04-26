@@ -7,7 +7,6 @@ import {
 import { canManageRoleplayContent, requireAuth } from "@/src/lib/auth";
 import { logAudit } from "@/src/lib/audit-log";
 import { getFirebaseAdminDb } from "@/src/lib/firebase-admin";
-import { assertScenarioLimit } from "@/src/lib/plan";
 import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
 
 export const OPTIONS = optionsResponse;
@@ -38,8 +37,6 @@ export async function POST(request: Request) {
     if (!canManageRoleplayContent(user)) {
       throw new ApiError(403, "Senaryo eklemek için role-play yöneticisi olmalısın.");
     }
-
-    await assertScenarioLimit();
 
     const body = await request.json();
     const input = roleplayScenarioInputSchema.parse(body);

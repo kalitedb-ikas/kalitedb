@@ -9,8 +9,6 @@ import { SurfaceCard } from "@kalitedb/ui";
 
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { usePlan } from "../lib/plan";
-import { LimitNotice } from "./plan";
 
 const EMPTY_FORM: RoleplayScenarioInput = {
   slug: "",
@@ -37,7 +35,6 @@ function slugify(value: string): string {
 export function RoleplayScenariosAdmin() {
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const { isAtScenarioLimit, limits, usage } = usePlan();
   const [editing, setEditing] = useState<RoleplayScenario | null>(null);
   const [creating, setCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -86,24 +83,15 @@ export function RoleplayScenariosAdmin() {
         title="Role-Play Senaryoları"
         description="Temsilcilerin kullanacağı senaryoları yönet. Aktif olanlar /sales/roleplay sayfasında görünür."
       >
-        <div className="mb-4 space-y-3">
-          <LimitNotice resource="scenarios" />
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500">{scenarios.length} senaryo</p>
-            <button
-              className="inline-flex items-center gap-2 rounded-[10px] bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isAtScenarioLimit}
-              onClick={() => setCreating(true)}
-              title={
-                isAtScenarioLimit && limits.scenarios !== null
-                  ? `Plan limiti doldu (${usage.scenarioCount}/${limits.scenarios}) — yükselt.`
-                  : undefined
-              }
-              type="button"
-            >
-              <Plus size={14} /> Yeni senaryo
-            </button>
-          </div>
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-xs text-slate-500">{scenarios.length} senaryo</p>
+          <button
+            className="inline-flex items-center gap-2 rounded-[10px] bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            onClick={() => setCreating(true)}
+            type="button"
+          >
+            <Plus size={14} /> Yeni senaryo
+          </button>
         </div>
 
         {errorMessage ? (

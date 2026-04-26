@@ -5,7 +5,6 @@ import { requireAuth } from "@/src/lib/auth";
 import { logAudit } from "@/src/lib/audit-log";
 import { canStartSession, createSignedUrl } from "@/src/lib/elevenlabs";
 import { getFirebaseAdminDb } from "@/src/lib/firebase-admin";
-import { assertMonthlyMinuteQuota } from "@/src/lib/plan";
 import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
 
 export const OPTIONS = optionsResponse;
@@ -21,9 +20,6 @@ export async function POST(request: Request) {
     if (!entitlement.allowed) {
       throw new ApiError(403, entitlement.reason ?? "Bu işlem için yetkin yok.");
     }
-
-    await assertMonthlyMinuteQuota();
-
     const { scenarioId } = bodySchema.parse(await request.json());
 
     const db = getFirebaseAdminDb();
