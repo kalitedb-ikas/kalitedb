@@ -29,6 +29,8 @@ import { PageHeader, SurfaceCard } from "@kalitedb/ui";
 
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { usePlan } from "../lib/plan";
+import { LimitNotice } from "../components/plan";
 
 type ScenarioVisual = {
   icon: typeof Gauge;
@@ -302,6 +304,7 @@ const SUPER_ADMIN_EMAIL = "zafer.coban@ikas.com";
 function RoleplayStudio() {
   const auth = useAuth();
   const queryClient = useQueryClient();
+  const { isAtMinuteQuota } = usePlan();
   const [active, setActive] = useState<RoleplayActiveState | null>(null);
   const [pendingScenarioId, setPendingScenarioId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -520,6 +523,7 @@ function RoleplayStudio() {
         />
       ) : (
         <SurfaceCard title="Senaryo seç" description="Hangi satış durumunu pratik etmek istiyorsun?">
+          <LimitNotice className="mb-4" resource="minutes" />
           {!entitlementQuery.isPending && !canStart ? (
             <div className="mb-4 flex items-start gap-3 rounded-[10px] border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
               <Lock className="mt-0.5 shrink-0" size={16} strokeWidth={2} />
@@ -538,7 +542,7 @@ function RoleplayStudio() {
                 const meta = buildScenarioMeta(scenario);
                 const Icon = meta.icon;
                 const isPending = pendingScenarioId === scenario.id && startMutation.isPending;
-                const disabled = startMutation.isPending || !canStart;
+                const disabled = startMutation.isPending || !canStart || isAtMinuteQuota;
                 return (
                   <button
                     className={`group relative overflow-hidden rounded-[14px] border border-slate-200 bg-white p-0 text-left transition duration-300 hover:-translate-y-1 hover:border-transparent hover:${meta.accent.glow} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 dark:border-slate-700 dark:bg-slate-900`}

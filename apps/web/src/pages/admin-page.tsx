@@ -41,6 +41,8 @@ import { FancySelect } from "../components/fancy-select";
 import { RecordEditor } from "../components/record-editor";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
 import { useAuth } from "../lib/auth";
+import { usePlan } from "../lib/plan";
+import { LimitNotice } from "../components/plan";
 import { api, type AuthenticatedUser } from "../lib/api";
 import { firebaseDb } from "../lib/firebase";
 import {
@@ -185,6 +187,7 @@ function downloadCsvTemplate(datasetType: DatasetType) {
 export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] | undefined }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
+  const { isAtSeatLimit, limits, usage } = usePlan();
   const now = new Date();
   const isAdminUser = true;
   const [selectedSection, setSelectedSection] = useState<AdminSection>("periods");
@@ -1340,6 +1343,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                   variant="default"
                 >
                   <form className="grid gap-4" onSubmit={roleForm.handleSubmit((values) => roleMutation.mutate(values))}>
+                    {editingRoleEmail ? null : <LimitNotice resource="seats" />}
                     {editingRoleEmail ? (
                       <div className="rounded-[10px] border border-sky-200 dark:border-sky-700/40 bg-sky-50 dark:bg-sky-900/30 px-4 py-3 text-sm text-sky-800 dark:text-sky-400">
                         <span className="font-semibold">{editingRoleEmail}</span> için düzenleme modundasınız.
@@ -1407,7 +1411,12 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     <div className="flex flex-wrap gap-3">
                       <button
                         className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[10px] bg-slate-950 dark:bg-slate-700 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700/50"
-                        disabled={roleMutation.isPending}
+                        disabled={roleMutation.isPending || (!editingRoleEmail && isAtSeatLimit)}
+                        title={
+                          !editingRoleEmail && isAtSeatLimit && limits.seats !== null
+                            ? `Koltuk limiti doldu (${usage.seatCount}/${limits.seats}) — yükselt.`
+                            : undefined
+                        }
                         type="submit"
                       >
                         {roleMutation.isPending
