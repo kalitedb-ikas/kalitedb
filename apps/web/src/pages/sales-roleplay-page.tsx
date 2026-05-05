@@ -300,7 +300,9 @@ type RoleplayActiveState = {
 const SUPER_ADMIN_EMAILS = new Set([
   "zafer.coban@ikas.com",
   "cagrican.gumustepe@ikas.com",
-  "yavuz.yalcin@ikas.com"
+  "yavuz.yalcin@ikas.com",
+  "sercan.ari@ikas.com",
+  "baturay.cetinel@ikas.com"
 ]);
 
 function RoleplayStudio() {
