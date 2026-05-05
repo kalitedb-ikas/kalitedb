@@ -64,12 +64,16 @@ function pickFirst(items: DashboardMetricItem[]): DashboardMetricItem | undefine
 
 const FEATURED_LABEL_PATTERN = /m[uü]berra/i;
 
-export function applyTopRankPreference<T extends { label: string }>(items: T[]): T[] {
+export function applyTopRankPreference<T extends { label: string; value: unknown }>(items: T[]): T[] {
   const idx = items.findIndex((item) => FEATURED_LABEL_PATTERN.test(item.label));
   if (idx <= 0) return items;
+  const featured = items[idx];
+  if (!featured) return items;
+  const firstTiedIdx = items.findIndex((item) => item.value === featured.value);
+  if (firstTiedIdx < 0 || firstTiedIdx >= idx) return items;
   const result = [...items];
-  const [featured] = result.splice(idx, 1);
-  if (featured) result.unshift(featured);
+  result.splice(idx, 1);
+  result.splice(firstTiedIdx, 0, featured);
   return result;
 }
 
