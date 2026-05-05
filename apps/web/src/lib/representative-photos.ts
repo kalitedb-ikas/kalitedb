@@ -18,6 +18,7 @@ const REPRESENTATIVE_PHOTO_FILES = [
   "/representatives/burak-telli.png",
   "/representatives/burak-yegin.png",
   "/representatives/cagla-bebek.png",
+  "/representatives/cagrican-gumustepe.png",
   "/representatives/celal-semi-savci.png",
   "/representatives/cenk-benli.png",
   "/representatives/dilsad-gergin.png",
@@ -63,6 +64,7 @@ const REPRESENTATIVE_PHOTO_FILES = [
   "/representatives/ugurhan-ozkeles.png",
   "/representatives/umut-akbay.png",
   "/representatives/yaren-ece-kocak.png",
+  "/representatives/yavuz-yalcin.png",
   "/representatives/zafer-coban.png",
   "/representatives/isil-arslan.png"
 ] as const;
@@ -78,8 +80,12 @@ const REPRESENTATIVE_PHOTO_MAP: Record<string, string> = Object.fromEntries(
 const REPRESENTATIVE_DISPLAY_NAME_MAP: Record<string, string> = {
   [normalizeKey("baturay.cetinel")]: "Baturay Çetinel",
   [normalizeKey("baturay.cetinel@ikas.com")]: "Baturay Çetinel",
+  [normalizeKey("cagrican.gumustepe")]: "Çağrıcan Gümüştepe",
+  [normalizeKey("cagrican.gumustepe@ikas.com")]: "Çağrıcan Gümüştepe",
   [normalizeKey("sercan.ari")]: "Sercan Arı",
   [normalizeKey("sercan.ari@ikas.com")]: "Sercan Arı",
+  [normalizeKey("yavuz.yalcin")]: "Yavuz Yalçın",
+  [normalizeKey("yavuz.yalcin@ikas.com")]: "Yavuz Yalçın",
   [normalizeKey("zafer.coban")]: "Zafer Çoban",
   [normalizeKey("zafer.coban@ikas.com")]: "Zafer Çoban"
 };
