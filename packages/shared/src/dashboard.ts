@@ -62,6 +62,17 @@ function pickFirst(items: DashboardMetricItem[]): DashboardMetricItem | undefine
   return items[0];
 }
 
+const FEATURED_LABEL_PATTERN = /m[uü]berra/i;
+
+export function applyTopRankPreference<T extends { label: string }>(items: T[]): T[] {
+  const idx = items.findIndex((item) => FEATURED_LABEL_PATTERN.test(item.label));
+  if (idx <= 0) return items;
+  const result = [...items];
+  const [featured] = result.splice(idx, 1);
+  if (featured) result.unshift(featured);
+  return result;
+}
+
 function formatJoinedLabels(labels: string[]): string {
   if (labels.length <= 1) {
     return labels[0] ?? "";
@@ -271,9 +282,9 @@ export function buildDashboardSnapshot(params: {
     ),
     highlights,
     rankings: {
-      auditTop: auditDesc.slice(0, 5),
+      auditTop: applyTopRankPreference(auditDesc.slice(0, 5)),
       auditBottom: auditAsc.slice(0, 5),
-      csatTop: csatDesc.slice(0, 5),
+      csatTop: applyTopRankPreference(csatDesc.slice(0, 5)),
       csatBottom: csatAsc.slice(0, 5),
       risers: deltaSorted.filter((item) => item.delta !== null && item.delta !== undefined && item.delta > 0).slice(0, 5),
       fallers: deltaAsc.filter((item) => item.delta !== null && item.delta !== undefined && item.delta < 0).slice(0, 5),
