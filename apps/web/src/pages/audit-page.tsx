@@ -582,13 +582,14 @@ export function AuditPage() {
                 [...highlightAudits]
                   .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
                   .sort((left, right) => right.auditScore - left.auditScore)
-                  .slice(0, 5)
                   .map((a) => ({
                     id: a.id,
                     label: a.agentName,
-                    value: formatAuditScore(a.auditScore)
-                  }))
-              )}
+                    value: a.auditScore,
+                    formatted: formatAuditScore(a.auditScore)
+                  })),
+                5
+              ).map(({ id, label, formatted }) => ({ id, label, value: formatted }))}
               title="Audit lider tablosu"
             />
           </div>
