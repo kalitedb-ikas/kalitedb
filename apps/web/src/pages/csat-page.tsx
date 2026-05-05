@@ -1,4 +1,5 @@
 import {
+  applyTopRankPreference,
   average,
   buildDashboardSnapshot,
   resolveThresholdTone,
@@ -286,14 +287,17 @@ export function CsatPage() {
 
     const topScore = Math.max(...scoredAgents.map((row) => row.callEvaluationAverage));
 
-    return scoredAgents
+    const leaders = scoredAgents
       .filter((row) => row.callEvaluationAverage === topScore)
       .sort((left, right) => left.agentName.localeCompare(right.agentName, "tr"))
       .map((row) => ({
         name: row.agentName,
+        label: row.agentName,
+        value: topScore,
         imageAlt: row.agentName,
         imageSrc: getRepresentativePhotoSrc(row.agentName) ?? undefined
       }));
+    return applyTopRankPreference(leaders).map(({ label: _label, value: _value, ...rest }) => rest);
   }, [rows]);
   const csatLeaderNames = formatNameList(csatLeaders.map((leader) => leader.name));
 
