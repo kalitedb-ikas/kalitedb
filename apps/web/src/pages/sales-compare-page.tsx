@@ -50,15 +50,15 @@ function formatHms(secs: number) {
 /* ── Başarı Endeksi hesaplaması (sales-success-index-page ile aynı) ── */
 
 const WEIGHTS = {
-  satisTutari: 0.425,
+  satisTutari: 0.40,
   satisAdedi: 0.10,
   audit: 0.10,
   acv: 0.05,
   hubspot: 0.10,
   outbound: 0.05,
-  dokunulan: 0.05,
+  dokunulan: 0.025,
   konusma: 0.05,
-  twoplus: 0.025,
+  twoplus: 0.05,
   premOn: 0.05,
   domain: 0.025,
 } as const;
