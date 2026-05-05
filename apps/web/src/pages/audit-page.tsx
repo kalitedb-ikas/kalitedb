@@ -2,6 +2,7 @@ import { ChampionSpotlightCard, Leaderboard, PageHeader, SurfaceCard } from "@ka
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
+  applyTopRankPreference,
   average,
   buildDashboardSnapshot,
   selectAuditMetrics,
@@ -577,15 +578,17 @@ export function AuditPage() {
             />
 
             <Leaderboard
-              items={[...highlightAudits]
-                .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
-                .sort((left, right) => right.auditScore - left.auditScore)
-                .slice(0, 5)
-                .map((a) => ({
-                  id: a.id,
-                  label: a.agentName,
-                  value: formatAuditScore(a.auditScore)
-                }))}
+              items={applyTopRankPreference(
+                [...highlightAudits]
+                  .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
+                  .sort((left, right) => right.auditScore - left.auditScore)
+                  .slice(0, 5)
+                  .map((a) => ({
+                    id: a.id,
+                    label: a.agentName,
+                    value: formatAuditScore(a.auditScore)
+                  }))
+              )}
               title="Audit lider tablosu"
             />
           </div>
