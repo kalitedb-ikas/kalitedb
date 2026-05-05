@@ -556,14 +556,19 @@ export function SalesRepresentativesPage() {
     enabled: last6Periods.length > 0 && Boolean(selectedAgentKey),
     queryKey: ["sales-rep-audit-trend", auth.token, selectedAgentKey, last6Periods.map((p) => p.id).join(","), periodId],
     queryFn: async () => {
-      const map = await api.getAuditMetricsForPeriods(auth.token, last6Periods.map((p) => p.id));
-      return last6Periods.map((period) => {
-        const audits = map[period.id] ?? [];
+      const [auditMap, kpiResults] = await Promise.all([
+        api.getAuditMetricsForPeriods(auth.token, last6Periods.map((p) => p.id)),
+        Promise.all(last6Periods.map((period) => api.getSalesKpiData(auth.token, period.id)))
+      ]);
+      return last6Periods.map((period, idx) => {
+        const audits = auditMap[period.id] ?? [];
         const agentAudit = audits.find((a) => a.agentKey === selectedAgentKey);
+        const kpi = kpiResults[idx];
+        const kpiAgent = kpi && "agents" in kpi ? kpi.agents.find((a) => a.agentKey === selectedAgentKey) : undefined;
         return {
           label: formatShortMonth(period.month),
           fullLabel: period.title ?? period.month,
-          auditScore: agentAudit?.auditScore ?? null,
+          auditScore: agentAudit?.auditScore ?? kpiAgent?.perfScore ?? null,
           isCurrent: period.id === periodId
         };
       });
