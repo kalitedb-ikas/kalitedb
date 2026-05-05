@@ -64,17 +64,22 @@ function pickFirst(items: DashboardMetricItem[]): DashboardMetricItem | undefine
 
 const FEATURED_LABEL_PATTERN = /m[uü]berra/i;
 
-export function applyTopRankPreference<T extends { label: string; value: unknown }>(items: T[]): T[] {
-  const idx = items.findIndex((item) => FEATURED_LABEL_PATTERN.test(item.label));
-  if (idx <= 0) return items;
-  const featured = items[idx];
-  if (!featured) return items;
+export function applyTopRankPreference<T extends { label: string; value: unknown }>(
+  items: T[],
+  limit?: number
+): T[] {
+  const trim = (list: T[]) => (limit !== undefined ? list.slice(0, limit) : list);
+  const featuredIdx = items.findIndex((item) => FEATURED_LABEL_PATTERN.test(item.label));
+  if (featuredIdx <= 0) return trim(items);
+  const featured = items[featuredIdx];
+  if (!featured) return trim(items);
   const firstTiedIdx = items.findIndex((item) => item.value === featured.value);
-  if (firstTiedIdx < 0 || firstTiedIdx >= idx) return items;
+  if (firstTiedIdx < 0 || firstTiedIdx >= featuredIdx) return trim(items);
+  if (limit !== undefined && firstTiedIdx >= limit) return trim(items);
   const result = [...items];
-  result.splice(idx, 1);
+  result.splice(featuredIdx, 1);
   result.splice(firstTiedIdx, 0, featured);
-  return result;
+  return trim(result);
 }
 
 function formatJoinedLabels(labels: string[]): string {
@@ -286,9 +291,9 @@ export function buildDashboardSnapshot(params: {
     ),
     highlights,
     rankings: {
-      auditTop: applyTopRankPreference(auditDesc.slice(0, 5)),
+      auditTop: applyTopRankPreference(auditDesc, 5),
       auditBottom: auditAsc.slice(0, 5),
-      csatTop: applyTopRankPreference(csatDesc.slice(0, 5)),
+      csatTop: applyTopRankPreference(csatDesc, 5),
       csatBottom: csatAsc.slice(0, 5),
       risers: deltaSorted.filter((item) => item.delta !== null && item.delta !== undefined && item.delta > 0).slice(0, 5),
       fallers: deltaAsc.filter((item) => item.delta !== null && item.delta !== undefined && item.delta < 0).slice(0, 5),
