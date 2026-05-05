@@ -115,10 +115,14 @@ function AppRoutes() {
           path="/sales/admin"
         />
 
-        {/* İşlem Geçmişi — sadece zafer.coban@ikas.com */}
+        {/* İşlem Geçmişi — süper adminler */}
         <Route
           element={
-            currentUser?.email === "zafer.coban@ikas.com"
+            currentUser?.email && [
+              "zafer.coban@ikas.com",
+              "cagrican.gumustepe@ikas.com",
+              "yavuz.yalcin@ikas.com"
+            ].includes(currentUser.email.toLowerCase())
               ? <AuditLogPage />
               : <Navigate replace to="/" />
           }

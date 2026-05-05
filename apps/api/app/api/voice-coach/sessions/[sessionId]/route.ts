@@ -5,7 +5,11 @@ import { logAudit } from "@/src/lib/audit-log";
 import { getFirebaseAdminDb, getFirebaseAdminStorage } from "@/src/lib/firebase-admin";
 import { ApiError, handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
 
-const SUPER_ADMIN_EMAIL = "zafer.coban@ikas.com";
+const SUPER_ADMIN_EMAILS = new Set([
+  "zafer.coban@ikas.com",
+  "cagrican.gumustepe@ikas.com",
+  "yavuz.yalcin@ikas.com"
+]);
 
 export const OPTIONS = optionsResponse;
 
@@ -42,7 +46,7 @@ export async function DELETE(
 ) {
   try {
     const user = await requireAuth(request as never);
-    if (user.email !== SUPER_ADMIN_EMAIL) {
+    if (!SUPER_ADMIN_EMAILS.has(user.email.toLowerCase())) {
       throw new ApiError(403, "Bu oturumu silme yetkin yok.");
     }
 

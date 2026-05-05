@@ -297,7 +297,11 @@ type RoleplayActiveState = {
   startedAt: number;
 };
 
-const SUPER_ADMIN_EMAIL = "zafer.coban@ikas.com";
+const SUPER_ADMIN_EMAILS = new Set([
+  "zafer.coban@ikas.com",
+  "cagrican.gumustepe@ikas.com",
+  "yavuz.yalcin@ikas.com"
+]);
 
 function RoleplayStudio() {
   const auth = useAuth();
@@ -309,7 +313,7 @@ function RoleplayStudio() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ sessionId: string; label: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const canDeleteSessions = auth.user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
+  const canDeleteSessions = SUPER_ADMIN_EMAILS.has(auth.user?.email?.toLowerCase() ?? "");
 
   const transcriptRef = useRef<VoiceCoachTranscriptTurn[]>([]);
   const conversationIdRef = useRef<string | undefined>(undefined);
