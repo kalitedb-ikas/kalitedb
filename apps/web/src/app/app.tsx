@@ -121,7 +121,9 @@ function AppRoutes() {
             currentUser?.email && [
               "zafer.coban@ikas.com",
               "cagrican.gumustepe@ikas.com",
-              "yavuz.yalcin@ikas.com"
+              "yavuz.yalcin@ikas.com",
+              "sercan.ari@ikas.com",
+              "baturay.cetinel@ikas.com"
             ].includes(currentUser.email.toLowerCase())
               ? <AuditLogPage />
               : <Navigate replace to="/" />
