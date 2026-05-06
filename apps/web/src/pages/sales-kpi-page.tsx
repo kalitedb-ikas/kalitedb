@@ -4,7 +4,7 @@ import type { SalesKpiAgent } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, Target } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -91,8 +91,9 @@ export function SalesKpiPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [periodRange, setPeriodRange] = useUrlPeriodRange(periodRangeDefaults);
-  const [sortKeyParam, setSortKeyParam] = useUrlParam("sort", "salesAmount");
-  const [sortDirParam, setSortDirParam] = useUrlParam("dir", "desc");
+  const [, setSearchParams] = useSearchParams();
+  const [sortKeyParam] = useUrlParam("sort", "salesAmount");
+  const [sortDirParam] = useUrlParam("dir", "desc");
   const [agentSearch, setAgentSearch] = useUrlParam("search", "");
   const sortKey = (sortKeyParam || null) as SortKey | null;
   const sortDir = (sortDirParam === "asc" ? "asc" : "desc") as SortDir;
@@ -187,12 +188,16 @@ export function SalesKpiPage() {
   }, [agents, sortKey, sortDir, agentSearch]);
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDirParam(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortKeyParam(key);
-      setSortDirParam("desc");
-    }
+    const nextDir: SortDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "desc";
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set("sort", key);
+        p.set("dir", nextDir);
+        return p;
+      },
+      { replace: true }
+    );
   };
 
   const monthLabel = useMemo(() => {
