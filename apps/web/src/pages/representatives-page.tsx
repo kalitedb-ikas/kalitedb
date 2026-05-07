@@ -29,7 +29,7 @@ import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-r
 import { RepresentativeSelect } from "../components/representative-select";
 import { BadgePill } from "../components/representative-detail-modal";
 import { CareerPathModal } from "../components/career-path-modal";
-import { useActiveRepresentativeKeys } from "../lib/use-active-representatives";
+import { useActiveRepresentativeKeys, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 
 function formatOrNa(value: number | null | undefined, formatter: (value: number) => string) {
   return value === null || value === undefined ? "N/A" : formatter(value);
@@ -395,20 +395,24 @@ export function RepresentativesPage() {
     };
   }, [rankingModalMetric, csAgents, auditMetrics, metricDefs]);
 
+  const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
   const teamAverages = useMemo(() => {
     const avg = (values: (number | null | undefined)[]) => {
       const valid = values.filter((v): v is number => v != null);
       return valid.length > 0 ? valid.reduce((s, v) => s + v, 0) / valid.length : null;
     };
+    // CSAT ortalaması, CSAT sayfasıyla tutarlı olacak şekilde 'premium_onboarding' etiketli
+    // temsilciler hariç hesaplanır; diğer metrikler tüm temsilcilerden ortalanır.
+    const csatAgents = csAgents.filter((a) => !premiumOnboardingKeys.has(a.agentKey));
     return {
-      callEvaluationAverage: avg(csAgents.map((a) => a.callEvaluationAverage)),
+      callEvaluationAverage: avg(csatAgents.map((a) => a.callEvaluationAverage)),
       totalConversationCount: avg(csAgents.map((a) => a.totalConversationCount)),
       localCloseRate: avg(csAgents.map((a) => a.localCloseRate)),
       avgTalkDurationSeconds: avg(csAgents.map((a) => a.avgTalkDurationSeconds)),
       evaluationCount: avg(csAgents.map((a) => a.evaluationCount)),
       auditScore: avg(auditMetrics.map((a) => a.auditScore)),
     } as Record<string, number | null>;
-  }, [csAgents, auditMetrics]);
+  }, [csAgents, auditMetrics, premiumOnboardingKeys]);
 
   const prevPeriodValues = useMemo(() => {
     const currentIdx = trendData.findIndex((p) => p.isCurrent);
