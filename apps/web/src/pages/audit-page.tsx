@@ -26,7 +26,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
-import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
+import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors, getQuarterPeriodIds } from "../lib/period-aggregation";
 import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
@@ -325,12 +325,31 @@ export function AuditPage() {
   const auditHistoryLoading = auditHistoryBulkQuery.isPending;
   const auditHistoryError = auditHistoryBulkQuery.isError;
 
-  /* ── Önceki dönem karşılaştırma ── */
-  const previousPeriod = useMemo(() => {
-    const idx = trendYearPeriods.findIndex((p) => p.id === periodId);
-    return idx > 0 ? trendYearPeriods[idx - 1] : undefined;
-  }, [trendYearPeriods, periodId]);
-  const previousAuditMetrics = previousPeriod && auditHistoryMap ? auditHistoryMap[previousPeriod.id] : undefined;
+  /* ── Önceki dönem karşılaştırma ──
+     Aylık view: önceki ay
+     Çeyreklik view: önceki çeyreğin (3 ayın) ortalaması
+     Yıllık view: karşılaştırma yapılmıyor (geçmiş yıl verisi sayfaya yüklenmiyor) */
+  const previousActivePeriodIds = useMemo<string[]>(() => {
+    if (periodRange.viewMode === "aylik") {
+      const idx = trendYearPeriods.findIndex((p) => p.id === periodId);
+      return idx > 0 ? [trendYearPeriods[idx - 1]!.id] : [];
+    }
+    if (periodRange.viewMode === "ceyreklik" && periodRange.quarter && periodRange.quarter > 1) {
+      return getQuarterPeriodIds(trendYearPeriods, periodRange.quarter - 1);
+    }
+    return [];
+  }, [periodRange.viewMode, periodRange.quarter, trendYearPeriods, periodId]);
+
+  const previousAuditMetrics = useMemo(() => {
+    if (!auditHistoryMap || previousActivePeriodIds.length === 0) return undefined;
+    if (previousActivePeriodIds.length === 1) {
+      return auditHistoryMap[previousActivePeriodIds[0]!] ?? [];
+    }
+    const perPeriod = previousActivePeriodIds.map((pid) => auditHistoryMap[pid] ?? []);
+    return aggregateAuditMetrics(perPeriod);
+  }, [auditHistoryMap, previousActivePeriodIds]);
+
+  const performanceShiftBaseTitle = periodRange.viewMode === "ceyreklik" ? "Çeyreklik değişim" : "Aylık değişim";
 
   const performanceShift = useMemo(() => {
     if (!previousAuditMetrics) {
@@ -392,7 +411,7 @@ export function AuditPage() {
     }
 
     return {
-      title: "Aylık değişim",
+      title: performanceShiftBaseTitle,
       names: changes
         .map((item) => item.label)
         .sort((left, right) => left.localeCompare(right, "tr"))
@@ -400,7 +419,7 @@ export function AuditPage() {
       delta: 0,
       score: null
     };
-  }, [highlightAudits, previousAuditMetrics]);
+  }, [highlightAudits, previousAuditMetrics, performanceShiftBaseTitle]);
 
   /* ── Aylık audit pivot tablosu (ortalama) ── */
   const auditMonthlyData = useMemo<MonthlyAgentRow[]>(() => {
