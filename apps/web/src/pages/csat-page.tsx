@@ -418,12 +418,27 @@ export function CsatPage() {
       previousAuditAccuracyDisplay:
         auditByKey.get(a.agentKey)?.previousAuditAccuracy ?? a.previousAuditAccuracy
     }));
+    // Audit ortalaması ve önceki audit doğruluğu, audit sayfasıyla aynı mantıkta
+    // hem agent-metrics hem audit-metrics anahtarlarının birleşimi üzerinden hesaplanır;
+    // sadece audit-metrics'te bulunan manuel kayıtlar ortalamaya dahil olur.
+    const auditUnionKeys = new Set<string>([
+      ...fullAgents.map((a) => a.agentKey),
+      ...fullAudits.map((a) => a.agentKey)
+    ]);
+    const auditScoresUnion: Array<number | null> = [];
+    const previousAuditAccuracyUnion: Array<number | null> = [];
+    auditUnionKeys.forEach((key) => {
+      const audit = auditByKey.get(key);
+      const agent = fullAgents.find((a) => a.agentKey === key);
+      auditScoresUnion.push(audit?.auditScore ?? agent?.auditScore ?? null);
+      previousAuditAccuracyUnion.push(audit?.previousAuditAccuracy ?? agent?.previousAuditAccuracy ?? null);
+    });
     const avgRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
       _label: "ORTALAMA",
       _tone: "emerald",
       agentName: "ORTALAMA",
-      auditScoreDisplay: formatAuditScore(average(enriched.map((r) => r.auditScoreDisplay))),
-      previousAuditAccuracyDisplay: formatPercent(average(enriched.map((r) => r.previousAuditAccuracyDisplay))),
+      auditScoreDisplay: formatAuditScore(average(auditScoresUnion)),
+      previousAuditAccuracyDisplay: formatPercent(average(previousAuditAccuracyUnion)),
       totalCallCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalCallCount)) / enriched.length)),
       totalChatMailCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalChatMailCount)) / enriched.length)),
       totalTicketClosedCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalTicketClosedCount)) / enriched.length)),
