@@ -1371,6 +1371,19 @@ export const api = {
       body: { action: "delete-record", datasetType, recordId }
     });
   },
+  async upsertAuditMetric(token: string | null, periodId: string, record: AuditMetric): Promise<AuditMetric> {
+    const parsed = auditMetricSchema.parse(record);
+    const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
+    if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
+      await setDoc(doc(firebaseDb, "reportPeriods", periodId, "auditMetrics", parsed.id), parsed);
+      return parsed;
+    }
+    return request<AuditMetric>(`/api/report-periods/${periodId}`, {
+      token,
+      method: "PATCH",
+      body: { action: "upsert-record", datasetType: "audit-metrics", record: parsed }
+    });
+  },
   resetDataset(token: string | null, periodId: string, datasetType: DatasetType) {
     return request<ResetDatasetResponse>(`/api/report-periods/${periodId}`, {
       token,

@@ -1,4 +1,10 @@
-import { datasetTypeSchema } from "@kalitedb/shared";
+import {
+  agentMetricSchema,
+  auditMetricSchema,
+  datasetTypeSchema,
+  questionPerformanceSchema,
+  qtMetricSchema
+} from "@kalitedb/shared";
 import { z } from "zod";
 
 import { sanitizeEditedRecord } from "@/src/lib/edit-record";
@@ -48,10 +54,11 @@ const patchSchema = z.object({
     parseManualCountField,
     z.number().int().nonnegative().nullable().optional()
   ),
-  action: z.enum(["reset-dataset", "delete-record"]).optional(),
+  action: z.enum(["reset-dataset", "delete-record", "upsert-record"]).optional(),
   datasetType: z.enum(["agent-metrics", "audit-metrics", "question-performance", "qt-metrics"]).optional(),
   recordId: z.string().optional(),
-  updates: z.record(z.string(), z.unknown()).optional()
+  updates: z.record(z.string(), z.unknown()).optional(),
+  record: z.record(z.string(), z.unknown()).optional()
 });
 
 export async function GET(
@@ -113,6 +120,26 @@ export async function PATCH(
       await repository.deleteDatasetRecord(periodId, body.datasetType, body.recordId);
       void logAudit(user, "delete", body.datasetType, body.recordId, { periodId });
       return jsonResponse({ deleted: true });
+    }
+
+    if (body.action === "upsert-record" && body.datasetType && body.record) {
+      const period = await repository.getReportPeriod(periodId);
+      if (!period) {
+        throw new ApiError(404, "Dönem bulunamadı.");
+      }
+
+      const parsed =
+        body.datasetType === "agent-metrics"
+          ? agentMetricSchema.parse(body.record)
+          : body.datasetType === "audit-metrics"
+            ? auditMetricSchema.parse(body.record)
+            : body.datasetType === "question-performance"
+              ? questionPerformanceSchema.parse(body.record)
+              : qtMetricSchema.parse(body.record);
+
+      const upserted = await repository.upsertDatasetRecord(periodId, body.datasetType, parsed as never);
+      void logAudit(user, "update", body.datasetType, parsed.id, { periodId, action: "upsert" });
+      return jsonResponse(upserted);
     }
 
     if (body.datasetType && body.recordId && body.updates) {

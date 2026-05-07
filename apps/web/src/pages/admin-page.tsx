@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  createDeterministicId,
   getTemplateContent,
   parseDatasetCsv,
   type AgentMetric,
@@ -39,6 +40,7 @@ import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } f
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { RecordEditor } from "../components/record-editor";
+import { AuditScoreEditorModal, type AuditScoreDraft } from "../components/audit-score-editor";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
 import { useAuth } from "../lib/auth";
 import { api, type AuthenticatedUser } from "../lib/api";
@@ -203,6 +205,12 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const [repDepartmentFilter, setRepDepartmentFilter] = useState<"all" | "cs" | "sales" | "quality" | "partner">("all");
   const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
   const [sidebarQuery, setSidebarQuery] = useState("");
+  const [auditEditorState, setAuditEditorState] = useState<
+    | { mode: "create" }
+    | { mode: "edit"; record: AuditMetric }
+    | null
+  >(null);
+  const [auditEditorError, setAuditEditorError] = useState<string | null>(null);
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -430,6 +438,29 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         queryClient.invalidateQueries({ queryKey: ["period-details"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] })
       ]);
+    }
+  });
+
+  const upsertAuditMutation = useMutation({
+    mutationFn: async (record: AuditMetric) => {
+      if (!selectedPeriodId) {
+        throw new Error("Önce dönem seçin.");
+      }
+      return api.upsertAuditMetric(auth.token, selectedPeriodId, record);
+    },
+    onSuccess: async () => {
+      setAuditEditorState(null);
+      setAuditEditorError(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["cs-audit-metrics-bulk"] }),
+        queryClient.invalidateQueries({ queryKey: ["audit-history-bulk"] })
+      ]);
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : "Audit kaydı yazılamadı.";
+      setAuditEditorError(message);
     }
   });
 
@@ -788,7 +819,10 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           cell: ({ row }) => (
             <button
               className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
-              onClick={() => setSelectedRecordId(row.original.id)}
+              onClick={() => {
+                setAuditEditorError(null);
+                setAuditEditorState({ mode: "edit", record: row.original as AuditMetric });
+              }}
               type="button"
             >
               Düzenle
@@ -1180,7 +1214,27 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                   </SurfaceCard>
 
                   <SurfaceCard
-                    description="Mevcut kayıtları okuyun ve düzenlemek istediğiniz satırı seçin."
+                    actions={
+                      activeDatasetType === "audit-metrics" && selectedPeriodId ? (
+                        <button
+                          className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!selectedPeriod}
+                          onClick={() => {
+                            setAuditEditorError(null);
+                            setAuditEditorState({ mode: "create" });
+                          }}
+                          type="button"
+                        >
+                          <Plus size={14} />
+                          Manuel Skor Ekle
+                        </button>
+                      ) : null
+                    }
+                    description={
+                      activeDatasetType === "audit-metrics"
+                        ? "Mevcut kayıtları okuyun veya yeni temsilci skoru ekleyin."
+                        : "Mevcut kayıtları okuyun ve düzenlemek istediğiniz satırı seçin."
+                    }
                     title="Mevcut Kayıtlar"
                     variant="default"
                   >
@@ -1193,22 +1247,24 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                   </SurfaceCard>
                 </div>
 
-                <RecordEditor
-                  onSave={async (updates) => {
-                    if (!selectedPeriodId || !selectedRecord || !activeDatasetType) {
-                      return;
-                    }
+                {activeDatasetType !== "audit-metrics" ? (
+                  <RecordEditor
+                    onSave={async (updates) => {
+                      if (!selectedPeriodId || !selectedRecord || !activeDatasetType) {
+                        return;
+                      }
 
-                    await api.updatePeriod(auth.token, selectedPeriodId, {
-                      datasetType: activeDatasetType,
-                      recordId: selectedRecord.id,
-                      updates
-                    });
-                    await queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] });
-                  }}
-                  record={selectedRecord as Record<string, string | number | null> | null}
-                  title="Kayıt Düzenleyici"
-                />
+                      await api.updatePeriod(auth.token, selectedPeriodId, {
+                        datasetType: activeDatasetType,
+                        recordId: selectedRecord.id,
+                        updates
+                      });
+                      await queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] });
+                    }}
+                    record={selectedRecord as Record<string, string | number | null> | null}
+                    title="Kayıt Düzenleyici"
+                  />
+                ) : null}
               </div>
             ) : null}
 
@@ -1442,6 +1498,41 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
               </div>
             ) : null}
           </div>
+      {auditEditorState && selectedPeriod && selectedPeriodId ? (
+        <AuditScoreEditorModal
+          errorMessage={auditEditorError}
+          existingAgentKeys={
+            new Set((periodDetailsQuery.data?.datasets.auditMetrics ?? []).map((rec) => rec.agentKey))
+          }
+          initial={auditEditorState.mode === "edit" ? auditEditorState.record : undefined}
+          isSaving={upsertAuditMutation.isPending}
+          mode={auditEditorState.mode}
+          onClose={() => {
+            if (upsertAuditMutation.isPending) return;
+            setAuditEditorState(null);
+            setAuditEditorError(null);
+          }}
+          onSave={async (draft: AuditScoreDraft) => {
+            const periodMonth = selectedPeriod.month;
+            const existing = (periodDetailsQuery.data?.datasets.auditMetrics ?? []).find(
+              (rec) => rec.agentKey === draft.agentKey
+            );
+            const id = existing?.id ?? createDeterministicId(periodMonth, "audit", draft.agentName);
+            const record: AuditMetric = {
+              id,
+              period: periodMonth,
+              agentKey: draft.agentKey,
+              agentName: draft.agentName,
+              auditScore: draft.auditScore,
+              previousAuditAccuracy: draft.previousAuditAccuracy
+            };
+            await upsertAuditMutation.mutateAsync(record);
+          }}
+          periodMonth={selectedPeriod.month}
+          periodTitle={selectedPeriod.title}
+          representatives={representativesQuery.data ?? []}
+        />
+      ) : null}
     </AdminShell>
   );
 }
