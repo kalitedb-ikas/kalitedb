@@ -4,9 +4,19 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import {
+  PolarAngleAxis,
+  PolarGrid,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  Tooltip
+} from "recharts";
 
 import { useAuth } from "../lib/auth";
+import { useDarkMode } from "../lib/use-dark-mode";
 import { api } from "../lib/api";
+import { brand, chartTooltipDark, chartTooltipLight } from "../theme/colors";
 import {
   formatAuditScore,
   formatNumber,
@@ -137,6 +147,8 @@ function useCsSideData(
 export function CsComparePage() {
   const auth = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isDark } = useDarkMode();
+  const tooltipStyle = isDark ? { ...chartTooltipDark } : { ...chartTooltipLight };
 
   /* Dönem filtreleri — her taraf bağımsız */
   const [periodRangeA, setPeriodRangeA] = useState<PeriodRangeValue>(makeDefaultPeriodRange);
@@ -205,6 +217,49 @@ export function CsComparePage() {
   const repDataA = (repsQuery.data ?? []).find((r) => r.key === keyA);
   const repDataB = (repsQuery.data ?? []).find((r) => r.key === keyB);
 
+  /* Radar verisi — kalite metrikleri threshold hedefiyle, hacim metrikleri relatif maks ile normalize */
+  const radarData = useMemo(() => {
+    if (!agentA && !agentB && !auditA && !auditB) return [];
+
+    const thresholds = sideA.snapshot?.thresholds ?? sideB.snapshot?.thresholds;
+    const csatTarget = thresholds?.callEvaluationAverage?.green ?? 4.85;
+    const auditTarget = thresholds?.auditScore?.green ?? 77;
+    const localCloseTarget = thresholds?.localCloseRate?.green ?? 92;
+    const talkTarget = thresholds?.avgTalkDurationSeconds?.green ?? 300;
+
+    const norm = (actual: number | null | undefined, target: number) => {
+      if (actual == null || target <= 0) return 0;
+      return Math.min(100, (actual / target) * 100);
+    };
+    // Lower is better: target/actual oranı
+    const normInverse = (actual: number | null | undefined, target: number) => {
+      if (actual == null || actual <= 0) return 0;
+      return Math.min(100, (target / actual) * 100);
+    };
+    // Hacim metrikleri için iki taraf arasında relatif max
+    const normRelative = (actual: number | null | undefined, peerMax: number) => {
+      if (actual == null || peerMax <= 0) return 0;
+      return Math.min(100, (actual / peerMax) * 100);
+    };
+
+    const conversationMax = Math.max(agentA?.totalConversationCount ?? 0, agentB?.totalConversationCount ?? 0);
+    const evaluationMax = Math.max(agentA?.evaluationCount ?? 0, agentB?.evaluationCount ?? 0);
+
+    const metrics = [
+      { metric: "CSAT", a: norm(agentA?.callEvaluationAverage, csatTarget), b: norm(agentB?.callEvaluationAverage, csatTarget) },
+      { metric: "Audit", a: norm(auditA?.auditScore, auditTarget), b: norm(auditB?.auditScore, auditTarget) },
+      { metric: "Lokal Kapatma", a: norm(agentA?.localCloseRate, localCloseTarget), b: norm(agentB?.localCloseRate, localCloseTarget) },
+      { metric: "Konuşma Süresi", a: normInverse(agentA?.avgTalkDurationSeconds, talkTarget), b: normInverse(agentB?.avgTalkDurationSeconds, talkTarget) },
+      { metric: "Görüşme", a: normRelative(agentA?.totalConversationCount, conversationMax), b: normRelative(agentB?.totalConversationCount, conversationMax) },
+      { metric: "Değerlendirme", a: normRelative(agentA?.evaluationCount, evaluationMax), b: normRelative(agentB?.evaluationCount, evaluationMax) }
+    ];
+
+    return metrics.map((m) => ({ metric: m.metric, left: m.a, right: m.b }));
+  }, [agentA, agentB, auditA, auditB, sideA.snapshot?.thresholds, sideB.snapshot?.thresholds]);
+
+  const nameA = repA?.agentName ?? "Sol";
+  const nameB = repB?.agentName ?? "Sağ";
+
   const selectOptions = representatives.map((r) => ({ key: r.agentKey, label: r.agentName }));
 
   return (
@@ -251,6 +306,58 @@ export function CsComparePage() {
               <RepCard name={repA?.agentName} avatarSrc={repA?.avatarSrc} badges={(repDataA as any)?.badges ?? []} />
               <RepCard name={repB?.agentName} avatarSrc={repB?.avatarSrc} badges={(repDataB as any)?.badges ?? []} />
             </div>
+
+            {/* Radar chart */}
+            {radarData.length > 0 && repA && repB && (
+              <SectionCard title="Radar Karşılaştırma">
+                <div className="mx-auto h-72 max-w-md">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={radarData}>
+                      <PolarGrid stroke={isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"} />
+                      <PolarAngleAxis
+                        dataKey="metric"
+                        tick={{ fontSize: 11, fill: isDark ? "rgba(255,255,255,0.6)" : "#64748b" }}
+                      />
+                      <Radar
+                        name={nameA}
+                        dataKey="left"
+                        stroke={brand.primary}
+                        fill={brand.primary}
+                        fillOpacity={0.15}
+                        strokeWidth={2}
+                      />
+                      <Radar
+                        name={nameB}
+                        dataKey="right"
+                        stroke={brand.accent}
+                        fill={brand.accent}
+                        fillOpacity={0.15}
+                        strokeWidth={2}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          ...tooltipStyle,
+                          borderRadius: "8px",
+                          border: "none",
+                          fontSize: "12px"
+                        }}
+                        formatter={(value) => `${Math.round(Number(value))}%`}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 flex items-center justify-center gap-6 text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: brand.primary }} />
+                    {nameA}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: brand.accent }} />
+                    {nameB}
+                  </span>
+                </div>
+              </SectionCard>
+            )}
 
             {/* Metrik karşılaştırma */}
             <div className="space-y-2">
