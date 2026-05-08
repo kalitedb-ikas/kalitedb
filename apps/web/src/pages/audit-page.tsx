@@ -132,11 +132,13 @@ export function AuditPage() {
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
-  // Audit sayfasında tüm temsilciler gösterilir (Satıcı Operasyon, Premium Onboarding dahil).
   const snapshot = aggregatedSnapshot;
   // "Diğer" badge'li temsilciler tablo + ortalamalarda kalır, öne çıkanlardan (champion,
   // lider tablosu, insight tile) hariç tutulur.
   const highlightExcludedKeys = useRepresentativeKeysWithBadge("diger");
+  // "Satıcı Operasyon" etiketlileri tablo ve öne çıkanlardan gizler;
+  // ortalama satırı `tableSummaryRows` aggregatedSnapshot üzerinden hesaplandığı için etkilenmez.
+  const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
   const repsMap = useRepresentativesMap();
   const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
   const [agentSearch, setAgentSearch] = useUrlParam("search", "");
@@ -144,7 +146,11 @@ export function AuditPage() {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
   }, [snapshot?.period.month]);
-  const currentAudits = useMemo(() => (snapshot ? selectAuditMetrics(snapshot.datasets) : []), [snapshot]);
+  const currentAudits = useMemo(() => {
+    if (!snapshot) return [];
+    const all = selectAuditMetrics(snapshot.datasets);
+    return all.filter((a) => !hiddenAgentKeys.has(a.agentKey));
+  }, [snapshot, hiddenAgentKeys]);
   const highlightAudits = useMemo(
     () => currentAudits.filter((a) => !highlightExcludedKeys.has(a.agentKey)),
     [currentAudits, highlightExcludedKeys]
@@ -173,10 +179,12 @@ export function AuditPage() {
         }
       ])
     );
-    const agentKeys = new Set([
-      ...snapshot.datasets.agentMetrics.map((agent) => agent.agentKey),
-      ...currentAudits.map((record) => record.agentKey)
-    ]);
+    const agentKeys = new Set(
+      [
+        ...snapshot.datasets.agentMetrics.map((agent) => agent.agentKey),
+        ...currentAudits.map((record) => record.agentKey)
+      ].filter((k) => !hiddenAgentKeys.has(k))
+    );
 
     const sortedAgents = Array.from(agentKeys)
       .map((agentKey) => {
@@ -218,7 +226,7 @@ export function AuditPage() {
       ...agent,
       listIndex: index + 1
     }));
-  }, [currentAudits, snapshot]);
+  }, [currentAudits, snapshot, hiddenAgentKeys]);
   const filteredAgents = useMemo(() => {
     let out = agents;
     if (badgeFilter) {
