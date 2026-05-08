@@ -114,7 +114,7 @@ export function QuestionsPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <QuestionSpotlight
               accent="from-rose-100 to-transparent"
-              label="En kırılgan soru"
+              label="En az bilinen soru"
               score={formatPercent(weakestQuestions[0]?.accuracyRate)}
               title={weakestQuestions[0]?.questionText ?? "Veri bekleniyor"}
               topic={weakestQuestions[0]?.topic ?? "Başlık yok"}
