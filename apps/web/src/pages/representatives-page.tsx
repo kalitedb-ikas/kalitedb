@@ -1,8 +1,9 @@
 import { buildDashboardSnapshot, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, type AgentMetric, type AuditMetric } from "@kalitedb/shared";
 import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
+import confetti from "canvas-confetti";
 import { GitCompareArrows, Route } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   CartesianGrid,
@@ -181,7 +182,29 @@ export function RepresentativesPage() {
   const rawId = searchParams.get("id");
   const legacyKey = searchParams.get("agentKey");
   const decodedKey = rawId ? (() => { try { return atob(rawId); } catch { return null; } })() : null;
-  const selectedAgentKey = decodedKey ?? legacyKey ?? representatives[0]?.agentKey;
+
+  const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
+
+  /* En yüksek CSAT, eşitlikte en yüksek görüşme — başlangıç seçimi.
+     Çeyreklik view'da premium_onboarding etiketli temsilciler ilk sırada olamaz. */
+  const defaultBestKey = useMemo(() => {
+    const agents = snapshot?.datasets.agentMetrics ?? [];
+    const excludePremium = periodRange.viewMode === "ceyreklik";
+    const valid = agents.filter((a) => {
+      if (a.callEvaluationAverage == null) return false;
+      if (excludePremium && premiumOnboardingKeys.has(a.agentKey)) return false;
+      return true;
+    });
+    if (valid.length === 0) return undefined;
+    const sorted = [...valid].sort((a, b) => {
+      const csatDiff = (b.callEvaluationAverage ?? 0) - (a.callEvaluationAverage ?? 0);
+      if (csatDiff !== 0) return csatDiff;
+      return (b.totalConversationCount ?? 0) - (a.totalConversationCount ?? 0);
+    });
+    return sorted[0]?.agentKey;
+  }, [snapshot, periodRange.viewMode, premiumOnboardingKeys]);
+
+  const selectedAgentKey = decodedKey ?? legacyKey ?? defaultBestKey ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
   const selectedAgent =
     snapshot?.datasets.agentMetrics.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
@@ -262,27 +285,30 @@ export function RepresentativesPage() {
     ];
   }, [selectedAgent, selectedAudit, snapshot?.thresholds]);
 
-  /* ── "En'ler" — temsilci bu metrikte 1. sıradaysa ── */
+  const chatMailKeys = useRepresentativeKeysWithBadge("chat_mail");
+
+  /* ── "En'ler" — temsilci bu metrikte 1. sıradaysa.
+       CSAT'te premium_onboarding, Konuşma süresi'nde chat_mail etiketliler sıralamadan hariç. ── */
   const topMetricLabels = useMemo(() => {
     if (!selectedRepresentative) return [] as string[];
     const agents = snapshot?.datasets.agentMetrics ?? [];
     if (agents.length < 2) return [];
     const key = selectedRepresentative.agentKey;
-    type Def = { label: string; getValue: (a: typeof agents[number]) => number | null | undefined; direction?: "higher" | "lower" };
+    type Def = { label: string; getValue: (a: typeof agents[number]) => number | null | undefined; direction?: "higher" | "lower"; excludeKeys?: Set<string> };
     const defs: Def[] = [
-      { label: "CSAT", getValue: (a) => a.callEvaluationAverage },
+      { label: "CSAT", getValue: (a) => a.callEvaluationAverage, excludeKeys: premiumOnboardingKeys },
       { label: "Lokal kapatma", getValue: (a) => a.localCloseRate },
       { label: "Toplam görüşme", getValue: (a) => a.totalConversationCount },
       { label: "Çağrı", getValue: (a) => a.totalCallCount },
       { label: "Chat / e-posta", getValue: (a) => a.totalChatMailCount },
       { label: "Ticket", getValue: (a) => a.totalTicketClosedCount },
       { label: "Değerlendirme", getValue: (a) => a.evaluationCount },
-      { label: "Konuşma süresi", getValue: (a) => a.avgTalkDurationSeconds, direction: "lower" },
+      { label: "Konuşma süresi", getValue: (a) => a.avgTalkDurationSeconds, direction: "lower", excludeKeys: chatMailKeys },
       { label: "Kaçan çağrı", getValue: (a) => a.missedCalls, direction: "lower" }
     ];
     const labels: string[] = [];
     for (const def of defs) {
-      const valid = agents.filter((a) => def.getValue(a) != null);
+      const valid = agents.filter((a) => def.getValue(a) != null && !def.excludeKeys?.has(a.agentKey));
       if (valid.length < 2) continue;
       const me = valid.find((a) => a.agentKey === key);
       if (!me) continue;
@@ -304,7 +330,7 @@ export function RepresentativesPage() {
       }
     }
     return labels;
-  }, [selectedRepresentative, snapshot?.datasets.agentMetrics, auditMetrics]);
+  }, [selectedRepresentative, snapshot?.datasets.agentMetrics, auditMetrics, premiumOnboardingKeys, chatMailKeys]);
 
   const [showCareerModal, setShowCareerModal] = useState(false);
 
@@ -395,7 +421,6 @@ export function RepresentativesPage() {
     };
   }, [rankingModalMetric, csAgents, auditMetrics, metricDefs]);
 
-  const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
   const teamAverages = useMemo(() => {
     const avg = (values: (number | null | undefined)[]) => {
       const valid = values.filter((v): v is number => v != null);
@@ -448,6 +473,26 @@ export function RepresentativesPage() {
     [CS_INK_LIGHT]: "#1F2839"
   };
   const labelFill = (lineColor: string) => (isDark ? lineColor : (LIGHT_LABEL_FILL[lineColor] ?? "#1F2839"));
+
+  /* ── Konfeti: URL'de seçim yokken otomatik seçilen "en iyi" temsilci için, her unique key başına bir kez patlar ── */
+  const confettiFiredRef = useRef<Set<string>>(new Set());
+  const fireConfetti = useCallback(() => {
+    const end = Date.now() + 2500;
+    const frame = () => {
+      confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0, y: 0.6 } });
+      confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1, y: 0.6 } });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  }, []);
+
+  useEffect(() => {
+    if (rawId || legacyKey) return; // kullanıcı URL ile geldi — otomatik seçim değil
+    if (!defaultBestKey || selectedAgentKey !== defaultBestKey) return;
+    if (confettiFiredRef.current.has(defaultBestKey)) return;
+    confettiFiredRef.current.add(defaultBestKey);
+    fireConfetti();
+  }, [rawId, legacyKey, defaultBestKey, selectedAgentKey, fireConfetti]);
 
   const handleRepresentativeChange = (agentKey: string) => {
     const next = new URLSearchParams(searchParams);
