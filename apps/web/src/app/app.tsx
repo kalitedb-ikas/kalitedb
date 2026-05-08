@@ -30,6 +30,7 @@ import { SalesComparePage } from "../pages/sales-compare-page";
 import { SalesCompanyComparePage } from "../pages/sales-company-compare-page";
 import { AuditLogPage } from "../pages/audit-log-page";
 import { SalesRampPage } from "../pages/sales-ramp-page";
+import { ROLEPLAY_VISIBLE } from "../lib/feature-flags";
 
 function LoadingScreen() {
   return (
@@ -97,7 +98,9 @@ function AppRoutes() {
         <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
         <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
         <Route element={<SalesRepresentativesPage />} path="/sales/representatives" />
-        <Route element={<SalesRoleplayPage />} path="/sales/roleplay" />
+        {ROLEPLAY_VISIBLE ? (
+          <Route element={<SalesRoleplayPage />} path="/sales/roleplay" />
+        ) : null}
         <Route element={<SalesComparePage />} path="/sales/compare" />
         <Route element={<SalesCompanyComparePage />} path="/sales/kpi/compare" />
         <Route element={<SalesTargetCalibrationPage />} path="/sales/kpi/target-calibration" />

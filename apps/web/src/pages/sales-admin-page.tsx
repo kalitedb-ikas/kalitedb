@@ -20,6 +20,7 @@ import { LossReasonSelect } from "../components/loss-reason-select";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
 import { RoleplayScenariosAdmin } from "../components/roleplay-scenarios-admin";
 import { RoleplayKnowledgeAdmin } from "../components/roleplay-knowledge-admin";
+import { ROLEPLAY_VISIBLE } from "../lib/feature-flags";
 
 
 type AdminSection =
@@ -1242,7 +1243,7 @@ export function SalesAdminPage() {
     {
       id: "evaluation",
       label: "Değerlendirme",
-      items: (["audit", "roleplay", "evaluation"] as const).map((id) => ({
+      items: (ROLEPLAY_VISIBLE ? (["audit", "roleplay", "evaluation"] as const) : (["audit", "evaluation"] as const)).map((id) => ({
         id,
         label: sectionMeta[id].label,
         description: sectionMeta[id].description,
@@ -1275,7 +1276,7 @@ export function SalesAdminPage() {
         onClick: () => setActiveSection(id)
       }))
     },
-    ...(canManageRoleplayContent
+    ...(ROLEPLAY_VISIBLE && canManageRoleplayContent
       ? [
           {
             id: "roleplay-cms",
