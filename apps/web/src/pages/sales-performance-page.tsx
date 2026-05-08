@@ -23,6 +23,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatNumber, formatPercent } from "../lib/format";
 import { chart } from "../theme/colors";
+import { ROLEPLAY_VISIBLE } from "../lib/feature-flags";
 
 type PerformanceAgentRow = {
   id: string;
@@ -613,20 +614,22 @@ export function SalesPerformancePage() {
             repsMap={repsMap}
           />
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <MonthlyTable
-              data={filterMonthly(rolePlayData)}
-              noteMap={roleplayNoteMap}
-              onNoteClick={(agentKey, agentName, currentNote) =>
-                setNoteModal({ agentKey, agentName, note: currentNote })
-              }
-              summaryMode="total"
-              title="IS Role-Play Adet"
-              emptyNote="Role-play verileri henüz girilmemiş. Yönetim panelinden giriş yapabilirsiniz."
-              colorScale="count"
-              actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
-              repsMap={repsMap}
-            />
+          <div className={ROLEPLAY_VISIBLE ? "grid gap-6 xl:grid-cols-2" : ""}>
+            {ROLEPLAY_VISIBLE ? (
+              <MonthlyTable
+                data={filterMonthly(rolePlayData)}
+                noteMap={roleplayNoteMap}
+                onNoteClick={(agentKey, agentName, currentNote) =>
+                  setNoteModal({ agentKey, agentName, note: currentNote })
+                }
+                summaryMode="total"
+                title="IS Role-Play Adet"
+                emptyNote="Role-play verileri henüz girilmemiş. Yönetim panelinden giriş yapabilirsiniz."
+                colorScale="count"
+                actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+                repsMap={repsMap}
+              />
+            ) : null}
 
             <MonthlyTable
               data={filterMonthly(revOpsData)}
