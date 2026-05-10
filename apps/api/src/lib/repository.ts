@@ -899,8 +899,12 @@ async function createFirebaseRepository(): Promise<Repository> {
     },
     async upsertUserRole(input) {
       await db.collection("userRoles").doc(normalizeRoleEmail(input.email)).set(input);
-      if (input.uid) {
-        await auth.setCustomUserClaims(input.uid, { role: input.role });
+      const uid = input.uid ?? (await auth.getUserByEmail(input.email).then((u) => u.uid).catch(() => undefined));
+      if (uid) {
+        await auth.setCustomUserClaims(uid, {
+          role: input.role,
+          representativeKey: input.representativeKey ?? null
+        });
       }
       return input;
     },
@@ -950,8 +954,12 @@ async function createFirebaseRepository(): Promise<Repository> {
       const parsed = userSchema.parse(user);
       const key = normalizeRoleEmail(parsed.email);
       await db.collection("users").doc(key).set(parsed);
-      if (parsed.uid) {
-        await auth.setCustomUserClaims(parsed.uid, { role: parsed.role });
+      const uid = parsed.uid ?? (await auth.getUserByEmail(parsed.email).then((u) => u.uid).catch(() => undefined));
+      if (uid) {
+        await auth.setCustomUserClaims(uid, {
+          role: parsed.role,
+          representativeKey: parsed.representativeKey ?? null
+        });
       }
       return parsed;
     },

@@ -12,7 +12,12 @@ export type AuthUser = {
   displayName: string;
   role: Role;              // birincil rol (geriye dönük uyumluluk)
   roles: UserRoleEntry[]; // tüm departman atamaları
+  representativeKey?: string | undefined; // representative rolündeki kullanıcının eşleştiği temsilci
 };
+
+export function representativeKeyFor(user: AuthUser): string | undefined {
+  return user.role === "representative" ? user.representativeKey : undefined;
+}
 
 export function isAdmin(user: AuthUser): boolean {
   return user.role === "admin";
@@ -115,7 +120,8 @@ function getBypassUser(token: string | undefined): AuthUser | undefined {
       email: "rep@local.dev",
       displayName: "Dev Representative",
       role: "representative",
-      roles: [{ department: "cs", role: "representative" }]
+      roles: [{ department: "cs", role: "representative", representativeKey: "test-rep" }],
+      representativeKey: "test-rep"
     }
   };
 
@@ -168,12 +174,25 @@ async function authenticateToken(token: string): Promise<AuthUser> {
     throw new ApiError(403, "Kullanıcı rol tanımı bulunamadı.");
   }
 
+  const claimRepKey = typeof decoded.representativeKey === "string" ? decoded.representativeKey : undefined;
+  const userRepKey = user?.representativeKey;
+  const roleEntryRepKey = user?.roles?.find((entry) => entry.role === "representative")?.representativeKey;
+  const representativeKey = claimRepKey ?? userRepKey ?? roleEntryRepKey;
+
+  if (mappedRole === "representative" && !representativeKey) {
+    throw new ApiError(
+      403,
+      "Temsilci rolü için temsilci eşleşmesi atanmamış. Lütfen yöneticinizle iletişime geçin."
+    );
+  }
+
   return {
     uid: decoded.uid,
     email,
     displayName: decoded.name ?? email,
     role: mappedRole,
-    roles: user?.roles ?? []
+    roles: user?.roles ?? [],
+    representativeKey
   };
 }
 

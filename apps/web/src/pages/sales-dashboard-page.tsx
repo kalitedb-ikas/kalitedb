@@ -8,8 +8,9 @@ import {
   SurfaceCard
 } from "@kalitedb/ui";
 import { selectDefaultReportPeriod } from "@kalitedb/shared";
-import type { SalesKpiAgent, LicenseSummary } from "@kalitedb/shared";
+import type { SalesKpiAgent, LicenseSummary, ReportPeriod } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
@@ -120,6 +121,91 @@ const DONUT_KEYS = [
   { key: "preCount", label: "Pre" }
 ] as const;
 
+type DonutSubItem = { name: string; value: number };
+type DonutSlice = {
+  name: string;
+  value: number;
+  color: string;
+  /** Lejandda ana satırın altında girintili gösterilen alt-kalemler (donut dilimine etkimez). */
+  subItems?: DonutSubItem[];
+};
+
+function computeLicenseDonut(
+  licenseSummary: LicenseSummary | undefined,
+  agents: SalesKpiAgent[],
+  salesInk: string
+): DonutSlice[] {
+  const donutColors = [salesInk, brand.accent, brand.sky];
+  const lsTotal = licenseSummary
+    ? licenseSummary.preCount + licenseSummary.scaleCount + licenseSummary.scalePlusCount
+    : 0;
+
+  if (licenseSummary && lsTotal > 0) {
+    return DONUT_KEYS.map((item, i) => {
+      const slice: DonutSlice = {
+        name: item.label,
+        value: licenseSummary[item.key],
+        color: donutColors[i] ?? salesInk
+      };
+      if (item.key === "scaleCount") {
+        slice.subItems = [{ name: "2+1", value: licenseSummary.scale2Plus1Count }];
+      } else if (item.key === "scalePlusCount") {
+        slice.subItems = [{ name: "2+1", value: licenseSummary.scalePlus2Plus1Count }];
+      }
+      return slice;
+    }).filter((d) => d.value > 0);
+  }
+
+  const totalScale = agents.reduce((s, a) => s + (a.scaleCount ?? 0), 0);
+  const totalScalePlus = agents.reduce((s, a) => s + (a.scalePlusCount ?? 0), 0);
+  const totalLicense = agents.reduce((s, a) => s + a.licenseCount, 0);
+
+  if (totalScale > 0 || totalScalePlus > 0) {
+    const otherCount = totalLicense - totalScale - totalScalePlus;
+    return [
+      { name: "Scale", value: totalScale, color: salesInk },
+      { name: "Scale Plus", value: totalScalePlus, color: brand.accent },
+      ...(otherCount > 0 ? [{ name: "Diğer", value: otherCount, color: brand.sky }] : [])
+    ].filter((d) => d.value > 0);
+  }
+
+  return [];
+}
+
+type DeltaInfo = {
+  /** null = oran hesaplanamaz (eski 0 ve yeni 0). */
+  pct: number | null;
+  direction: "up" | "down" | "flat";
+  /** Eski 0 iken yeni > 0 olduğu özel durumda yüzde yerine "yeni" rakamı göstermek için. */
+  fromZero: boolean;
+};
+
+function computeDelta(current: number, base: number): DeltaInfo {
+  if (base === 0 && current === 0) return { pct: null, direction: "flat", fromZero: false };
+  if (base === 0) return { pct: null, direction: "up", fromZero: true };
+  const pct = ((current - base) / base) * 100;
+  const direction: DeltaInfo["direction"] = pct > 0.05 ? "up" : pct < -0.05 ? "down" : "flat";
+  return { pct, direction, fromZero: false };
+}
+
+function formatDelta(info: DeltaInfo): string {
+  if (info.fromZero) return "yeni";
+  if (info.pct === null) return "—";
+  const arrow = info.direction === "up" ? "▲" : info.direction === "down" ? "▼" : "■";
+  const sign = info.pct > 0 ? "+" : "";
+  return `${arrow} ${sign}${formatNumber(info.pct, 1)}%`;
+}
+
+function describeDonutPeriod(value: PeriodRangeValue, periods: ReportPeriod[]): string {
+  if (value.viewMode === "yillik") return value.year;
+  if (value.viewMode === "ceyreklik") {
+    return `${value.year} ${QUARTER_SHORT[(value.quarter ?? 1) - 1]}`;
+  }
+  const period = periods.find((p) => p.id === value.monthPeriodId);
+  if (period) return formatPeriodMonth(period.month, { includeYear: true });
+  return value.year;
+}
+
 /* ── Ana Component ── */
 
 export function SalesDashboardPage() {
@@ -217,8 +303,6 @@ export function SalesDashboardPage() {
   const kpiData = kpiQuery.data;
   const agents: SalesKpiAgent[] = kpiData && "agents" in kpiData ? (kpiData as any).agents ?? [] : [];
   const targets = kpiData && "targets" in kpiData ? (kpiData as any).targets ?? null : null;
-  const licenseSummary: LicenseSummary | undefined =
-    kpiData && "licenseSummary" in kpiData ? (kpiData as any).licenseSummary : undefined;
 
   const summary = useMemo(() => computeDashboardSummary(agents), [agents]);
 
@@ -281,37 +365,124 @@ export function SalesDashboardPage() {
       }));
   }, [agents]);
 
-  /* ── Lisans donut verisi ── */
-  // licenseSummary varsa ve icerigi tutarliysa onu kullan, yoksa agent bazli hesapla
-  const donutData = useMemo(() => {
-    // licenseSummary'den sadece ana paket adetlerini al (2+1 alt kirilimlari haric)
-    const lsTotal = licenseSummary
-      ? licenseSummary.preCount + licenseSummary.scaleCount + licenseSummary.scalePlusCount
-      : 0;
+  /* ── Lisans Dağılımı: bağımsız iki grafik için ayrı period state'leri ── */
+  // Sol grafik: bu yılı (default 2026) yıllık olarak gösterir
+  const [donut1Period, setDonut1Period] = useState<PeriodRangeValue>(() => ({
+    year: String(now.getFullYear()),
+    viewMode: "yillik",
+    monthPeriodId: undefined,
+    quarter: undefined
+  }));
+  // Sağ grafik: kullanıcının kıyaslamak için seçeceği dönem (default ay bazlı, önceki ay)
+  const [donut2Period, setDonut2Period] = useState<PeriodRangeValue>(() => {
+    const prevMonth = now.getMonth();
+    const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
+    const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
+    return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
+  });
 
-    const donutColors = [salesInk, brand.accent, brand.sky];
-    if (licenseSummary && lsTotal > 0) {
-      return DONUT_KEYS.map((item, i) => ({
-        name: item.label,
-        value: licenseSummary[item.key],
-        color: donutColors[i] ?? salesInk
-      })).filter((d) => d.value > 0);
+  const donut1YearPeriods = useMemo(
+    () => derivePeriodRangeSelectors(salesPeriods, donut1Period.year).yearPeriods,
+    [salesPeriods, donut1Period.year]
+  );
+  const donut2YearPeriods = useMemo(
+    () => derivePeriodRangeSelectors(salesPeriods, donut2Period.year).yearPeriods,
+    [salesPeriods, donut2Period.year]
+  );
+
+  // Aylık modda monthPeriodId tutarlı kalsın diye normalize et (yıl/dönem değişince düşmesin)
+  const donut1MonthlyPeriodId = donut1YearPeriods.some((p) => p.id === donut1Period.monthPeriodId)
+    ? donut1Period.monthPeriodId
+    : donut1YearPeriods[donut1YearPeriods.length - 1]?.id;
+  const donut2MonthlyPeriodId = donut2YearPeriods.some((p) => p.id === donut2Period.monthPeriodId)
+    ? donut2Period.monthPeriodId
+    : donut2YearPeriods[donut2YearPeriods.length - 1]?.id;
+
+  useEffect(() => {
+    if (!donut1Period.monthPeriodId && donut1MonthlyPeriodId) {
+      setDonut1Period((prev) => ({ ...prev, monthPeriodId: donut1MonthlyPeriodId }));
     }
+  }, [donut1MonthlyPeriodId, donut1Period.monthPeriodId]);
 
-    // Yoksa agent bazli Scale/Scale+ toplamlarini goster
-    if (summary.totalScaleCount > 0 || summary.totalScalePlusCount > 0) {
-      const otherCount = summary.totalLicenseCount - summary.totalScaleCount - summary.totalScalePlusCount;
-      return [
-        { name: "Scale", value: summary.totalScaleCount, color: salesInk },
-        { name: "Scale Plus", value: summary.totalScalePlusCount, color: brand.accent },
-        ...(otherCount > 0 ? [{ name: "Diğer", value: otherCount, color: brand.sky }] : [])
-      ].filter((d) => d.value > 0);
+  useEffect(() => {
+    if (!donut2Period.monthPeriodId && donut2MonthlyPeriodId) {
+      setDonut2Period((prev) => ({ ...prev, monthPeriodId: donut2MonthlyPeriodId }));
     }
+  }, [donut2MonthlyPeriodId, donut2Period.monthPeriodId]);
 
-    return [];
-  }, [licenseSummary, summary]);
+  const donut1ActivePeriodIds = useMemo(
+    () =>
+      computeActivePeriodIds(donut1YearPeriods, {
+        ...donut1Period,
+        monthPeriodId: donut1MonthlyPeriodId
+      }),
+    [donut1Period, donut1MonthlyPeriodId, donut1YearPeriods]
+  );
+  const donut2ActivePeriodIds = useMemo(
+    () =>
+      computeActivePeriodIds(donut2YearPeriods, {
+        ...donut2Period,
+        monthPeriodId: donut2MonthlyPeriodId
+      }),
+    [donut2Period, donut2MonthlyPeriodId, donut2YearPeriods]
+  );
 
-  const donutTotal = donutData.reduce((s, d) => s + d.value, 0);
+  const donut1KpiQuery = useQuery({
+    enabled: donut1ActivePeriodIds.length > 0,
+    queryKey: ["sales-dashboard-donut1", auth.token, donut1ActivePeriodIds.join(",")],
+    queryFn: async () => {
+      if (donut1ActivePeriodIds.length === 1) {
+        return api.getSalesKpiData(auth.token, donut1ActivePeriodIds[0]!);
+      }
+      const results = await Promise.all(
+        donut1ActivePeriodIds.map((pid) => api.getSalesKpiData(auth.token, pid))
+      );
+      return aggregateMultiPeriodKpi(results);
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000
+  });
+
+  const donut2KpiQuery = useQuery({
+    enabled: donut2ActivePeriodIds.length > 0,
+    queryKey: ["sales-dashboard-donut2", auth.token, donut2ActivePeriodIds.join(",")],
+    queryFn: async () => {
+      if (donut2ActivePeriodIds.length === 1) {
+        return api.getSalesKpiData(auth.token, donut2ActivePeriodIds[0]!);
+      }
+      const results = await Promise.all(
+        donut2ActivePeriodIds.map((pid) => api.getSalesKpiData(auth.token, pid))
+      );
+      return aggregateMultiPeriodKpi(results);
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000
+  });
+
+  const donut1Data = useMemo(() => {
+    const data = donut1KpiQuery.data;
+    const ls = data && "licenseSummary" in data ? (data as any).licenseSummary as LicenseSummary | undefined : undefined;
+    const ag = data && "agents" in data ? (data as any).agents as SalesKpiAgent[] : [];
+    return computeLicenseDonut(ls, ag, salesInk);
+  }, [donut1KpiQuery.data, salesInk]);
+  const donut2Data = useMemo(() => {
+    const data = donut2KpiQuery.data;
+    const ls = data && "licenseSummary" in data ? (data as any).licenseSummary as LicenseSummary | undefined : undefined;
+    const ag = data && "agents" in data ? (data as any).agents as SalesKpiAgent[] : [];
+    return computeLicenseDonut(ls, ag, salesInk);
+  }, [donut2KpiQuery.data, salesInk]);
+
+  const donut1Total = donut1Data.reduce((s, d) => s + d.value, 0);
+  const donut2Total = donut2Data.reduce((s, d) => s + d.value, 0);
+
+  const donut1PeriodLabel = useMemo(
+    () => describeDonutPeriod({ ...donut1Period, monthPeriodId: donut1MonthlyPeriodId }, donut1YearPeriods),
+    [donut1Period, donut1MonthlyPeriodId, donut1YearPeriods]
+  );
+  const donut2PeriodLabel = useMemo(
+    () => describeDonutPeriod({ ...donut2Period, monthPeriodId: donut2MonthlyPeriodId }, donut2YearPeriods),
+    [donut2Period, donut2MonthlyPeriodId, donut2YearPeriods]
+  );
 
   /* ── Hedef yuzdeleri ── */
   const targetPercent = useMemo(() => {
@@ -452,51 +623,41 @@ export function SalesDashboardPage() {
             ) : null}
           </div>
 
-          {/* ── Bolum C + D: Lisans Dagilimi + Temsilci Bar Chart ── */}
+          {/* ── Bolum C: Lisans Dagilimi (iki bagimsiz grafik, ayri filtreler) ── */}
           <div className="grid gap-4 xl:grid-cols-2">
-            {/* Lisans Donut Chart */}
-            {donutData.length > 0 ? (
-              <ExecutiveChartCard title="Lisans Dağılımı" description={`Toplam: ${formatNumber(donutTotal)} lisans`}>
-                <div className="flex flex-col items-center gap-4 sm:flex-row">
-                  <div className="h-64 w-64 shrink-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={donutData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={68}
-                          outerRadius={100}
-                          paddingAngle={3}
-                          strokeWidth={0}
-                        >
-                          {donutData.map((entry) => (
-                            <Cell key={entry.name} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{ ...tooltipStyle, borderRadius: 10 }}
-                          formatter={((value: number, name: string) => [`${formatNumber(value)} adet (%${formatNumber((value / donutTotal) * 100, 1)})`, name]) as any}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="grid gap-2">
-                    {donutData.map((item) => (
-                      <div key={item.name} className="flex items-center gap-2.5">
-                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-sm text-slate-600 dark:text-slate-400">{item.name}</span>
-                        <span className="ml-auto text-sm font-semibold text-slate-900 dark:text-slate-100">{formatNumber(item.value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </ExecutiveChartCard>
-            ) : null}
+            <LicenseDonutCard
+              data={donut1Data}
+              total={donut1Total}
+              isLoading={donut1KpiQuery.isPending}
+              periodLabel={donut1PeriodLabel}
+              tooltipStyle={tooltipStyle}
+              filter={
+                <PeriodRangeFilter
+                  onChange={setDonut1Period}
+                  periods={salesPeriods}
+                  value={{ ...donut1Period, monthPeriodId: donut1MonthlyPeriodId }}
+                />
+              }
+            />
+            <LicenseDonutCard
+              data={donut2Data}
+              total={donut2Total}
+              isLoading={donut2KpiQuery.isPending}
+              periodLabel={donut2PeriodLabel}
+              tooltipStyle={tooltipStyle}
+              compareTo={{ data: donut1Data, total: donut1Total, periodLabel: donut1PeriodLabel }}
+              filter={
+                <PeriodRangeFilter
+                  onChange={setDonut2Period}
+                  periods={salesPeriods}
+                  value={{ ...donut2Period, monthPeriodId: donut2MonthlyPeriodId }}
+                />
+              }
+            />
+          </div>
 
-            {/* Temsilci Satis Bar Chart */}
+          {/* ── Bolum D: Temsilci Bar Chart ── */}
+          <div className="grid gap-4">
             <ExecutiveChartCard title="Temsilci Satış Karşılaştırması" description="Temsilci bazlı satış tutarları">
               <div className="overflow-x-auto">
                 <div className="h-80" style={{ minWidth: Math.max(400, agents.length * 56) }}>
@@ -814,5 +975,110 @@ export function SalesDashboardPage() {
         </>
       )}
     </div>
+  );
+}
+
+function deltaToneClass(direction: DeltaInfo["direction"], fromZero: boolean): string {
+  if (fromZero) return "text-emerald-600 dark:text-emerald-400";
+  if (direction === "up") return "text-emerald-600 dark:text-emerald-400";
+  if (direction === "down") return "text-rose-600 dark:text-rose-400";
+  return "text-slate-500 dark:text-slate-400";
+}
+
+/* ── Lisans Dağılımı kartı: filtre + donut chart ── */
+function LicenseDonutCard(props: {
+  data: DonutSlice[];
+  total: number;
+  isLoading: boolean;
+  periodLabel: string;
+  tooltipStyle: Record<string, unknown>;
+  filter: ReactNode;
+  /** Sağ donut için baz dönem; verilirse her segmentin ve toplamın delta'sı gösterilir. */
+  compareTo?: { data: DonutSlice[]; total: number; periodLabel: string } | undefined;
+}) {
+  const { data, total, isLoading, periodLabel, tooltipStyle, filter, compareTo } = props;
+
+  const description = total > 0 ? `${periodLabel} • Toplam: ${formatNumber(total)} lisans` : periodLabel;
+
+  // Baz dönemdeki segment kayıtlarını segment adına göre indeksle (delta için)
+  const baseSliceByName = compareTo
+    ? new Map(compareTo.data.map((d) => [d.name, d]))
+    : null;
+
+  return (
+    <ExecutiveChartCard title="Lisans Dağılımı" description={description} actions={filter}>
+      {data.length === 0 ? (
+        <div className="flex h-64 items-center justify-center rounded-[10px] border border-dashed border-slate-200 bg-slate-50 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700/30 dark:text-slate-400">
+          {isLoading ? "Yükleniyor..." : "Bu dönem için lisans verisi bulunamadı."}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-4 sm:flex-row">
+          <div className="h-64 w-64 shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={68}
+                  outerRadius={100}
+                  paddingAngle={3}
+                  strokeWidth={0}
+                >
+                  {data.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ ...tooltipStyle, borderRadius: 10 }}
+                  formatter={((value: number, name: string) => [`${formatNumber(value)} adet (%${formatNumber((value / total) * 100, 1)})`, name]) as any}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid gap-2">
+            {data.map((item) => {
+              const baseSlice = baseSliceByName?.get(item.name);
+              const delta = baseSliceByName ? computeDelta(item.value, baseSlice?.value ?? 0) : null;
+              const baseSubByName = baseSlice?.subItems
+                ? new Map(baseSlice.subItems.map((s) => [s.name, s.value]))
+                : null;
+              return (
+                <div key={item.name} className="grid gap-1">
+                  <div className="flex items-center gap-2.5">
+                    <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{item.name}</span>
+                    <span className="ml-auto text-sm font-semibold text-slate-900 dark:text-slate-100">{formatNumber(item.value)}</span>
+                    {delta ? (
+                      <span className={`min-w-[70px] text-right text-xs font-semibold tabular-nums ${deltaToneClass(delta.direction, delta.fromZero)}`}>
+                        {formatDelta(delta)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {item.subItems?.map((sub) => {
+                    const subDelta = baseSliceByName
+                      ? computeDelta(sub.value, baseSubByName?.get(sub.name) ?? 0)
+                      : null;
+                    return (
+                      <div key={sub.name} className="ml-5 flex items-center gap-2.5">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">└ {sub.name}</span>
+                        <span className="ml-auto text-xs font-medium text-slate-700 dark:text-slate-300">{formatNumber(sub.value)}</span>
+                        {subDelta ? (
+                          <span className={`min-w-[70px] text-right text-xs font-semibold tabular-nums ${deltaToneClass(subDelta.direction, subDelta.fromZero)}`}>
+                            {formatDelta(subDelta)}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </ExecutiveChartCard>
   );
 }
