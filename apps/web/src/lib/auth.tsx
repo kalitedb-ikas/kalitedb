@@ -18,7 +18,7 @@ type AuthContextValue = {
   loading: boolean;
   authMode: "firebase" | "dev" | "none";
   loginWithGoogle: () => Promise<void>;
-  loginAsDev: (role: "admin" | "team" | "ceo" | "qt") => void;
+  loginAsDev: (role: "admin" | "team" | "ceo" | "qt" | "representative") => void;
   logout: () => Promise<void>;
 };
 

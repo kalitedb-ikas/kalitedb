@@ -51,22 +51,33 @@ import {
   formatPercent
 } from "../lib/format";
 
-const roleSchema = z.object({
-  email: z.string().email(),
-  role: z.enum([
-    "admin",
-    "manager",
-    "team_leader",
-    "quality",
-    "representative",
-    "viewer",
-    "roleplay_admin",
-    "team",
-    "ceo",
-    "qt"
-  ]),
-  departments: z.array(z.enum(["cs", "sales", "quality", "partner"]))
-});
+const roleSchema = z
+  .object({
+    email: z.string().email(),
+    role: z.enum([
+      "admin",
+      "manager",
+      "team_leader",
+      "quality",
+      "representative",
+      "viewer",
+      "roleplay_admin",
+      "team",
+      "ceo",
+      "qt"
+    ]),
+    departments: z.array(z.enum(["cs", "sales", "quality", "partner"])),
+    representativeKey: z.string().optional()
+  })
+  .superRefine((value, ctx) => {
+    if (value.role === "representative" && !value.representativeKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["representativeKey"],
+        message: "Temsilci rolü için temsilci seçimi zorunludur."
+      });
+    }
+  });
 
 const roleOptions = [
   { value: "admin", label: "Admin" },
@@ -247,7 +258,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
   const roleForm = useForm<z.infer<typeof roleSchema>>({
     resolver: zodResolver(roleSchema),
-    defaultValues: { email: "", role: "team", departments: [] }
+    defaultValues: { email: "", role: "team", departments: [], representativeKey: "" }
   });
 
   const createPeriodMutation = useMutation({
@@ -351,7 +362,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["roles"] });
       setEditingRoleEmail(null);
-      roleForm.reset();
+      roleForm.reset({ email: "", role: "team", departments: [], representativeKey: "" });
     }
   });
 
@@ -678,7 +689,8 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
               roleForm.reset({
                 email: row.original.email,
                 role: row.original.role,
-                departments: row.original.departments ?? []
+                departments: row.original.departments ?? [],
+                representativeKey: row.original.representativeKey ?? ""
               });
             }}
             type="button"
@@ -1450,9 +1462,28 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                         })}
                       </div>
                     </InputField>
-                    {(roleForm.formState.errors.email || roleForm.formState.errors.role) ? (
+                    {roleForm.watch("role") === "representative" ? (
+                      <InputField label="Hangi temsilci?">
+                        <FancySelect
+                          options={(representativesQuery.data ?? [])
+                            .filter((r) => r.status === "active")
+                            .map((r) => ({
+                              value: r.key,
+                              label: `${r.displayName} (${r.department === "sales" ? "Satış" : r.department === "cs" ? "CS" : r.department})`
+                            }))}
+                          placeholder="Temsilci seçin"
+                          value={roleForm.watch("representativeKey") ?? ""}
+                          onChange={(value) =>
+                            roleForm.setValue("representativeKey", value, { shouldDirty: true, shouldValidate: true })
+                          }
+                        />
+                      </InputField>
+                    ) : null}
+                    {(roleForm.formState.errors.email || roleForm.formState.errors.role || roleForm.formState.errors.representativeKey) ? (
                       <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                        {roleForm.formState.errors.email?.message ?? roleForm.formState.errors.role?.message}
+                        {roleForm.formState.errors.email?.message
+                          ?? roleForm.formState.errors.role?.message
+                          ?? roleForm.formState.errors.representativeKey?.message}
                       </div>
                     ) : null}
                     {roleMutation.isError ? (
@@ -1477,7 +1508,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                           className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-5 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700/30"
                           onClick={() => {
                             setEditingRoleEmail(null);
-                            roleForm.reset({ email: "", role: "team", departments: [] });
+                            roleForm.reset({ email: "", role: "team", departments: [], representativeKey: "" });
                           }}
                           type="button"
                         >

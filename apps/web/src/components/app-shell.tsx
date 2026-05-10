@@ -22,6 +22,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from
 import { useAuth } from "../lib/auth";
 import { toPublicAssetPath } from "../lib/asset-path";
 import { api, type AuthenticatedUser } from "../lib/api";
+import { useRepScope } from "../lib/use-rep-scope";
 import { SkyToggle } from "./sky-toggle";
 
 type Department = "cs" | "sales" | "quality";
@@ -33,7 +34,7 @@ type NavigationItem = {
   roles?: AuthenticatedUser["role"][];
 };
 
-const nonViewerRoles: AuthenticatedUser["role"][] = ["admin", "manager", "team_leader", "quality", "representative", "team", "ceo", "qt"];
+const nonViewerRoles: AuthenticatedUser["role"][] = ["admin", "manager", "team_leader", "quality", "team", "ceo", "qt"];
 
 const csNavigation: NavigationItem[] = [
   { label: "Genel Bakış", to: "/cs", icon: Gauge },
@@ -67,6 +68,7 @@ function roleLabel(role: AuthenticatedUser["role"] | undefined) {
   if (role === "ceo") return "Yönetici";
   if (role === "qt") return "QT";
   if (role === "viewer") return "Görüntüleyici";
+  if (role === "representative") return "Temsilci";
   return "KaliteDB";
 }
 
@@ -141,6 +143,8 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
     }
   }, [auth.token, departmentPeriods, queryClient]);
 
+  const repScope = useRepScope(props.currentUser);
+
   const activeNavigation = useMemo(() => {
     const items =
       activeDepartment === "sales"
@@ -150,10 +154,17 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
           : csNavigation;
     const currentUser = props.currentUser;
     if (!currentUser) return items.filter((item) => !item.roles);
+    if (repScope.isRepresentative) {
+      // Temsilci için yalnızca kendi performans sayfası gösterilir.
+      const personalPath = repScope.department === "sales" ? "/sales/representatives" : "/cs/representatives";
+      return items.filter((item) => item.to === personalPath);
+    }
     return items.filter((item) => !item.roles || item.roles.includes(currentUser.role));
-  }, [activeDepartment, props.currentUser]);
+  }, [activeDepartment, props.currentUser, repScope.isRepresentative, repScope.department]);
 
-  const canSeeQualityTab = Boolean(props.currentUser);
+  const canSeeCsTab = !repScope.isRepresentative || repScope.department === "cs";
+  const canSeeSalesTab = !repScope.isRepresentative || repScope.department === "sales";
+  const canSeeQualityTab = Boolean(props.currentUser) && !repScope.isRepresentative;
 
   const currentNavigationItem = getCurrentNavigationItem(location.pathname, activeNavigation);
 
@@ -222,30 +233,34 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                   </p>
                   {/* Departman sekmeleri — başlığın altında */}
                   <div className="mt-1 hidden items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100/80 p-0.5 dark:border-slate-600 dark:bg-slate-800/80 2xl:inline-flex">
-                    <button
-                      className={[
-                        "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
-                        activeDepartment === "cs"
-                          ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
-                          : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                      ].join(" ")}
-                      onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("cs"); }}
-                      type="button"
-                    >
-                      CS
-                    </button>
-                    <button
-                      className={[
-                        "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
-                        activeDepartment === "sales"
-                          ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
-                          : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                      ].join(" ")}
-                      onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("sales"); }}
-                      type="button"
-                    >
-                      Satış
-                    </button>
+                    {canSeeCsTab ? (
+                      <button
+                        className={[
+                          "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
+                          activeDepartment === "cs"
+                            ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
+                            : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                        ].join(" ")}
+                        onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("cs"); }}
+                        type="button"
+                      >
+                        CS
+                      </button>
+                    ) : null}
+                    {canSeeSalesTab ? (
+                      <button
+                        className={[
+                          "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
+                          activeDepartment === "sales"
+                            ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
+                            : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                        ].join(" ")}
+                        onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("sales"); }}
+                        type="button"
+                      >
+                        Satış
+                      </button>
+                    ) : null}
                     {canSeeQualityTab ? (
                       <button
                         className={[
@@ -387,30 +402,34 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
 
             {/* Departman sekmeleri (mobil) */}
             <div className="mt-4 flex gap-2">
-              <button
-                className={[
-                  "flex-1 rounded-[10px] border py-2.5 text-sm font-semibold transition",
-                  activeDepartment === "cs"
-                    ? "border-slate-900 bg-slate-950 text-white dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500"
-                ].join(" ")}
-                onClick={() => { handleDepartmentSwitch("cs"); setIsDrawerOpen(false); }}
-                type="button"
-              >
-                CS
-              </button>
-              <button
-                className={[
-                  "flex-1 rounded-[10px] border py-2.5 text-sm font-semibold transition",
-                  activeDepartment === "sales"
-                    ? "border-slate-900 bg-slate-950 text-white dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500"
-                ].join(" ")}
-                onClick={() => { handleDepartmentSwitch("sales"); setIsDrawerOpen(false); }}
-                type="button"
-              >
-                Satış
-              </button>
+              {canSeeCsTab ? (
+                <button
+                  className={[
+                    "flex-1 rounded-[10px] border py-2.5 text-sm font-semibold transition",
+                    activeDepartment === "cs"
+                      ? "border-slate-900 bg-slate-950 text-white dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500"
+                  ].join(" ")}
+                  onClick={() => { handleDepartmentSwitch("cs"); setIsDrawerOpen(false); }}
+                  type="button"
+                >
+                  CS
+                </button>
+              ) : null}
+              {canSeeSalesTab ? (
+                <button
+                  className={[
+                    "flex-1 rounded-[10px] border py-2.5 text-sm font-semibold transition",
+                    activeDepartment === "sales"
+                      ? "border-slate-900 bg-slate-950 text-white dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500"
+                  ].join(" ")}
+                  onClick={() => { handleDepartmentSwitch("sales"); setIsDrawerOpen(false); }}
+                  type="button"
+                >
+                  Satış
+                </button>
+              ) : null}
               {canSeeQualityTab ? (
                 <button
                   className={[

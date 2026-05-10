@@ -8,9 +8,11 @@ export function RepresentativeSelect(props: {
   options: Option[];
   value: string;
   onChange: (key: string) => void;
-  placeholder?: string;
+  placeholder?: string | undefined;
+  lockedTo?: string | undefined;
+  lockedLabel?: string | undefined;
 }) {
-  const { options, value, onChange, placeholder = "Temsilci seçin" } = props;
+  const { options, value, onChange, placeholder = "Temsilci seçin", lockedTo, lockedLabel } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -18,7 +20,9 @@ export function RepresentativeSelect(props: {
   const searchRef = useRef<HTMLInputElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
+  const isLocked = Boolean(lockedTo);
   const selected = options.find((o) => o.key === value);
+  const lockedDisplay = lockedLabel ?? options.find((o) => o.key === lockedTo)?.label ?? selected?.label;
 
   const filtered = search
     ? options.filter((o) => o.label.toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")))
@@ -46,6 +50,7 @@ export function RepresentativeSelect(props: {
   }, [open]);
 
   const toggle = () => {
+    if (isLocked) return;
     if (!open && btnRef.current) {
       setRect(btnRef.current.getBoundingClientRect());
     }
@@ -58,14 +63,18 @@ export function RepresentativeSelect(props: {
       <button
         ref={btnRef}
         type="button"
-        className="inline-flex items-center gap-2 rounded-full border border-white/45 bg-white/72 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-200 dark:hover:bg-slate-700/80"
+        disabled={isLocked}
+        title={isLocked ? "Yalnızca kendi verilerinizi görebilirsiniz" : undefined}
+        className="inline-flex items-center gap-2 rounded-full border border-white/45 bg-white/72 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-white/72 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-200 dark:hover:bg-slate-700/80"
         onClick={toggle}
       >
-        <span className="max-w-[180px] truncate">{selected?.label ?? placeholder}</span>
-        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+        <span className="max-w-[180px] truncate">{isLocked ? lockedDisplay ?? placeholder : selected?.label ?? placeholder}</span>
+        {!isLocked ? (
+          <ChevronDown size={14} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+        ) : null}
       </button>
 
-      {open && rect
+      {open && rect && !isLocked
         ? createPortal(
             <div
               ref={panelRef}

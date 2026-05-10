@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
+import type { ReactElement } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "../components/app-shell";
@@ -31,6 +32,7 @@ import { SalesCompanyComparePage } from "../pages/sales-company-compare-page";
 import { AuditLogPage } from "../pages/audit-log-page";
 import { SalesRampPage } from "../pages/sales-ramp-page";
 import { ROLEPLAY_VISIBLE } from "../lib/feature-flags";
+import { useRepScope } from "../lib/use-rep-scope";
 
 function LoadingScreen() {
   return (
@@ -41,7 +43,11 @@ function LoadingScreen() {
 }
 
 function canAccessAdmin(currentUser: AuthenticatedUser | undefined) {
-  return Boolean(currentUser) && currentUser?.role !== "viewer";
+  return Boolean(currentUser) && currentUser?.role !== "viewer" && currentUser?.role !== "representative";
+}
+
+function isRepresentative(currentUser: AuthenticatedUser | undefined) {
+  return currentUser?.role === "representative";
 }
 
 function AppRoutes() {
@@ -54,27 +60,37 @@ function AppRoutes() {
     staleTime: 5 * 60 * 1000
   });
 
+  const currentUser = meQuery.isSuccess ? meQuery.data : undefined;
+  const repScope = useRepScope(currentUser);
+  const repHome = repScope.department === "sales" ? "/sales" : "/cs";
+  // Temsilci yalnızca kendi performans sayfasını görür; diğer her şey redirect.
+  const repPersonalPath = repScope.department === "sales" ? "/sales/representatives" : "/cs/representatives";
+  const repBlocked = isRepresentative(currentUser);
+  const blockForRep = (element: ReactElement): ReactElement =>
+    repBlocked ? <Navigate replace to={repPersonalPath} /> : element;
+
   if (auth.loading) {
     return <LoadingScreen />;
   }
-
-  const currentUser = meQuery.isSuccess ? meQuery.data : undefined;
 
   return (
     <Routes>
       <Route element={<LoginPage />} path="/login" />
       <Route element={<AppShell currentUser={currentUser} />}>
         {/* CS rotaları */}
-        <Route element={<DashboardPage />} path="/cs" />
-        <Route element={<AuditPage />} path="/cs/audit" />
-        <Route element={<QuestionsPage />} path="/cs/questions" />
-        <Route element={<CsatPage />} path="/cs/csat" />
+        <Route element={blockForRep(<DashboardPage />)} path="/cs" />
+        <Route element={blockForRep(<AuditPage />)} path="/cs/audit" />
+        <Route element={blockForRep(<QuestionsPage />)} path="/cs/questions" />
+        <Route element={blockForRep(<CsatPage />)} path="/cs/csat" />
         <Route element={<RepresentativesPage />} path="/cs/representatives" />
-        <Route element={<CsComparePage />} path="/cs/compare" />
+        <Route
+          element={blockForRep(<CsComparePage />)}
+          path="/cs/compare"
+        />
 
         {/* Kalite rotaları */}
         <Route element={<Navigate replace to="/quality/qt" />} path="/quality" />
-        <Route element={<QtPage />} path="/quality/qt" />
+        <Route element={blockForRep(<QtPage />)} path="/quality/qt" />
         <Route
           element={
             auth.token && meQuery.isPending
@@ -89,22 +105,22 @@ function AppRoutes() {
         />
 
         {/* Satış rotaları */}
-        <Route element={<SalesDashboardPage />} path="/sales" />
-        <Route element={<SalesKpiPage />} path="/sales/kpi" />
-        <Route element={<SalesSuccessIndexPage />} path="/sales/success-index" />
-        <Route element={<SalesRampPage />} path="/sales/ramp" />
-        <Route element={<SalesPerformancePage />} path="/sales/performance" />
+        <Route element={blockForRep(<SalesDashboardPage />)} path="/sales" />
+        <Route element={blockForRep(<SalesKpiPage />)} path="/sales/kpi" />
+        <Route element={blockForRep(<SalesSuccessIndexPage />)} path="/sales/success-index" />
+        <Route element={blockForRep(<SalesRampPage />)} path="/sales/ramp" />
+        <Route element={blockForRep(<SalesPerformancePage />)} path="/sales/performance" />
         <Route element={<Navigate replace to="/sales/performance" />} path="/sales/audit" />
-        <Route element={<SalesEvaluationQuestionsPage />} path="/sales/evaluation-questions" />
-        <Route element={<SalesMeetingsPage />} path="/sales/meetings" />
+        <Route element={blockForRep(<SalesEvaluationQuestionsPage />)} path="/sales/evaluation-questions" />
+        <Route element={blockForRep(<SalesMeetingsPage />)} path="/sales/meetings" />
         <Route element={<SalesRepresentativesPage />} path="/sales/representatives" />
         {ROLEPLAY_VISIBLE ? (
-          <Route element={<SalesRoleplayPage />} path="/sales/roleplay" />
+          <Route element={blockForRep(<SalesRoleplayPage />)} path="/sales/roleplay" />
         ) : null}
-        <Route element={<SalesComparePage />} path="/sales/compare" />
-        <Route element={<SalesCompanyComparePage />} path="/sales/kpi/compare" />
-        <Route element={<SalesTargetCalibrationPage />} path="/sales/kpi/target-calibration" />
-        <Route element={<SalesCalendarPage currentUser={currentUser} />} path="/sales/calendar" />
+        <Route element={blockForRep(<SalesComparePage />)} path="/sales/compare" />
+        <Route element={blockForRep(<SalesCompanyComparePage />)} path="/sales/kpi/compare" />
+        <Route element={blockForRep(<SalesTargetCalibrationPage />)} path="/sales/kpi/target-calibration" />
+        <Route element={blockForRep(<SalesCalendarPage currentUser={currentUser} />)} path="/sales/calendar" />
         <Route
           element={
             auth.token && meQuery.isPending
@@ -142,14 +158,14 @@ function AppRoutes() {
               : canAccessAdmin(currentUser)
               ? <AdminPage currentUserRole={currentUser?.role} />
               : auth.token
-                ? <Navigate replace to="/cs" />
+                ? <Navigate replace to={repHome} />
                 : <Navigate replace to="/login" />
           }
           path="/admin"
         />
 
-        {/* Kök → CS'e yönlendir */}
-        <Route element={<Navigate replace to="/cs" />} path="/" />
+        {/* Kök → kullanıcının departmanına yönlendir */}
+        <Route element={<Navigate replace to={repHome} />} path="/" />
 
         {/* Geriye dönük uyumluluk: eski URL'ler CS'e yönlendirilir */}
         <Route element={<Navigate replace to="/cs/audit" />} path="/audit" />

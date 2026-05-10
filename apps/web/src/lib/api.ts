@@ -67,7 +67,8 @@ export type AuthenticatedUser = {
   email: string;
   displayName: string;
   role: Role;
-  roles?: UserRoleEntry[];
+  roles?: UserRoleEntry[] | undefined;
+  representativeKey?: string | undefined;
 };
 
 type ResetDatasetResponse = {
@@ -190,12 +191,16 @@ async function getFirebaseCurrentUser() {
   return currentUser;
 }
 
-async function resolveFirebaseRole(email: string): Promise<Role | null> {
+async function resolveFirebaseRole(email: string): Promise<{ role: Role; representativeKey?: string | undefined } | null> {
   const tokenResult = await firebaseAuth?.currentUser?.getIdTokenResult();
   const claimRole = roleSchema.safeParse(tokenResult?.claims.role);
+  const claimRepKey =
+    typeof tokenResult?.claims.representativeKey === "string"
+      ? (tokenResult!.claims.representativeKey as string)
+      : undefined;
 
   if (claimRole.success) {
-    return claimRole.data;
+    return { role: claimRole.data, representativeKey: claimRepKey };
   }
 
   if (!firebaseDb) {
@@ -210,41 +215,54 @@ async function resolveFirebaseRole(email: string): Promise<Role | null> {
 
   const parsedRoleAssignment = userRoleAssignmentSchema.safeParse(roleSnapshot.data());
   if (parsedRoleAssignment.success) {
-    return parsedRoleAssignment.data.role;
+    return {
+      role: parsedRoleAssignment.data.role,
+      representativeKey: parsedRoleAssignment.data.representativeKey ?? claimRepKey
+    };
   }
 
   const parsedRole = roleSchema.safeParse(roleSnapshot.data().role);
-  return parsedRole.success ? parsedRole.data : null;
+  return parsedRole.success
+    ? {
+        role: parsedRole.data,
+        representativeKey: (roleSnapshot.data() as { representativeKey?: string }).representativeKey ?? claimRepKey
+      }
+    : null;
 }
 
 async function getMeFromFirebase(): Promise<AuthenticatedUser> {
   const currentUser = await getFirebaseCurrentUser();
-  let role = await resolveFirebaseRole(currentUser.email!);
+  let resolved = await resolveFirebaseRole(currentUser.email!);
 
   // Dev modunda rol bulunamazsa otomatik admin kaydı oluştur (bootstrap)
-  if (!role && import.meta.env.VITE_DEV_AUTH_MODE === "true" && firebaseDb) {
+  if (!resolved && import.meta.env.VITE_DEV_AUTH_MODE === "true" && firebaseDb) {
     const emailKey = normalizeRoleEmail(currentUser.email!);
     try {
       await setDoc(doc(firebaseDb, "userRoles", emailKey), {
         email: currentUser.email!,
         role: "admin"
       });
-      role = "admin";
+      resolved = { role: "admin" };
       console.info(`[KaliteDB] Dev bootstrap: ${currentUser.email} → admin rolü oluşturuldu.`);
     } catch {
       // Firestore kuralları izin vermiyorsa sessizce geç
     }
   }
 
-  if (!role) {
+  if (!resolved) {
     throw new Error("Kullanıcı rol tanımı bulunamadı.");
+  }
+
+  if (resolved.role === "representative" && !resolved.representativeKey) {
+    throw new Error("Temsilci rolü için temsilci eşleşmesi atanmamış. Lütfen yöneticinizle iletişime geçin.");
   }
 
   return {
     uid: currentUser.uid,
     email: currentUser.email!,
     displayName: currentUser.displayName ?? currentUser.email!,
-    role
+    role: resolved.role,
+    representativeKey: resolved.representativeKey
   };
 }
 
@@ -289,9 +307,9 @@ async function getRolesFromFirebase(): Promise<UserRoleAssignment[]> {
   }
 
   const currentUser = await getFirebaseCurrentUser();
-  const currentRole = await resolveFirebaseRole(currentUser.email!);
+  const resolved = await resolveFirebaseRole(currentUser.email!);
 
-  if (currentRole !== "admin") {
+  if (resolved?.role !== "admin") {
     throw new Error("Rol listesi yalnızca admin kullanıcılar için kullanılabilir.");
   }
 
@@ -622,11 +640,13 @@ function buildDefaultQtManualEntry(
 async function resolveQtManualTarget(target?: QtManualEntryTarget) {
   const currentUser = await getFirebaseCurrentUser();
   const currentUserName = currentUser.displayName ?? currentUser.email!;
-  const currentRole = await resolveFirebaseRole(currentUser.email!);
+  const resolved = await resolveFirebaseRole(currentUser.email!);
 
-  if (!currentRole) {
+  if (!resolved) {
     throw new Error("Kullanıcı rol tanımı bulunamadı.");
   }
+
+  const currentRole = resolved.role;
 
   if (currentRole !== "admin" || !target?.targetUserEmail) {
     return {
@@ -1247,7 +1267,8 @@ export const api = {
           uid: "dev-user",
           email: "dev@kalitedb.local",
           displayName: "Geliştirici",
-          role: role.data
+          role: role.data,
+          representativeKey: role.data === "representative" ? "test-rep" : undefined
         } satisfies AuthenticatedUser;
       }
     }
@@ -1638,11 +1659,24 @@ export const api = {
       return getRolesFromFirebase();
     });
   },
-  createRole(token: string | null, body: { uid?: string; email: string; role: Role; departments?: Department[] }) {
+  createRole(
+    token: string | null,
+    body: {
+      uid?: string | undefined;
+      email: string;
+      role: Role;
+      departments?: Department[] | undefined;
+      representativeKey?: string | undefined;
+    }
+  ) {
+    const cleaned = {
+      ...body,
+      representativeKey: body.representativeKey?.trim() || undefined
+    };
     return request<UserRoleAssignment>("/api/users/roles", {
       token,
       method: "POST",
-      body
+      body: cleaned
     });
   },
   async getQtManualEntries(token: string | null, periodId: string) {

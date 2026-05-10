@@ -35,6 +35,7 @@ import {
   getQuarterPeriodIds
 } from "../lib/period-aggregation";
 import { RepresentativeSelect } from "../components/representative-select";
+import { useRepScope } from "../lib/use-rep-scope";
 import { BadgePill } from "../components/representative-detail-modal";
 import { CareerPathModal } from "../components/career-path-modal";
 import { useActiveRepresentativeKeys } from "../lib/use-active-representatives";
@@ -123,6 +124,7 @@ function resolveSuccessState(value: number | null | undefined) {
 
 export function SalesRepresentativesPage() {
   const auth = useAuth();
+  const repScope = useRepScope();
   const [searchParams, setSearchParams] = useSearchParams();
   const datasetTypes = ["agent-metrics", "audit-metrics"] as const;
 
@@ -348,7 +350,9 @@ export function SalesRepresentativesPage() {
   const rawId = searchParams.get("id");
   const legacyKey = searchParams.get("agentKey");
   const decodedKey = rawId ? (() => { try { return atob(rawId); } catch { return null; } })() : null;
-  const selectedAgentKey = decodedKey ?? legacyKey ?? topPerformerKey ?? representatives[0]?.agentKey;
+  const selectedAgentKey = repScope.isRepresentative
+    ? repScope.lockedKey
+    : decodedKey ?? legacyKey ?? topPerformerKey ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
   const selectedAudit = auditMetrics.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
   const selectedKpi: SalesKpiAgent | null = kpiAgents.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
@@ -706,14 +710,18 @@ export function SalesRepresentativesPage() {
               options={representatives.map((item) => ({ key: item.agentKey, label: item.agentName }))}
               value={selectedRepresentative?.agentKey ?? ""}
               onChange={handleRepresentativeChange}
+              lockedTo={repScope.isRepresentative ? repScope.lockedKey : undefined}
+              lockedLabel={repScope.displayName}
             />
-            <Link
-              to={`/sales/compare${selectedRepresentative ? `?a=${selectedRepresentative.agentKey}` : ""}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
-            >
-              <GitCompareArrows size={14} />
-              <span className="hidden sm:inline">Karşılaştır</span>
-            </Link>
+            {!repScope.isRepresentative ? (
+              <Link
+                to={`/sales/compare${selectedRepresentative ? `?a=${selectedRepresentative.agentKey}` : ""}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
+              >
+                <GitCompareArrows size={14} />
+                <span className="hidden sm:inline">Karşılaştır</span>
+              </Link>
+            ) : null}
           </div>
         }
       >
@@ -1059,7 +1067,7 @@ export function SalesRepresentativesPage() {
         />
       )}
 
-      {rankingModalData && (
+      {rankingModalData && !repScope.isRepresentative && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setRankingModalMetric(null)}>
           <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-600 dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">

@@ -167,33 +167,56 @@ export const importJobSchema = z.object({
   uploadedAt: z.string().datetime()
 });
 
-export const userRoleAssignmentSchema = z.object({
-  uid: z.string().optional(),
-  email: z.string().email(),
-  role: roleSchema,
-  departments: z.array(departmentSchema).default([]),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime()
-});
+export const userRoleAssignmentSchema = z
+  .object({
+    uid: z.string().optional(),
+    email: z.string().email(),
+    role: roleSchema,
+    departments: z.array(departmentSchema).default([]),
+    representativeKey: z.string().optional(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime()
+  })
+  .superRefine((value, ctx) => {
+    if (value.role === "representative" && !value.representativeKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["representativeKey"],
+        message: "Temsilci rolü için temsilci eşleşmesi zorunludur."
+      });
+    }
+  });
 
 // Bir kullanıcının tek bir departmandaki rol tanımı
 export const userRoleEntrySchema = z.object({
   department: departmentSchema.optional(), // admin için boş (global erişim)
   role: roleSchema,
   level: managerLevelSchema.optional(),    // sadece manager için
-  teamId: z.string().optional()            // team_leader / representative için
+  teamId: z.string().optional(),           // team_leader / representative için
+  representativeKey: z.string().optional() // representative rolü için kişi eşleşmesi
 });
 
 // Yeni kullanıcı dokümanı (userRoles'un yerini alır)
-export const userSchema = z.object({
-  uid: z.string().optional(),
-  email: z.string().email(),
-  displayName: z.string().optional(),
-  role: roleSchema,                               // birincil rol (kural ve claim uyumu için)
-  roles: z.array(userRoleEntrySchema).default([]), // tüm departman atamaları
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime()
-});
+export const userSchema = z
+  .object({
+    uid: z.string().optional(),
+    email: z.string().email(),
+    displayName: z.string().optional(),
+    role: roleSchema,                               // birincil rol (kural ve claim uyumu için)
+    roles: z.array(userRoleEntrySchema).default([]), // tüm departman atamaları
+    representativeKey: z.string().optional(),       // representative rolü için kişi eşleşmesi
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime()
+  })
+  .superRefine((value, ctx) => {
+    if (value.role === "representative" && !value.representativeKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["representativeKey"],
+        message: "Temsilci rolü için temsilci eşleşmesi zorunludur."
+      });
+    }
+  });
 
 // Takım dokümanı
 export const teamSchema = z.object({

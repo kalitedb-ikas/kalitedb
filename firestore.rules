@@ -16,6 +16,15 @@ service cloud.firestore {
       return isAuthed() && request.auth.token.role in ['admin', 'roleplay_admin'];
     }
 
+    // Yazma yetkisi: temsilci ve görüntüleyici rolleri yazamaz; diğer
+    // authenticated roller (admin/manager/team_leader/quality/team/ceo/qt vb.)
+    // mevcut mantıkla yazabilir.
+    function isWriter() {
+      return isAuthed()
+        && request.auth.token.role != 'representative'
+        && request.auth.token.role != 'viewer';
+    }
+
     // ─── Koleksiyon kuralları ────────────────────────────────────────────────
     // Tüm rollere admin yetkisi verildi — giriş yapan herkes okuyabilir/yazabilir.
     // Yalnızca userRoles ve users koleksiyonları admin ile sınırlandırıldı
@@ -24,43 +33,43 @@ service cloud.firestore {
     // Dönem üst dokümanı
     match /reportPeriods/{periodId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Agent metrikleri
     match /reportPeriods/{periodId}/agentMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Audit metrikleri
     match /reportPeriods/{periodId}/auditMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Soru performansı
     match /reportPeriods/{periodId}/questionPerformance/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // QT metrikleri
     match /reportPeriods/{periodId}/qtMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Role-play metrikleri (satış)
     match /reportPeriods/{periodId}/roleplayMetrics/{recordId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Sesli rol-play koçu oturumları
     match /voiceCoachSessions/{sessionId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Rol-play senaryoları (CMS) — herkes okur, yalnızca roleplay_admin/admin yazar
@@ -78,19 +87,19 @@ service cloud.firestore {
     // Değerlendirme soruları (satış)
     match /reportPeriods/{periodId}/evaluationQuestions/{questionId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // QT manuel girişleri
     match /reportPeriods/{periodId}/qtManualEntries/{userKey} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Eşik konfigürasyonları
     match /thresholdConfigs/{metricId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Eski kullanıcı rolleri — sadece admin yazabilir (privilege escalation engeli)
@@ -108,49 +117,49 @@ service cloud.firestore {
     // Takımlar
     match /teams/{teamId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Satış KPI verileri
     match /reportPeriods/{periodId}/salesKpiData/{docId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Satış toplantıları
     match /reportPeriods/{periodId}/salesMeetings/{meetingId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Temsilci yönetimi
     match /representatives/{repKey} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Eğitim takvimi etkinlikleri
     match /trainingEvents/{eventId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // RAMP endeksi girişleri ve hedefleri
     match /reportPeriods/{periodId}/rampEntries/{docId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Başarı endeksi manuel girişleri
     match /reportPeriods/{periodId}/successIndexEntries/{agentKey} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // İçe aktarma işleri
     match /importJobs/{jobId} {
       allow get, list: if isAuthed();
-      allow create, update, delete: if isAuthed();
+      allow create, update, delete: if isWriter();
     }
 
     // Audit logları — herkes yazabilir (loglama), sadece admin silebilir
