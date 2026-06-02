@@ -1,4 +1,4 @@
-import { buildDashboardSnapshot, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, type AgentMetric, type AuditMetric } from "@kalitedb/shared";
+import { AUDIT_AVERAGE_EXCLUDED_KEYS, buildDashboardSnapshot, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, type AgentMetric, type AuditMetric } from "@kalitedb/shared";
 import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
@@ -439,7 +439,10 @@ export function RepresentativesPage() {
       localCloseRate: avg(csAgents.map((a) => a.localCloseRate)),
       avgTalkDurationSeconds: avg(csAgents.map((a) => a.avgTalkDurationSeconds)),
       evaluationCount: avg(csAgents.map((a) => a.evaluationCount)),
-      auditScore: avg(auditMetrics.map((a) => a.auditScore)),
+      // Audit ortalaması doğrudan audit import'undan; AUDIT_AVERAGE_EXCLUDED_KEYS hariç.
+      auditScore: avg(
+        auditMetrics.filter((a) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey)).map((a) => a.auditScore)
+      ),
     } as Record<string, number | null>;
   }, [csAgents, auditMetrics, premiumOnboardingKeys]);
 

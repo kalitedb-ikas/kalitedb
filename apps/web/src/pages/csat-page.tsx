@@ -1,5 +1,6 @@
 import {
   applyTopRankPreference,
+  AUDIT_AVERAGE_EXCLUDED_KEYS,
   average,
   buildDashboardSnapshot,
   resolveThresholdTone,
@@ -193,7 +194,12 @@ export function CsatPage() {
   // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
   // ama özet (summary / ortalama / toplam) hesaplarında korunur.
   const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
-  const snapshot = useMemo(() => {
+  // "Start" ekibi: CSAT kart ve grafiklerinde (champion, lider tablosu, en güçlü/izlenmesi
+  // gereken, takım CSAT ortalaması, yıllık trend) gösterilmez; ayrıntı tablosunda KALIR.
+  const startTeamKeys = useRepresentativeKeysWithBadge("start");
+
+  // Ayrıntı tablosu snapshot'ı: 'satıcı operasyon' gizli, 'start' ekibi DAHİL.
+  const tableSnapshot = useMemo(() => {
     if (!aggregatedSnapshotCsatAdjusted) return undefined;
     if (hiddenAgentKeys.size === 0) return aggregatedSnapshotCsatAdjusted;
 
@@ -215,27 +221,54 @@ export function CsatPage() {
     return { ...rebuilt, summary: aggregatedSnapshotCsatAdjusted.summary };
   }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys]);
 
+  // Kart/grafik snapshot'ı: rankings & highlights'tan 'satıcı operasyon' (mevcut) + 'start'
+  // ekibi çıkarılır. Takım CSAT ortalaması/agentCount satıcı operasyonu korur (mevcut davranış)
+  // ama 'start' ekibini hariç tutar; 'premium_onboarding' null'lama davranışı da korunur.
+  const snapshot = useMemo(() => {
+    if (!aggregatedSnapshotCsatAdjusted) return undefined;
+    const base = aggregatedSnapshotCsatAdjusted;
+    const rankingExcluded = new Set<string>([...hiddenAgentKeys, ...startTeamKeys]);
+    const rankingAgents = base.datasets.agentMetrics.filter((a) => !rankingExcluded.has(a.agentKey));
+    const rankingAudits = base.datasets.auditMetrics.filter((a) => !rankingExcluded.has(a.agentKey));
+    const rebuilt = buildDashboardSnapshot({
+      period: base.period,
+      datasets: { ...base.datasets, agentMetrics: rankingAgents, auditMetrics: rankingAudits },
+      thresholds: base.thresholds
+    });
+    if (startTeamKeys.size === 0) {
+      return { ...rebuilt, summary: base.summary };
+    }
+    const summaryAgents = base.datasets.agentMetrics.filter((a) => !startTeamKeys.has(a.agentKey));
+    const summaryAudits = base.datasets.auditMetrics.filter((a) => !startTeamKeys.has(a.agentKey));
+    const summarySnapshot = buildDashboardSnapshot({
+      period: base.period,
+      datasets: { ...base.datasets, agentMetrics: summaryAgents, auditMetrics: summaryAudits },
+      thresholds: base.thresholds
+    });
+    return { ...rebuilt, summary: summarySnapshot.summary };
+  }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys, startTeamKeys]);
+
   const rawYearlyTrend = yearlyTrendQuery.data ?? [];
   // Yıllık trend grafiği CSAT serisi: Premium Onboarding'i hariç tut (aylık nokta bazında
   // yeniden hesapla ki Mart gibi onların yüksek skor aldığı aylar ortalamayı şişirmesin).
   const yearlyTrend = useMemo(() => {
-    if (premiumOnboardingKeys.size === 0) return rawYearlyTrend;
+    if (premiumOnboardingKeys.size === 0 && startTeamKeys.size === 0) return rawYearlyTrend;
     const agentMap = agentMetricsBulkQuery.data;
     if (!agentMap) return rawYearlyTrend;
     return rawYearlyTrend.map((point) => {
       const agents = agentMap[point.periodId];
       if (!agents) return point;
       const csatValues = agents
-        .filter((a) => !premiumOnboardingKeys.has(a.agentKey))
+        .filter((a) => !premiumOnboardingKeys.has(a.agentKey) && !startTeamKeys.has(a.agentKey))
         .map((a) => a.callEvaluationAverage);
       return { ...point, csat: average(csatValues) };
     });
-  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys]);
+  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys, startTeamKeys]);
   const rows = useMemo(() => {
-    if (!snapshot) return [];
+    if (!tableSnapshot) return [];
 
     const auditMap = new Map(
-      selectAuditMetrics(snapshot.datasets).map((record) => [
+      selectAuditMetrics(tableSnapshot.datasets).map((record) => [
         record.agentKey,
         {
           auditScore: record.auditScore,
@@ -244,7 +277,7 @@ export function CsatPage() {
       ])
     );
 
-    return snapshot.datasets.agentMetrics
+    return tableSnapshot.datasets.agentMetrics
       .map((item) => {
         const audit = auditMap.get(item.agentKey);
         return {
@@ -275,10 +308,12 @@ export function CsatPage() {
 
         return left.agentName.localeCompare(right.agentName, "tr");
       });
-  }, [snapshot]);
+  }, [tableSnapshot]);
   const csatLeaders = useMemo(() => {
+    // Champion podyumu 'start' ekibini göstermez (ayrıntı tablosunda kalsalar da).
     const scoredAgents = rows.filter(
-      (row): row is CsatRow & { callEvaluationAverage: number } => row.callEvaluationAverage !== null
+      (row): row is CsatRow & { callEvaluationAverage: number } =>
+        row.callEvaluationAverage !== null && !startTeamKeys.has(row.agentKey)
     );
 
     if (scoredAgents.length === 0) {
@@ -298,7 +333,7 @@ export function CsatPage() {
         imageSrc: getRepresentativePhotoSrc(row.agentName) ?? undefined
       }));
     return applyTopRankPreference(leaders).map(({ label: _label, value: _value, ...rest }) => rest);
-  }, [rows]);
+  }, [rows, startTeamKeys]);
   const csatLeaderNames = formatNameList(csatLeaders.map((leader) => leader.name));
 
   const csatSummary = useMemo(() => {
@@ -418,27 +453,18 @@ export function CsatPage() {
       previousAuditAccuracyDisplay:
         auditByKey.get(a.agentKey)?.previousAuditAccuracy ?? a.previousAuditAccuracy
     }));
-    // Audit ortalaması ve önceki audit doğruluğu, audit sayfasıyla aynı mantıkta
-    // hem agent-metrics hem audit-metrics anahtarlarının birleşimi üzerinden hesaplanır;
-    // sadece audit-metrics'te bulunan manuel kayıtlar ortalamaya dahil olur.
-    const auditUnionKeys = new Set<string>([
-      ...fullAgents.map((a) => a.agentKey),
-      ...fullAudits.map((a) => a.agentKey)
-    ]);
-    const auditScoresUnion: Array<number | null> = [];
-    const previousAuditAccuracyUnion: Array<number | null> = [];
-    auditUnionKeys.forEach((key) => {
-      const audit = auditByKey.get(key);
-      const agent = fullAgents.find((a) => a.agentKey === key);
-      auditScoresUnion.push(audit?.auditScore ?? agent?.auditScore ?? null);
-      previousAuditAccuracyUnion.push(audit?.previousAuditAccuracy ?? agent?.previousAuditAccuracy ?? null);
-    });
+    // Audit ortalaması ve önceki audit doğruluğu doğrudan audit import'undan (auditMetrics)
+    // hesaplanır; agent-metrics (CSAT) ile birleştirilmez. AUDIT_AVERAGE_EXCLUDED_KEYS'teki
+    // temsilciler ortalamaya dahil edilmez (puanları tabloda görünmeye devam eder).
+    const includedAudits = fullAudits.filter((a) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey));
+    const auditScoresImport = includedAudits.map((a) => a.auditScore);
+    const previousAuditAccuracyImport = includedAudits.map((a) => a.previousAuditAccuracy);
     const avgRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
       _label: "ORTALAMA",
       _tone: "emerald",
       agentName: "ORTALAMA",
-      auditScoreDisplay: formatAuditScore(average(auditScoresUnion)),
-      previousAuditAccuracyDisplay: formatPercent(average(previousAuditAccuracyUnion)),
+      auditScoreDisplay: formatAuditScore(average(auditScoresImport)),
+      previousAuditAccuracyDisplay: formatPercent(average(previousAuditAccuracyImport)),
       totalCallCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalCallCount)) / enriched.length)),
       totalChatMailCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalChatMailCount)) / enriched.length)),
       totalTicketClosedCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalTicketClosedCount)) / enriched.length)),

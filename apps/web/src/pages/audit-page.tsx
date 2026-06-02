@@ -3,6 +3,7 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   applyTopRankPreference,
+  AUDIT_AVERAGE_EXCLUDED_KEYS,
   average,
   buildDashboardSnapshot,
   selectAuditMetrics,
@@ -314,7 +315,11 @@ export function AuditPage() {
 
     const points = trendYearPeriods.map((period) => {
       const audits = auditHistoryMap[period.id] ?? [];
-      const auditAverage = average(audits.filter((a) => !isAuditSummaryRow(a.agentName)).map((a) => a.auditScore));
+      const auditAverage = average(
+        audits
+          .filter((a) => !isAuditSummaryRow(a.agentName) && !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey))
+          .map((a) => a.auditScore)
+      );
       return {
         periodId: period.id,
         period: period.month,
@@ -492,25 +497,15 @@ export function AuditPage() {
   const tableSummaryRows = useMemo(() => {
     // Ortalama satırı 'satıcı operasyon' etiketlileri de içerir.
     // Etiket filtresi aktifse ortalama yalnızca filtrelenmiş temsilciler üzerinden hesaplanır.
+    // Audit ortalaması doğrudan audit import'undan (auditMetrics) hesaplanır; agent-metrics
+    // (CSAT) ile birleştirilmez. AUDIT_AVERAGE_EXCLUDED_KEYS'teki temsilciler ortalamaya girmez.
     let fullAudits = aggregatedSnapshot ? selectAuditMetrics(aggregatedSnapshot.datasets) : [];
-    let fullAgents = aggregatedSnapshot?.datasets.agentMetrics ?? [];
     if (badgeFilter) {
       fullAudits = fullAudits.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
-      fullAgents = fullAgents.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
     }
-    const auditByKey = new Map(fullAudits.map((r) => [r.agentKey, r]));
-    const allKeys = new Set<string>([
-      ...fullAgents.map((a) => a.agentKey),
-      ...fullAudits.map((a) => a.agentKey)
-    ]);
-    const auditScores: Array<number | null> = [];
-    const prevAuditScores: Array<number | null> = [];
-    allKeys.forEach((key) => {
-      const audit = auditByKey.get(key);
-      const agent = fullAgents.find((a) => a.agentKey === key);
-      auditScores.push(audit?.auditScore ?? agent?.auditScore ?? null);
-      prevAuditScores.push(audit?.previousAuditAccuracy ?? agent?.previousAuditAccuracy ?? null);
-    });
+    const includedAudits = fullAudits.filter((a) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey));
+    const auditScores = includedAudits.map((a) => a.auditScore);
+    const prevAuditScores = includedAudits.map((a) => a.previousAuditAccuracy);
     if (auditScores.every((v) => v === null)) {
       return [] as Array<Record<string, ReactNode> & { _tone?: "emerald" }>;
     }

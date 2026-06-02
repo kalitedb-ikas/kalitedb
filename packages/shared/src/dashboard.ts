@@ -16,6 +16,13 @@ import { average, computeFeedbackCoverage, selectQuestionRankings, sortMetricIte
 
 type ThresholdMap = Record<KpiMetricKey, ThresholdConfig>;
 
+/**
+ * CS audit ortalamalarına dahil edilmeyen temsilci key'leri (normalizeKey formatı).
+ * Bu temsilcilerin audit puanları tablolarda/sıralamalarda görünmeye devam eder;
+ * yalnızca takım audit ortalaması ve önceki audit doğruluğu ortalaması hesabına girmez.
+ */
+export const AUDIT_AVERAGE_EXCLUDED_KEYS: ReadonlySet<string> = new Set(["bahadir-icoz", "burak-yegin"]);
+
 function buildMetricItem(
   id: string,
   label: string,
@@ -188,9 +195,15 @@ function buildSummary(
     ...auditMetrics.map((record) => record.agentKey)
   ]);
 
+  // Audit ortalamaları doğrudan audit import'undan (auditMetrics) hesaplanır;
+  // AUDIT_AVERAGE_EXCLUDED_KEYS'teki temsilciler ortalamaya dahil edilmez.
+  const includedAuditMetrics = auditMetrics.filter(
+    (record) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(record.agentKey)
+  );
+
   return {
-    auditAverage: average(auditMetrics.map((record) => record.auditScore)),
-    previousAuditAccuracyAverage: average(auditMetrics.map((record) => record.previousAuditAccuracy)),
+    auditAverage: average(includedAuditMetrics.map((record) => record.auditScore)),
+    previousAuditAccuracyAverage: average(includedAuditMetrics.map((record) => record.previousAuditAccuracy)),
     csatAverage: average(agentMetrics.map((record) => record.callEvaluationAverage)),
     qtCoverageAverage: average(qtMetrics.map((record) => record.feedbackCoverage)),
     totalConversationCount: sum(agentMetrics.map((record) => record.totalConversationCount)),
