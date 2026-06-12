@@ -22,6 +22,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from
 import { useAuth } from "../lib/auth";
 import { toPublicAssetPath } from "../lib/asset-path";
 import { api, type AuthenticatedUser } from "../lib/api";
+import { getAllowedDepartments } from "../lib/department-access";
 import { useRepScope } from "../lib/use-rep-scope";
 import { SkyToggle } from "./sky-toggle";
 
@@ -162,9 +163,13 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
     return items.filter((item) => !item.roles || item.roles.includes(currentUser.role));
   }, [activeDepartment, props.currentUser, repScope.isRepresentative, repScope.department]);
 
-  const canSeeCsTab = !repScope.isRepresentative || repScope.department === "cs";
-  const canSeeSalesTab = !repScope.isRepresentative || repScope.department === "sales";
-  const canSeeQualityTab = Boolean(props.currentUser) && !repScope.isRepresentative;
+  const allowedDepartments = useMemo(() => getAllowedDepartments(props.currentUser), [props.currentUser]);
+  const canSeeCsTab =
+    (!repScope.isRepresentative || repScope.department === "cs") && allowedDepartments.includes("cs");
+  const canSeeSalesTab =
+    (!repScope.isRepresentative || repScope.department === "sales") && allowedDepartments.includes("sales");
+  const canSeeQualityTab =
+    Boolean(props.currentUser) && !repScope.isRepresentative && allowedDepartments.includes("quality");
 
   const currentNavigationItem = getCurrentNavigationItem(location.pathname, activeNavigation);
 

@@ -68,6 +68,7 @@ export type AuthenticatedUser = {
   displayName: string;
   role: Role;
   roles?: UserRoleEntry[] | undefined;
+  departments?: Department[] | undefined;
   representativeKey?: string | undefined;
 };
 
@@ -191,7 +192,7 @@ async function getFirebaseCurrentUser() {
   return currentUser;
 }
 
-async function resolveFirebaseRole(email: string): Promise<{ role: Role; representativeKey?: string | undefined } | null> {
+async function resolveFirebaseRole(email: string): Promise<{ role: Role; departments?: Department[] | undefined; representativeKey?: string | undefined } | null> {
   const tokenResult = await firebaseAuth?.currentUser?.getIdTokenResult();
   const claimRole = roleSchema.safeParse(tokenResult?.claims.role);
   const claimRepKey =
@@ -217,14 +218,20 @@ async function resolveFirebaseRole(email: string): Promise<{ role: Role; represe
   if (parsedRoleAssignment.success) {
     return {
       role: parsedRoleAssignment.data.role,
+      departments: parsedRoleAssignment.data.departments,
       representativeKey: parsedRoleAssignment.data.representativeKey ?? claimRepKey
     };
   }
 
+  const rawDepartments = (roleSnapshot.data() as { departments?: unknown }).departments;
+  const departments = Array.isArray(rawDepartments)
+    ? (rawDepartments.filter((dep): dep is Department => dep === "cs" || dep === "sales" || dep === "quality" || dep === "partner"))
+    : undefined;
   const parsedRole = roleSchema.safeParse(roleSnapshot.data().role);
   return parsedRole.success
     ? {
         role: parsedRole.data,
+        departments,
         representativeKey: (roleSnapshot.data() as { representativeKey?: string }).representativeKey ?? claimRepKey
       }
     : null;
@@ -262,6 +269,7 @@ async function getMeFromFirebase(): Promise<AuthenticatedUser> {
     email: currentUser.email!,
     displayName: currentUser.displayName ?? currentUser.email!,
     role: resolved.role,
+    departments: resolved.departments,
     representativeKey: resolved.representativeKey
   };
 }
