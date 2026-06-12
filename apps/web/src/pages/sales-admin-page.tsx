@@ -1,9 +1,9 @@
 import { SurfaceCard } from "@kalitedb/ui";
 import { normalizeKey } from "@kalitedb/shared";
-import type { Representative, SalesMeeting, SalesKpiData } from "@kalitedb/shared";
+import type { Representative, SalesMeeting, SalesKpiData, SalesKpiAgent } from "@kalitedb/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, ClipboardCheck, FileQuestion, Handshake, LogOut, MessageSquare, MessageSquarePlus, Mic, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, Users, X } from "lucide-react";
+import { BookOpen, ClipboardCheck, FileQuestion, Handshake, LogOut, Maximize2, MessageSquare, MessageSquarePlus, Mic, Minimize2, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -12,7 +12,7 @@ import { collection, doc, getDocs, setDoc } from "firebase/firestore";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { firebaseDb } from "../lib/firebase";
-import { parseTalkDurationLabelToSeconds } from "../lib/format";
+import { formatPeriodMonth, parseTalkDurationLabelToSeconds } from "../lib/format";
 import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
@@ -319,6 +319,16 @@ export function SalesAdminPage() {
   }, [representativesQuery.data, allSalesAgentsQuery.data, repStatusFilter]);
 
   const selectedRep = filteredSalesReps.find((r) => r.key === selectedRepKey) ?? null;
+
+  // Aktif satış/partner temsilcileri (KPI tablosunu temsilci adlarıyla ön-doldurmak için)
+  const activeSalesReps = useMemo(
+    () =>
+      (representativesQuery.data ?? [])
+        .filter((r) => (r.department === "sales" || r.department === "partner") && r.status === "active")
+        .sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"))
+        .map((r) => ({ key: r.key, name: r.displayName })),
+    [representativesQuery.data]
+  );
 
   const representativeColumns = useMemo<ColumnDef<Representative>[]>(
     () => [
@@ -1011,6 +1021,68 @@ export function SalesAdminPage() {
     }
   });
 
+  // Veri olmayan bir dönemde KPI iskeleti oluşturur (manuel giriş için).
+  // Aktif satış temsilcilerini satır olarak ön-doldurur; dönem yoksa CSV
+  // import ile aynı mantıkla önce dönemi oluşturur.
+  const initKpiMutation = useMutation({
+    mutationFn: async () => {
+      let periodId = selectedPeriodId;
+      if (!periodId) {
+        const compareToPeriodId = salesPeriods.find((p) => p.month === getPreviousMonth(activePeriodMonth))?.id;
+        const created = await api.createPeriod(auth.token, {
+          month: activePeriodMonth,
+          title: formatSalesPeriodTitle(activePeriodMonth),
+          department: "sales",
+          ...(compareToPeriodId ? { compareToPeriodId } : {})
+        });
+        periodId = created.id;
+        setSelectedPeriodId(periodId);
+      }
+      const payload: Record<string, unknown> = {
+        targets: {
+          perfScore: 0, salesAmount: 0, licenseCount: 0, avgLicensePrice: 0,
+          talkDurationLabel: "", talkDurationTargetSeconds: 0,
+          callAttempts: 0, conversionRate: 0
+        },
+        agents: activeSalesReps.map((rep) => makeBlankKpiAgent(rep.key, rep.name)),
+        updatedAt: new Date().toISOString()
+      };
+      await api.saveSalesKpiData(auth.token, periodId, payload as any);
+      return periodId;
+    },
+    onSuccess: async (savedPeriodId) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sales-kpi"] }),
+        queryClient.invalidateQueries({ queryKey: ["periods", auth.token] }),
+        queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, savedPeriodId] })
+      ]);
+    }
+  });
+
+  // Mevcut tabloya, henüz eklenmemiş aktif satış temsilcilerini ekler.
+  const fillRepsMutation = useMutation({
+    mutationFn: async () => {
+      const current = kpiDataQuery.data;
+      if (!current || !selectedPeriodId) throw new Error("Bu dönem için KPI verisi yok.");
+      const present = new Set<string>();
+      for (const a of current.agents) {
+        present.add(a.agentKey || normalizeKey(a.agentName));
+        present.add(normalizeKey(a.agentName));
+      }
+      const missing = activeSalesReps.filter((rep) => !present.has(rep.key) && !present.has(normalizeKey(rep.name)));
+      if (missing.length === 0) return selectedPeriodId;
+      const payload: Record<string, unknown> = {
+        targets: current.targets,
+        agents: [...current.agents, ...missing.map((rep) => makeBlankKpiAgent(rep.key, rep.name))],
+        ...(current.licenseSummary ? { licenseSummary: current.licenseSummary } : {}),
+        updatedAt: new Date().toISOString()
+      };
+      await api.saveSalesKpiData(auth.token, selectedPeriodId, payload as any);
+      return selectedPeriodId;
+    },
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["sales-kpi"] }); }
+  });
+
   /* ── Tekil silme/güncelleme mutasyonları ── */
 
   const deleteRoleplayRecordMutation = useMutation({
@@ -1463,6 +1535,9 @@ export function SalesAdminPage() {
               kpiAgentCount={kpiAgentCount}
               kpiData={kpiDataQuery.data}
               kpiImportSuccess={kpiImportSuccess}
+              initKpiMutation={initKpiMutation}
+              fillRepsMutation={fillRepsMutation}
+              activeReps={activeSalesReps}
               resetAgentsMutation={resetKpiAgentsMutation}
               saveKpiMutation={saveKpiMutation}
               selectedPeriodId={selectedPeriodId}
@@ -2259,6 +2334,9 @@ function KpiSection(props: {
   kpiImportSuccess: boolean;
   selectedPeriodId: string;
   saveKpiMutation: { isPending: boolean; isError: boolean; error: unknown; mutate: (file: File) => void };
+  initKpiMutation: { mutate: () => void; isPending: boolean };
+  fillRepsMutation: { mutate: () => void; isPending: boolean };
+  activeReps: { key: string; name: string }[];
   addAgentMutation: { mutate: (a: any) => void; isPending: boolean };
   updateAgentMutation: { mutate: (p: { agentKey: string; updates: Record<string, unknown> }) => void; isPending: boolean };
   deleteAgentMutation: { mutate: (k: string) => void; isPending: boolean };
@@ -2268,35 +2346,11 @@ function KpiSection(props: {
 }) {
   const {
     kpiAgentCount, kpiData, kpiImportSuccess,
-    saveKpiMutation, addAgentMutation, updateAgentMutation, deleteAgentMutation, resetAgentsMutation, updateTargetsMutation, updateLicenseSummaryMutation
+    saveKpiMutation, initKpiMutation, fillRepsMutation, activeReps, addAgentMutation, updateAgentMutation, deleteAgentMutation, resetAgentsMutation, updateTargetsMutation, updateLicenseSummaryMutation
   } = props;
-
-  const [showManualForm, setShowManualForm] = useState(false);
-  const [agentForm, setAgentForm] = useState({
-    agentName: "", perfScore: "", salesAmount: "", licenseCount: "",
-    avgLicensePrice: "", talkDurationSeconds: "", callAttempts: "", conversionRate: "",
-    scaleCount: "", scalePlusCount: "", scaleConversion: "", scalePlusConversion: "", totalConversion: ""
-  });
-
-  const [editingTargets, setEditingTargets] = useState(false);
-  const [targetDraft, setTargetDraft] = useState<Record<string, string>>({});
 
   const [editingLicenseSummary, setEditingLicenseSummary] = useState(false);
   const [licenseSummaryDraft, setLicenseSummaryDraft] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (kpiData?.targets) {
-      setTargetDraft({
-        perfScore: String(kpiData.targets.perfScore),
-        salesAmount: String(kpiData.targets.salesAmount),
-        licenseCount: String(kpiData.targets.licenseCount),
-        avgLicensePrice: String(kpiData.targets.avgLicensePrice),
-        talkDurationLabel: kpiData.targets.talkDurationLabel,
-        callAttempts: String(kpiData.targets.callAttempts),
-        conversionRate: String(kpiData.targets.conversionRate)
-      });
-    }
-  }, [kpiData?.targets]);
 
   useEffect(() => {
     if ((kpiData as any)?.licenseSummary) {
@@ -2319,26 +2373,6 @@ function KpiSection(props: {
     }
   };
 
-  const handleAddAgent = () => {
-    if (!agentForm.agentName.trim()) return;
-    addAgentMutation.mutate({
-      agentName: agentForm.agentName.trim(),
-      perfScore: agentForm.perfScore ? Number(agentForm.perfScore) : null,
-      salesAmount: Number(agentForm.salesAmount) || 0,
-      licenseCount: Number(agentForm.licenseCount) || 0,
-      avgLicensePrice: Number(agentForm.avgLicensePrice) || 0,
-      talkDurationSeconds: Number(agentForm.talkDurationSeconds) || 0,
-      callAttempts: Number(agentForm.callAttempts) || 0,
-      conversionRate: Number(agentForm.conversionRate) || 0,
-      scaleCount: Number(agentForm.scaleCount) || 0,
-      scalePlusCount: Number(agentForm.scalePlusCount) || 0,
-      scaleConversion: Number(agentForm.scaleConversion) || 0,
-      scalePlusConversion: Number(agentForm.scalePlusConversion) || 0,
-      totalConversion: Number(agentForm.totalConversion) || 0
-    });
-    setAgentForm({ agentName: "", perfScore: "", salesAmount: "", licenseCount: "", avgLicensePrice: "", talkDurationSeconds: "", callAttempts: "", conversionRate: "", scaleCount: "", scalePlusCount: "", scaleConversion: "", scalePlusConversion: "", totalConversion: "" });
-  };
-
   const handleSaveLicenseSummary = () => {
     updateLicenseSummaryMutation.mutate({
       preCount: Number(licenseSummaryDraft.preCount) || 0,
@@ -2350,23 +2384,6 @@ function KpiSection(props: {
     setEditingLicenseSummary(false);
   };
 
-  const handleSaveTargets = () => {
-    const talkDurationLabel = targetDraft.talkDurationLabel ?? "";
-    updateTargetsMutation.mutate({
-      perfScore: Number(targetDraft.perfScore) || 0,
-      salesAmount: Number(targetDraft.salesAmount) || 0,
-      licenseCount: Number(targetDraft.licenseCount) || 0,
-      avgLicensePrice: Number(targetDraft.avgLicensePrice) || 0,
-      talkDurationLabel,
-      talkDurationTargetSeconds: parseTalkDurationLabelToSeconds(talkDurationLabel),
-      callAttempts: Number(targetDraft.callAttempts) || 0,
-      conversionRate: Number(targetDraft.conversionRate) || 0
-    });
-    setEditingTargets(false);
-  };
-
-  const formatTryCurrency = (v: number) => new Intl.NumberFormat("tr-TR").format(v) + " TRY";
-
   return (
     <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
@@ -2375,55 +2392,19 @@ function KpiSection(props: {
           {kpiAgentCount > 0 && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">{kpiAgentCount} temsilci</span>}
         </div>
 
-        {/* Hedef Düzenleme */}
-        {kpiData?.targets ? (
-          <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Hedef Değerler</h3>
-              <button
-                className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700"
-                onClick={() => setEditingTargets(!editingTargets)}
-                type="button"
-              >
-                {editingTargets ? <X size={12} /> : <Pencil size={12} />}
-                {editingTargets ? "Vazgeç" : "Düzenle"}
-              </button>
-            </div>
-            {editingTargets ? (
-              <div className="mt-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <MiniInput label="Perf. Değ." value={targetDraft.perfScore ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, perfScore: v }))} type="number" />
-                  <MiniInput label="Satış Tutarı" value={targetDraft.salesAmount ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, salesAmount: v }))} type="number" />
-                  <MiniInput label="Lisans Adeti" value={targetDraft.licenseCount ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, licenseCount: v }))} type="number" />
-                  <MiniInput label="Ort. Lisans Fiyatı" value={targetDraft.avgLicensePrice ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, avgLicensePrice: v }))} type="number" />
-                  <MiniInput label="Konuşma Süresi" value={targetDraft.talkDurationLabel ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, talkDurationLabel: v }))} />
-                  <MiniInput label="Arama Denemesi" value={targetDraft.callAttempts ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, callAttempts: v }))} type="number" />
-                  <MiniInput label="Dönüşüm Oranı" value={targetDraft.conversionRate ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, conversionRate: v }))} type="number" />
-                  <div className="flex items-end">
-                    <button
-                      className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
-                      disabled={updateTargetsMutation.isPending}
-                      onClick={handleSaveTargets}
-                      type="button"
-                    >
-                      {updateTargetsMutation.isPending ? "Kaydediliyor..." : "Kaydet"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                <div><span className="text-slate-500">Perf. Değ.:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.perfScore}</span></div>
-                <div><span className="text-slate-500">Satış Tutarı:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{formatTryCurrency(kpiData.targets.salesAmount)}</span></div>
-                <div><span className="text-slate-500">Lisans:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.licenseCount}</span></div>
-                <div><span className="text-slate-500">Ort. Fiyat:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{formatTryCurrency(kpiData.targets.avgLicensePrice)}</span></div>
-                <div><span className="text-slate-500">Konuşma:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.talkDurationLabel}</span></div>
-                <div><span className="text-slate-500">Arama:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.callAttempts}</span></div>
-                <div><span className="text-slate-500">Dönüşüm:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.conversionRate}%</span></div>
-              </div>
-            )}
-          </section>
-        ) : null}
+        {/* Temsilci KPI Tablosu (spreadsheet) */}
+        <KpiGrid
+          kpiData={kpiData}
+          activePeriodMonth={props.activePeriodMonth}
+          addAgentMutation={addAgentMutation}
+          updateAgentMutation={updateAgentMutation}
+          deleteAgentMutation={deleteAgentMutation}
+          resetAgentsMutation={resetAgentsMutation}
+          updateTargetsMutation={updateTargetsMutation}
+          initKpiMutation={initKpiMutation}
+          fillRepsMutation={fillRepsMutation}
+          activeReps={activeReps}
+        />
 
         {/* Lisans Özet Tablosu */}
         <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
@@ -2469,48 +2450,6 @@ function KpiSection(props: {
           )}
         </section>
 
-        {/* Manuel Temsilci Ekleme */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
-          <div className="flex items-center justify-between">
-            <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Manuel Temsilci Ekle</h3>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700"
-              onClick={() => setShowManualForm(!showManualForm)}
-              type="button"
-            >
-              {showManualForm ? <X size={14} /> : <Plus size={14} />}
-              {showManualForm ? "Kapat" : "Yeni Temsilci"}
-            </button>
-          </div>
-          {showManualForm && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MiniInput label="Temsilci Adı *" value={agentForm.agentName} onChange={(v) => setAgentForm((p) => ({ ...p, agentName: v }))} />
-              <MiniInput label="Perf. Değ." value={agentForm.perfScore} onChange={(v) => setAgentForm((p) => ({ ...p, perfScore: v }))} type="number" />
-              <MiniInput label="Satış Tutarı" value={agentForm.salesAmount} onChange={(v) => setAgentForm((p) => ({ ...p, salesAmount: v }))} type="number" />
-              <MiniInput label="Lisans Adeti" value={agentForm.licenseCount} onChange={(v) => setAgentForm((p) => ({ ...p, licenseCount: v }))} type="number" />
-              <MiniInput label="Ort. Lisans Fiyatı" value={agentForm.avgLicensePrice} onChange={(v) => setAgentForm((p) => ({ ...p, avgLicensePrice: v }))} type="number" />
-              <MiniInput label="Konuşma Süresi (sn)" value={agentForm.talkDurationSeconds} onChange={(v) => setAgentForm((p) => ({ ...p, talkDurationSeconds: v }))} type="number" />
-              <MiniInput label="Arama Denemesi" value={agentForm.callAttempts} onChange={(v) => setAgentForm((p) => ({ ...p, callAttempts: v }))} type="number" />
-              <MiniInput label="Dönüşüm Oranı (%)" value={agentForm.conversionRate} onChange={(v) => setAgentForm((p) => ({ ...p, conversionRate: v }))} type="number" />
-              <MiniInput label="Scale 2+1" value={agentForm.scaleCount} onChange={(v) => setAgentForm((p) => ({ ...p, scaleCount: v }))} type="number" />
-              <MiniInput label="Scale %" value={agentForm.scaleConversion} onChange={(v) => setAgentForm((p) => ({ ...p, scaleConversion: v }))} type="number" />
-              <MiniInput label="Scale Plus 2+1" value={agentForm.scalePlusCount} onChange={(v) => setAgentForm((p) => ({ ...p, scalePlusCount: v }))} type="number" />
-              <MiniInput label="Scale Plus %" value={agentForm.scalePlusConversion} onChange={(v) => setAgentForm((p) => ({ ...p, scalePlusConversion: v }))} type="number" />
-              <MiniInput label="Toplam %" value={agentForm.totalConversion} onChange={(v) => setAgentForm((p) => ({ ...p, totalConversion: v }))} type="number" />
-              <div className="flex items-end">
-                <button
-                  className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
-                  disabled={addAgentMutation.isPending || !agentForm.agentName.trim()}
-                  onClick={handleAddAgent}
-                  type="button"
-                >
-                  {addAgentMutation.isPending ? "Ekleniyor..." : "Ekle"}
-                </button>
-              </div>
-            </div>
-          )}
-        </section>
-
         {/* CSV Import */}
         <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">CSV İçe Aktarım</h3>
@@ -2536,58 +2475,545 @@ function KpiSection(props: {
           {saveKpiMutation.isError ? <div className="mt-3"><ErrorBanner message={(saveKpiMutation.error as Error)?.message ?? "Bir hata oluştu."} /></div> : null}
           {kpiImportSuccess ? <SuccessBanner message="KPI verileri başarıyla içe aktarıldı." /> : null}
         </section>
-
-        {/* Kayıtlı Temsilci Verileri */}
-        {kpiData && kpiData.agents.length > 0 ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{kpiData.agents.length} temsilci kaydı</p>
-              <button
-                className="inline-flex items-center gap-1.5 rounded-[10px] border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 dark:border-rose-700/40 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/40 disabled:opacity-50"
-                disabled={resetAgentsMutation.isPending}
-                onClick={() => { if (confirm("Tüm temsilci KPI verilerini silmek istediğinize emin misiniz?")) resetAgentsMutation.mutate(); }}
-                type="button"
-              >
-                <Trash2 size={12} />
-                {resetAgentsMutation.isPending ? "Siliniyor..." : "Tümünü sil"}
-              </button>
-            </div>
-          <EditableSavedData
-            columns={["Temsilci", "Perf. Değ.", "Satış Tutarı", "Lisans", "Ort. Fiyat", "Konuşma (sn)", "Arama", "Dönüşüm %", "Scale 2+1", "Scale %", "Scale+ 2+1", "Scale+ %", "Toplam %"]}
-            rows={kpiData.agents.map((a) => ({
-              id: a.agentKey ?? normalizeKey(a.agentName),
-              cells: [
-                a.agentName,
-                a.perfScore !== null ? String(a.perfScore) : "",
-                String(a.salesAmount),
-                String(a.licenseCount),
-                String(a.avgLicensePrice),
-                String(a.talkDurationSeconds),
-                String(a.callAttempts),
-                String(a.conversionRate),
-                String(a.scaleCount ?? 0),
-                String(a.scaleConversion ?? 0),
-                String(a.scalePlusCount ?? 0),
-                String(a.scalePlusConversion ?? 0),
-                String(a.totalConversion ?? 0)
-              ],
-              fields: ["agentName", "perfScore", "salesAmount", "licenseCount", "avgLicensePrice", "talkDurationSeconds", "callAttempts", "conversionRate", "scaleCount", "scaleConversion", "scalePlusCount", "scalePlusConversion", "totalConversion"],
-              types: ["text", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number"] as ("text" | "number")[]
-            }))}
-            onDelete={(agentKey) => deleteAgentMutation.mutate(agentKey)}
-            onUpdate={(agentKey, field, value) => {
-              const updates: Record<string, unknown> = {};
-              if (field === "agentName") updates[field] = value;
-              else if (field === "perfScore") updates[field] = value === "" ? null : Number(value);
-              else updates[field] = Number(value) || 0;
-              updateAgentMutation.mutate({ agentKey, updates });
-            }}
-            isDeleting={deleteAgentMutation.isPending}
-          />
-          </div>
-        ) : null}
     </div>
   );
+}
+
+/* ── KPI Temsilci Tablosu (spreadsheet manuel giriş) ── */
+
+type KpiCellKind = "int" | "currency" | "percent" | "duration";
+
+type KpiAgentNumericKey =
+  | "perfScore" | "salesAmount" | "licenseCount" | "avgLicensePrice"
+  | "talkDurationSeconds" | "callAttempts" | "conversionRate"
+  | "scaleCount" | "scaleConversion" | "scalePlusCount" | "scalePlusConversion" | "totalConversion";
+
+type KpiGridColumn = {
+  key: KpiAgentNumericKey;
+  label: string;
+  kind: KpiCellKind;
+  /** Hedef (yeşil) satırında düzenlenebilir bir karşılığı var mı */
+  hasTarget: boolean;
+  /** TOPLAM satırında toplanır mı (ortalama her sütun için hesaplanır) */
+  sum: boolean;
+};
+
+function formatTrInt(value: number): string {
+  return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(value));
+}
+
+function formatTrDecimal(value: number, digits = 2): string {
+  return new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(value);
+}
+
+function formatTryMoney(value: number): string {
+  return `${formatTrInt(value)} TRY`;
+}
+
+function formatSecondsToHms(total: number): string {
+  const sec = Math.max(0, Math.round(total));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+/** "HH:MM:SS", "MM:SS" veya düz saniye/sayı kabul eder; saniyeye çevirir. */
+function parseFlexibleHms(raw: string): number {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return 0;
+  if (!trimmed.includes(":")) {
+    const n = parseTurkishNumber(trimmed);
+    return n === null ? 0 : Math.round(n);
+  }
+  const parts = trimmed.split(":").map((p) => Number(p.trim()) || 0);
+  if (parts.length === 3) return (parts[0] ?? 0) * 3600 + (parts[1] ?? 0) * 60 + (parts[2] ?? 0);
+  if (parts.length === 2) return (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
+  return 0;
+}
+
+function formatKpiCellValue(kind: KpiCellKind, value: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  switch (kind) {
+    case "currency": return formatTryMoney(value);
+    case "percent": return `${formatTrDecimal(value, 2)}%`;
+    case "duration": return formatSecondsToHms(value);
+    case "int":
+    default: return formatTrInt(value);
+  }
+}
+
+function seedKpiEditValue(kind: KpiCellKind, value: number | null): string {
+  if (value === null || value === undefined) return "";
+  if (kind === "duration") return formatSecondsToHms(value);
+  // parseTurkishNumber nokta=binlik, virgül=ondalık sayar; JS ondalık noktasını
+  // virgüle çevirerek round-trip güvenli hale getiriyoruz (1.72 → "1,72").
+  return String(value).replace(".", ",");
+}
+
+function parseKpiEditValue(kind: KpiCellKind, raw: string): number {
+  if (kind === "duration") return parseFlexibleHms(raw);
+  const n = parseTurkishNumber(raw);
+  return n === null ? 0 : n;
+}
+
+const KPI_GRID_CELL_INPUT =
+  "h-7 w-full min-w-[68px] rounded-md border border-slate-200 bg-white px-1.5 text-right text-[13px] tabular-nums text-slate-800 placeholder:text-slate-300 focus:border-sky-400 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100";
+
+/** Sıfır metrikli boş bir KPI temsilci satırı üretir (manuel giriş ön-doldurma). */
+function makeBlankKpiAgent(key: string, name: string) {
+  return {
+    agentKey: key || normalizeKey(name),
+    agentName: name,
+    perfScore: null as number | null,
+    salesAmount: 0,
+    licenseCount: 0,
+    avgLicensePrice: 0,
+    talkDurationSeconds: 0,
+    callAttempts: 0,
+    conversionRate: 0,
+    scaleCount: 0,
+    scalePlusCount: 0,
+    scaleConversion: 0,
+    scalePlusConversion: 0,
+    totalConversion: 0
+  };
+}
+
+function KpiGrid(props: {
+  kpiData: SalesKpiData | null | undefined;
+  activePeriodMonth: string;
+  addAgentMutation: { mutate: (a: Record<string, unknown>) => void; isPending: boolean };
+  updateAgentMutation: { mutate: (p: { agentKey: string; updates: Record<string, unknown> }) => void; isPending: boolean };
+  deleteAgentMutation: { mutate: (k: string) => void; isPending: boolean };
+  resetAgentsMutation: { mutate: () => void; isPending: boolean };
+  updateTargetsMutation: { mutate: (t: Record<string, unknown>) => void; isPending: boolean };
+  initKpiMutation: { mutate: () => void; isPending: boolean };
+  fillRepsMutation: { mutate: () => void; isPending: boolean };
+  activeReps: { key: string; name: string }[];
+}) {
+  const { kpiData, activePeriodMonth, addAgentMutation, updateAgentMutation, deleteAgentMutation, resetAgentsMutation, updateTargetsMutation, initKpiMutation, fillRepsMutation, activeReps } = props;
+  const agents: SalesKpiAgent[] = kpiData?.agents ?? [];
+  const targets = kpiData?.targets ?? null;
+
+  const monthLabel = formatPeriodMonth(activePeriodMonth);
+  const salesLabel = monthLabel === "-" ? "Satış (TRY)" : `${monthLabel} (TRY)`;
+
+  const columns = useMemo<KpiGridColumn[]>(() => [
+    { key: "perfScore", label: "Perf. Değ.", kind: "int", hasTarget: true, sum: false },
+    { key: "salesAmount", label: salesLabel, kind: "currency", hasTarget: true, sum: true },
+    { key: "licenseCount", label: "Lisans Adedi", kind: "int", hasTarget: true, sum: true },
+    { key: "avgLicensePrice", label: "Ort. Lisans Fiyatı", kind: "currency", hasTarget: true, sum: false },
+    { key: "talkDurationSeconds", label: "Konuşma Süresi", kind: "duration", hasTarget: true, sum: false },
+    { key: "callAttempts", label: "Arama Denemesi", kind: "int", hasTarget: true, sum: true },
+    { key: "conversionRate", label: "Dönüşüm Oranı", kind: "percent", hasTarget: true, sum: false },
+    { key: "scaleCount", label: "Scale 2+1", kind: "int", hasTarget: false, sum: false },
+    { key: "scaleConversion", label: "Scale %", kind: "percent", hasTarget: false, sum: false },
+    { key: "scalePlusCount", label: "Scale+ 2+1", kind: "int", hasTarget: false, sum: false },
+    { key: "scalePlusConversion", label: "Scale+ %", kind: "percent", hasTarget: false, sum: false },
+    { key: "totalConversion", label: "Toplam %", kind: "percent", hasTarget: false, sum: false }
+  ], [salesLabel]);
+
+  const [editing, setEditing] = useState<{ rowId: string; key: KpiAgentNumericKey | "agentName" } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const emptyNewRow: Record<string, string> = {
+    agentName: "", perfScore: "", salesAmount: "", licenseCount: "", avgLicensePrice: "",
+    talkDurationSeconds: "", callAttempts: "", conversionRate: "",
+    scaleCount: "", scaleConversion: "", scalePlusCount: "", scalePlusConversion: "", totalConversion: ""
+  };
+  const [newRow, setNewRow] = useState<Record<string, string>>(emptyNewRow);
+
+  const stats = useMemo(() => {
+    const acc: Record<string, { sum: number; count: number }> = {};
+    for (const col of columns) acc[col.key] = { sum: 0, count: 0 };
+    for (const agent of agents) {
+      for (const col of columns) {
+        const v = agent[col.key];
+        if (typeof v !== "number" || Number.isNaN(v)) continue;
+        const bucket = acc[col.key]!;
+        bucket.sum += v;
+        bucket.count += 1;
+      }
+    }
+    return acc;
+  }, [agents, columns]);
+
+  // Tabloda henüz olmayan aktif temsilciler (tek tıkla eklemek için)
+  const missingReps = useMemo(() => {
+    const present = new Set<string>();
+    for (const agent of agents) {
+      present.add(agent.agentKey || normalizeKey(agent.agentName));
+      present.add(normalizeKey(agent.agentName));
+    }
+    return activeReps.filter((rep) => !present.has(rep.key) && !present.has(normalizeKey(rep.name)));
+  }, [agents, activeReps]);
+
+  // Tam ekran (maximize) modu: ESC ile çık + arka plan kaydırmasını kilitle
+  const [maximized, setMaximized] = useState(false);
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMaximized(false); };
+    window.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [maximized]);
+
+  const beginEdit = (rowId: string, key: KpiAgentNumericKey | "agentName", seed: string) => {
+    setEditing({ rowId, key });
+    setEditValue(seed);
+  };
+  const cancelEdit = () => setEditing(null);
+
+  const commitAgentEdit = (agentKey: string, key: KpiAgentNumericKey | "agentName") => {
+    const updates: Record<string, unknown> = {};
+    if (key === "agentName") {
+      const name = editValue.trim();
+      if (name) updates.agentName = name;
+    } else if (key === "perfScore") {
+      updates.perfScore = editValue.trim() === "" ? null : parseKpiEditValue("int", editValue);
+    } else {
+      const col = columns.find((c) => c.key === key);
+      updates[key] = parseKpiEditValue(col?.kind ?? "int", editValue);
+    }
+    if (Object.keys(updates).length > 0) updateAgentMutation.mutate({ agentKey, updates });
+    setEditing(null);
+  };
+
+  const targetValueFor = (key: KpiAgentNumericKey): number | null => {
+    if (!targets) return null;
+    switch (key) {
+      case "perfScore": return targets.perfScore;
+      case "salesAmount": return targets.salesAmount;
+      case "licenseCount": return targets.licenseCount;
+      case "avgLicensePrice": return targets.avgLicensePrice;
+      case "callAttempts": return targets.callAttempts;
+      case "conversionRate": return targets.conversionRate;
+      default: return null;
+    }
+  };
+
+  const commitTargetEdit = (key: KpiAgentNumericKey) => {
+    if (!targets) { setEditing(null); return; }
+    const next: Record<string, unknown> = {
+      perfScore: targets.perfScore,
+      salesAmount: targets.salesAmount,
+      licenseCount: targets.licenseCount,
+      avgLicensePrice: targets.avgLicensePrice,
+      talkDurationLabel: targets.talkDurationLabel,
+      talkDurationTargetSeconds: targets.talkDurationTargetSeconds ?? parseTalkDurationLabelToSeconds(targets.talkDurationLabel),
+      callAttempts: targets.callAttempts,
+      conversionRate: targets.conversionRate,
+      perPersonSalesTarget: targets.perPersonSalesTarget ?? null
+    };
+    if (key === "talkDurationSeconds") {
+      next.talkDurationLabel = editValue.trim();
+      next.talkDurationTargetSeconds = parseTalkDurationLabelToSeconds(editValue.trim());
+    } else {
+      const col = columns.find((c) => c.key === key);
+      next[key] = parseKpiEditValue(col?.kind ?? "int", editValue);
+    }
+    updateTargetsMutation.mutate(next);
+    setEditing(null);
+  };
+
+  const handleAdd = () => {
+    if (!(newRow.agentName ?? "").trim()) return;
+    addAgentMutation.mutate({
+      agentName: (newRow.agentName ?? "").trim(),
+      perfScore: (newRow.perfScore ?? "").trim() === "" ? null : parseKpiEditValue("int", newRow.perfScore ?? ""),
+      salesAmount: parseKpiEditValue("currency", newRow.salesAmount ?? ""),
+      licenseCount: parseKpiEditValue("int", newRow.licenseCount ?? ""),
+      avgLicensePrice: parseKpiEditValue("currency", newRow.avgLicensePrice ?? ""),
+      talkDurationSeconds: parseFlexibleHms(newRow.talkDurationSeconds ?? ""),
+      callAttempts: parseKpiEditValue("int", newRow.callAttempts ?? ""),
+      conversionRate: parseKpiEditValue("percent", newRow.conversionRate ?? ""),
+      scaleCount: parseKpiEditValue("int", newRow.scaleCount ?? ""),
+      scaleConversion: parseKpiEditValue("percent", newRow.scaleConversion ?? ""),
+      scalePlusCount: parseKpiEditValue("int", newRow.scalePlusCount ?? ""),
+      scalePlusConversion: parseKpiEditValue("percent", newRow.scalePlusConversion ?? ""),
+      totalConversion: parseKpiEditValue("percent", newRow.totalConversion ?? "")
+    });
+    setNewRow(emptyNewRow);
+  };
+
+  const renderInput = (commit: () => void, opts?: { align?: "left" | "right"; numeric?: boolean }) => (
+    <input
+      autoFocus
+      className={[
+        "h-7 w-full min-w-[68px] rounded-md border border-sky-400 bg-white px-1.5 text-[13px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-300 dark:border-sky-500 dark:bg-slate-700 dark:text-slate-100",
+        opts?.align === "left" ? "text-left" : "text-right tabular-nums"
+      ].join(" ")}
+      inputMode={opts?.numeric === false ? undefined : "decimal"}
+      onBlur={commit}
+      onChange={(e) => setEditValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(); }
+        if (e.key === "Escape") { e.stopPropagation(); cancelEdit(); }
+      }}
+      value={editValue}
+    />
+  );
+
+  if (!kpiData || !targets) {
+    return (
+      <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Temsilci KPI Tablosu</h3>
+        <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
+          Bu dönem{monthLabel !== "-" ? ` (${monthLabel})` : ""} için henüz KPI verisi yok.{" "}
+          {activeReps.length > 0
+            ? <>Tabloyu oluşturduğunuzda <span className="font-medium text-slate-700 dark:text-slate-300">{activeReps.length} aktif temsilci</span> satır olarak hazır gelir; sadece değerleri doldurursunuz. </>
+            : <>Boş bir tablo oluşturup hedefleri ve temsilcileri elle girebilirsiniz. </>}
+          Dilerseniz aşağıdaki <span className="font-medium text-slate-700 dark:text-slate-300">CSV İçe Aktarım</span> ile toplu da yükleyebilirsiniz.
+        </p>
+        <button
+          className="mt-4 inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+          disabled={initKpiMutation.isPending}
+          onClick={() => initKpiMutation.mutate()}
+          type="button"
+        >
+          <Plus size={16} />
+          {initKpiMutation.isPending
+            ? "Oluşturuluyor..."
+            : activeReps.length > 0 ? `Tabloyu oluştur (${activeReps.length} temsilci)` : "Boş tablo oluştur"}
+        </button>
+      </section>
+    );
+  }
+
+  const actionCol = columns.length + 2; // sticky name + columns + işlem
+
+  const gridContent = (
+    <section className={maximized
+      ? "fixed inset-0 z-50 flex flex-col border-0 bg-white p-3 dark:bg-slate-900 sm:p-4"
+      : "rounded-[10px] border border-slate-200/80 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/60 sm:p-5"}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Temsilci KPI Tablosu</h3>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            {agents.length} temsilci{monthLabel !== "-" ? ` · ${monthLabel}` : ""} · hücreye tıklayarak düzenleyin
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[#2f6b7a] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#285d6a]"
+            onClick={() => setAddOpen((v) => !v)}
+            type="button"
+          >
+            {addOpen ? <X size={14} /> : <Plus size={14} />}
+            {addOpen ? "Satırı kapat" : "Temsilci ekle"}
+          </button>
+          {missingReps.length > 0 ? (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[#2f6b7a]/30 bg-[#2f6b7a]/5 px-3 py-1.5 text-xs font-semibold text-[#2f6b7a] transition hover:bg-[#2f6b7a]/10 disabled:opacity-50 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
+              disabled={fillRepsMutation.isPending}
+              onClick={() => fillRepsMutation.mutate()}
+              title="Tabloda olmayan aktif temsilcileri ekle"
+              type="button"
+            >
+              <UserPlus size={13} />
+              {fillRepsMutation.isPending ? "Ekleniyor..." : `Tüm temsilcileri ekle (${missingReps.length})`}
+            </button>
+          ) : null}
+          {agents.length > 0 ? (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-50 dark:border-rose-700/40 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/40"
+              disabled={resetAgentsMutation.isPending}
+              onClick={() => { if (confirm("Tüm temsilci KPI verilerini silmek istediğinize emin misiniz?")) resetAgentsMutation.mutate(); }}
+              type="button"
+            >
+              <Trash2 size={12} />
+              {resetAgentsMutation.isPending ? "Siliniyor..." : "Tümünü sil"}
+            </button>
+          ) : null}
+          <button
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            onClick={() => setMaximized((v) => !v)}
+            title={maximized ? "Küçült (Esc)" : "Tam ekran"}
+            type="button"
+          >
+            {maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            {maximized ? "Küçült" : "Tam ekran"}
+          </button>
+        </div>
+      </div>
+
+      <div className={maximized
+        ? "min-h-0 flex-1 overflow-auto rounded-[10px] border border-slate-200 dark:border-slate-700"
+        : "overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-700"}>
+        <table className="min-w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-slate-100 dark:bg-slate-700/50">
+              <th className="sticky left-0 top-0 z-30 border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">Temsilci</th>
+              {columns.map((col) => (
+                <th key={col.key} className="sticky top-0 z-20 whitespace-nowrap border-b border-l border-slate-200 bg-slate-100 px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">{col.label}</th>
+              ))}
+              <th className="sticky top-0 z-20 border-b border-l border-slate-200 bg-slate-100 px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-600 dark:bg-slate-700">İşlem</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* HEDEF satırı */}
+            <tr className="bg-emerald-50 dark:bg-emerald-900/20">
+              <th scope="row" className="sticky left-0 z-10 border-b border-emerald-200 bg-emerald-50 px-3 py-1.5 text-left text-[12px] font-bold uppercase tracking-wide text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-900/30 dark:text-emerald-300">Hedef</th>
+              {columns.map((col) => {
+                const isEd = editing?.rowId === "__target__" && editing?.key === col.key;
+                if (!col.hasTarget) {
+                  return <td key={col.key} className="border-b border-l border-emerald-200/60 px-2 py-1.5 text-right text-[13px] text-emerald-700/30 dark:border-emerald-800/30 dark:text-emerald-300/30">—</td>;
+                }
+                const display = col.key === "talkDurationSeconds" ? (targets.talkDurationLabel || "—") : formatKpiCellValue(col.kind, targetValueFor(col.key));
+                const seed = col.key === "talkDurationSeconds" ? targets.talkDurationLabel : seedKpiEditValue(col.kind, targetValueFor(col.key));
+                return (
+                  <td key={col.key} className="border-b border-l border-emerald-200/60 px-1 py-1 text-right dark:border-emerald-800/30">
+                    {isEd ? renderInput(() => commitTargetEdit(col.key), { numeric: col.key !== "talkDurationSeconds" }) : (
+                      <button
+                        className="block w-full rounded px-1 py-0.5 text-right text-[13px] font-semibold tabular-nums text-emerald-800 transition hover:bg-emerald-100/70 dark:text-emerald-200 dark:hover:bg-emerald-800/30"
+                        onClick={() => beginEdit("__target__", col.key, seed)}
+                        title="Hedefi düzenle"
+                        type="button"
+                      >
+                        {display}
+                      </button>
+                    )}
+                  </td>
+                );
+              })}
+              <td className="border-b border-l border-emerald-200/60 dark:border-emerald-800/30" />
+            </tr>
+
+            {/* Temsilci satırları */}
+            {agents.map((agent) => {
+              const rowId = agent.agentKey || normalizeKey(agent.agentName);
+              const nameEditing = editing?.rowId === rowId && editing?.key === "agentName";
+              return (
+                <tr key={rowId} className="group border-b border-slate-100 transition last:border-b-0 hover:bg-slate-50 dark:border-slate-700/40 dark:hover:bg-slate-700/30">
+                  <th scope="row" className="sticky left-0 z-10 bg-white px-3 py-1 text-left group-hover:bg-slate-50 dark:bg-slate-800 dark:group-hover:bg-slate-700/40">
+                    {nameEditing ? renderInput(() => commitAgentEdit(rowId, "agentName"), { align: "left", numeric: false }) : (
+                      <button
+                        className="block max-w-[200px] truncate text-left text-[13px] font-medium text-slate-900 transition hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400"
+                        onClick={() => beginEdit(rowId, "agentName", agent.agentName)}
+                        title={agent.agentName}
+                        type="button"
+                      >
+                        {agent.agentName}
+                      </button>
+                    )}
+                  </th>
+                  {columns.map((col) => {
+                    const raw = agent[col.key];
+                    const value = typeof raw === "number" ? raw : null;
+                    const isEd = editing?.rowId === rowId && editing?.key === col.key;
+                    return (
+                      <td key={col.key} className="border-l border-slate-100 px-1 py-1 text-right dark:border-slate-700/40">
+                        {isEd ? renderInput(() => commitAgentEdit(rowId, col.key)) : (
+                          <button
+                            className="block w-full rounded px-1 py-0.5 text-right text-[13px] tabular-nums text-slate-700 transition hover:bg-sky-50 dark:text-slate-300 dark:hover:bg-sky-900/20"
+                            onClick={() => beginEdit(rowId, col.key, seedKpiEditValue(col.kind, value))}
+                            title="Düzenlemek için tıklayın"
+                            type="button"
+                          >
+                            {formatKpiCellValue(col.kind, value)}
+                          </button>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className="border-l border-slate-100 px-2 py-1 text-right dark:border-slate-700/40">
+                    {confirmDeleteId === rowId ? (
+                      <span className="inline-flex items-center gap-1">
+                        <button className="rounded-md bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-rose-600" onClick={() => { deleteAgentMutation.mutate(rowId); setConfirmDeleteId(null); }} type="button">Sil</button>
+                        <button className="rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700" onClick={() => setConfirmDeleteId(null)} type="button">İptal</button>
+                      </span>
+                    ) : (
+                      <button className="invisible inline-flex size-6 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition hover:border-rose-300 hover:text-rose-500 group-hover:visible dark:border-slate-600 dark:hover:border-rose-700/40 dark:hover:text-rose-400" onClick={() => setConfirmDeleteId(rowId)} title="Sil" type="button">
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+
+            {/* Yeni temsilci ekleme satırı */}
+            {addOpen ? (
+              <tr className="border-t border-sky-200 bg-sky-50/50 dark:border-sky-800/40 dark:bg-sky-900/10">
+                <th scope="row" className="sticky left-0 z-10 bg-sky-50 px-3 py-1 text-left dark:bg-sky-900/20">
+                  <input
+                    className="h-7 w-full min-w-[140px] rounded-md border border-sky-300 bg-white px-2 text-[13px] text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none dark:border-sky-600 dark:bg-slate-700 dark:text-slate-100"
+                    onChange={(e) => setNewRow((p) => ({ ...p, agentName: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+                    placeholder="Temsilci adı *"
+                    value={newRow.agentName ?? ""}
+                  />
+                </th>
+                {columns.map((col) => (
+                  <td key={col.key} className="border-l border-sky-200/60 px-1 py-1 dark:border-sky-800/30">
+                    <input
+                      className={KPI_GRID_CELL_INPUT}
+                      inputMode="decimal"
+                      onChange={(e) => setNewRow((p) => ({ ...p, [col.key]: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+                      placeholder={col.kind === "duration" ? "00:00:00" : ""}
+                      value={newRow[col.key] ?? ""}
+                    />
+                  </td>
+                ))}
+                <td className="border-l border-sky-200/60 px-2 py-1 text-right dark:border-sky-800/30">
+                  <button
+                    className="rounded-md bg-[#2f6b7a] px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-[#285d6a] disabled:opacity-50"
+                    disabled={addAgentMutation.isPending || !(newRow.agentName ?? "").trim()}
+                    onClick={handleAdd}
+                    type="button"
+                  >
+                    {addAgentMutation.isPending ? "..." : "Ekle"}
+                  </button>
+                </td>
+              </tr>
+            ) : null}
+
+            {agents.length === 0 && !addOpen ? (
+              <tr>
+                <td className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400" colSpan={actionCol}>
+                  Henüz temsilci yok. “Temsilci ekle” ile satır açın veya CSV içe aktarın.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+          {agents.length > 0 ? (
+            <tfoot>
+              <tr className="border-t-2 border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30">
+                <th scope="row" className="sticky left-0 z-10 bg-slate-50 px-3 py-1.5 text-left text-[12px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-300">Ortalama</th>
+                {columns.map((col) => {
+                  const bucket = stats[col.key]!;
+                  const avg = bucket.count > 0 ? bucket.sum / bucket.count : null;
+                  return <td key={col.key} className="border-l border-slate-200 px-2 py-1.5 text-right text-[13px] font-semibold tabular-nums text-slate-700 dark:border-slate-600 dark:text-slate-200">{avg === null ? "—" : formatKpiCellValue(col.kind, avg)}</td>;
+                })}
+                <td className="border-l border-slate-200 dark:border-slate-600" />
+              </tr>
+              <tr className="bg-slate-100 dark:bg-slate-700/50">
+                <th scope="row" className="sticky left-0 z-10 bg-slate-100 px-3 py-1.5 text-left text-[12px] font-bold uppercase tracking-wide text-slate-700 dark:bg-slate-700 dark:text-slate-200">Toplam</th>
+                {columns.map((col) => {
+                  const bucket = stats[col.key]!;
+                  return <td key={col.key} className="border-l border-slate-200 px-2 py-1.5 text-right text-[13px] font-bold tabular-nums text-slate-800 dark:border-slate-600 dark:text-slate-100">{col.sum ? formatKpiCellValue(col.kind, bucket.sum) : ""}</td>;
+                })}
+                <td className="border-l border-slate-200 dark:border-slate-600" />
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+    </section>
+  );
+
+  // Tam ekran modunda admin-shell'in backdrop-blur'ü position:fixed için
+  // containing-block oluşturur; bu yüzden overlay'i body'ye portal ediyoruz.
+  return maximized ? createPortal(gridContent, document.body) : gridContent;
 }
 
 /* ── KPI CSV Yardımcı Fonksiyonlar ── */
