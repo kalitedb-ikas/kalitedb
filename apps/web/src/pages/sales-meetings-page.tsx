@@ -1,9 +1,9 @@
 import { PageHeader, StatCard, SurfaceCard } from "@kalitedb/ui";
 import { selectDefaultReportPeriod } from "@kalitedb/shared";
-import type { SalesMeeting } from "@kalitedb/shared";
+import type { SalesMeeting, SalesMeetingStatus } from "@kalitedb/shared";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Plus, X } from "lucide-react";
+import { Check, Pencil, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
@@ -313,7 +313,8 @@ function buildColumns(
   statusUpdating?: boolean,
   onLossSave?: (rowId: string, data: { reason: string; note: string }) => void,
   lossExistingReasons?: string[],
-  lossUpdating?: boolean
+  lossUpdating?: boolean,
+  onEdit?: (row: MeetingRow) => void
 ) {
   return [
     columnHelper.accessor("qualityMember", {
@@ -389,6 +390,23 @@ function buildColumns(
         );
       },
       size: 180
+    }),
+    columnHelper.display({
+      id: "actions",
+      header: "",
+      size: 60,
+      cell: (info) =>
+        onEdit ? (
+          <button
+            aria-label="Toplantıyı düzenle"
+            className="inline-flex size-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            onClick={() => onEdit(info.row.original)}
+            title="Düzenle"
+            type="button"
+          >
+            <Pencil size={14} />
+          </button>
+        ) : null
     })
   ] as unknown as import("@tanstack/react-table").ColumnDef<MeetingRow, unknown>[];
 }
@@ -432,14 +450,72 @@ const emptyMeetingForm: MeetingFormData = {
   lossNote: ""
 };
 
+type MeetingPayload = Omit<SalesMeeting, "id" | "createdAt" | "updatedAt">;
+
+// Mevcut bir kaydı (değiştirilmeden) tam-yazma payload'ına çevirir.
+function existingToPayload(m: SalesMeeting): MeetingPayload {
+  return {
+    periodId: m.periodId,
+    qualityMember: m.qualityMember,
+    salesRepresentative: m.salesRepresentative,
+    customerName: m.customerName,
+    licenseAmount: m.licenseAmount ?? null,
+    ...(m.date ? { date: m.date } : {}),
+    ...(m.status ? { status: m.status } : {}),
+    ...(m.licenseDetail ? { licenseDetail: m.licenseDetail } : {}),
+    ...(m.status === "kaybedildi" && m.lossReason ? { lossReason: m.lossReason } : {}),
+    ...(m.status === "kaybedildi" && m.lossNote ? { lossNote: m.lossNote } : {})
+  };
+}
+
+// Form verisini tam-yazma payload'ına çevirir (ekle/düzenle ortak).
+function formToPayload(data: MeetingFormData, periodId: string): MeetingPayload {
+  const isLost = data.status === "kaybedildi";
+  return {
+    periodId,
+    qualityMember: data.qualityMember.trim(),
+    salesRepresentative: data.salesRepresentative.trim(),
+    customerName: data.customerName.trim(),
+    licenseAmount: data.licenseAmount ? Number(data.licenseAmount) : null,
+    ...(data.date ? { date: data.date } : {}),
+    ...(data.status ? { status: data.status as SalesMeetingStatus } : {}),
+    ...(data.licenseDetail.trim() ? { licenseDetail: data.licenseDetail.trim() } : {}),
+    ...(isLost && data.lossReason.trim() ? { lossReason: data.lossReason.trim() } : {}),
+    ...(isLost && data.lossNote.trim() ? { lossNote: data.lossNote.trim() } : {})
+  };
+}
+
+// Tablo satırını form verisine çevirir (düzenle modunu doldurmak için).
+// date alanı UI'da gizli; round-trip için korunur.
+function rowToForm(row: MeetingRow): MeetingFormData {
+  return {
+    date: row.date,
+    qualityMember: row.qualityMember,
+    salesRepresentative: row.salesRepresentative,
+    customerName: row.customerName,
+    status: row.status,
+    licenseDetail: row.licenseDetail,
+    licenseAmount: row.licenseAmount != null ? String(row.licenseAmount) : "",
+    lossReason: row.lossReason,
+    lossNote: row.lossNote
+  };
+}
+
 function MeetingFormModal(props: {
   open: boolean;
   saving: boolean;
+  mode: "add" | "edit";
+  initial: MeetingFormData | null;
   existingReasons: string[];
   onClose: () => void;
   onSave: (data: MeetingFormData) => void;
 }) {
   const [form, setForm] = useState<MeetingFormData>(emptyMeetingForm);
+
+  // Açılışta formu doldur: düzenle → mevcut değerler, ekle → boş.
+  useEffect(() => {
+    if (props.open) setForm(props.initial ?? emptyMeetingForm);
+  }, [props.open, props.initial]);
 
   if (!props.open) return null;
 
@@ -462,7 +538,7 @@ function MeetingFormModal(props: {
       >
         <div className="flex items-center justify-between">
           <h3 className="font-display text-lg font-semibold text-slate-950 dark:text-slate-100">
-            Toplantı Ekle
+            {props.mode === "edit" ? "Toplantı Düzenle" : "Toplantı Ekle"}
           </h3>
           <button
             className="inline-flex size-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
@@ -583,10 +659,7 @@ function MeetingFormModal(props: {
           <button
             className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-slate-900 bg-slate-950 px-4 text-sm font-medium text-white shadow transition hover:bg-slate-800 disabled:opacity-50 dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
             disabled={!canSave}
-            onClick={() => {
-              props.onSave(form);
-              setForm(emptyMeetingForm);
-            }}
+            onClick={() => props.onSave(form)}
             type="button"
           >
             <Check size={14} />
@@ -632,7 +705,7 @@ export function SalesMeetingsPage() {
     staleTime: 5 * 60 * 1000
   });
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modal, setModal] = useState<{ mode: "add" } | { mode: "edit"; row: MeetingRow } | null>(null);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ meetingId, status }: { meetingId: string; status: string }) => {
@@ -681,35 +754,26 @@ export function SalesMeetingsPage() {
     mutationFn: async (data: MeetingFormData) => {
       if (!periodId) throw new Error("Dönem seçili değil.");
       const existing = meetingsQuery.data ?? [];
-      const isLost = data.status === "kaybedildi";
-      const newMeeting = {
-        periodId,
-        qualityMember: data.qualityMember.trim(),
-        salesRepresentative: data.salesRepresentative.trim(),
-        customerName: data.customerName.trim(),
-        licenseAmount: data.licenseAmount ? Number(data.licenseAmount) : null,
-        ...(data.date ? { date: data.date } : {}),
-        ...(data.status ? { status: data.status as "devam_ediyor" | "kapandi" | "kaybedildi" } : {}),
-        ...(data.licenseDetail.trim() ? { licenseDetail: data.licenseDetail.trim() } : {}),
-        ...(isLost && data.lossReason.trim() ? { lossReason: data.lossReason.trim() } : {}),
-        ...(isLost && data.lossNote.trim() ? { lossNote: data.lossNote.trim() } : {})
-      };
-      const all = [...existing.map((m) => ({
-        periodId: m.periodId,
-        qualityMember: m.qualityMember,
-        salesRepresentative: m.salesRepresentative,
-        customerName: m.customerName,
-        licenseAmount: m.licenseAmount ?? null,
-        ...(m.date ? { date: m.date } : {}),
-        ...(m.status ? { status: m.status } : {}),
-        ...(m.licenseDetail ? { licenseDetail: m.licenseDetail } : {}),
-        ...(m.status === "kaybedildi" && m.lossReason ? { lossReason: m.lossReason } : {}),
-        ...(m.status === "kaybedildi" && m.lossNote ? { lossNote: m.lossNote } : {})
-      })), newMeeting];
+      const all = [...existing.map(existingToPayload), formToPayload(data, periodId)];
       await api.saveSalesMeetings(auth.token, periodId, all);
     },
     onSuccess: () => {
-      setIsModalOpen(false);
+      setModal(null);
+      void queryClient.invalidateQueries({ queryKey: ["sales-meetings", auth.token, periodId] });
+    }
+  });
+
+  const editMeetingMutation = useMutation({
+    mutationFn: async ({ meetingId, data }: { meetingId: string; data: MeetingFormData }) => {
+      if (!periodId) throw new Error("Dönem seçili değil.");
+      const existing = meetingsQuery.data ?? [];
+      const all = existing.map((m) =>
+        m.id === meetingId ? formToPayload(data, periodId) : existingToPayload(m)
+      );
+      await api.saveSalesMeetings(auth.token, periodId, all);
+    },
+    onSuccess: () => {
+      setModal(null);
       void queryClient.invalidateQueries({ queryKey: ["sales-meetings", auth.token, periodId] });
     }
   });
@@ -753,10 +817,16 @@ export function SalesMeetingsPage() {
       updateStatusMutation.isPending,
       (rowId, data) => updateLossDataMutation.mutate({ meetingId: rowId, reason: data.reason, note: data.note }),
       existingReasons,
-      updateLossDataMutation.isPending
+      updateLossDataMutation.isPending,
+      (row) => setModal({ mode: "edit", row })
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [updateStatusMutation.isPending, updateLossDataMutation.isPending, existingReasons]
+  );
+
+  const modalInitial = useMemo(
+    () => (modal?.mode === "edit" ? rowToForm(modal.row) : null),
+    [modal]
   );
 
   const periodLabel = selectedPeriod ? formatPeriodMonth(selectedPeriod.month) : "";
@@ -849,7 +919,7 @@ export function SalesMeetingsPage() {
             <button
               className="inline-flex min-h-9 items-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-4 text-sm font-medium text-white shadow transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-500 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
               disabled={!periodId}
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => setModal({ mode: "add" })}
               type="button"
             >
               <Plus size={14} />
@@ -875,10 +945,18 @@ export function SalesMeetingsPage() {
 
       <MeetingFormModal
         existingReasons={existingReasons}
-        open={isModalOpen}
-        saving={addMeetingMutation.isPending}
-        onClose={() => setIsModalOpen(false)}
-        onSave={(data) => addMeetingMutation.mutate(data)}
+        initial={modalInitial}
+        mode={modal?.mode ?? "add"}
+        open={modal !== null}
+        saving={addMeetingMutation.isPending || editMeetingMutation.isPending}
+        onClose={() => setModal(null)}
+        onSave={(data) => {
+          if (modal?.mode === "edit") {
+            editMeetingMutation.mutate({ meetingId: modal.row.id, data });
+          } else {
+            addMeetingMutation.mutate(data);
+          }
+        }}
       />
     </div>
   );
