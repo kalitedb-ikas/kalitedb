@@ -463,11 +463,21 @@ export const salesKpiAgentSchema = z.object({
   talkDurationSeconds: z.number(),
   callAttempts: z.number(),
   conversionRate: z.number(),
+  // 2026-06 öncesi CSV formatının alanları; yeni import'lar doldurmaz,
+  // eski dönem kayıtları için okunmaya devam eder.
   scaleCount: z.number().default(0),
   scalePlusCount: z.number().default(0),
   scaleConversion: z.number().default(0),
   scalePlusConversion: z.number().default(0),
-  totalConversion: z.number().default(0)
+  totalConversion: z.number().default(0),
+  // 2026-06+ CSV formatının alanları (Q&T Team Report). null = kolon
+  // CSV'de yok ya da hücre boş.
+  twoPlusOneCount: z.number().nullable().optional().default(null),
+  twoPlusOnePercent: z.number().nullable().optional().default(null),
+  preOnbCount: z.number().nullable().optional().default(null),
+  hubspotScore: z.number().nullable().optional().default(null),
+  domainCount: z.number().nullable().optional().default(null),
+  outboundLeadCount: z.number().nullable().optional().default(null)
 });
 
 export const salesKpiTargetsSchema = z.object({
@@ -507,6 +517,18 @@ export type SalesKpiAgent = z.infer<typeof salesKpiAgentSchema>;
 export type SalesKpiTargets = z.infer<typeof salesKpiTargetsSchema>;
 export type SalesKpiData = z.infer<typeof salesKpiDataSchema>;
 export type LicenseSummary = z.infer<typeof licenseSummarySchema>;
+
+/** 2+1 adedi: yeni format alanı; eski dönem kayıtlarında Scale + Scale+
+ *  toplamından türetilir. */
+export function getTwoPlusOneCount(agent: Pick<SalesKpiAgent, "twoPlusOneCount" | "scaleCount" | "scalePlusCount">): number {
+  return agent.twoPlusOneCount ?? (agent.scaleCount ?? 0) + (agent.scalePlusCount ?? 0);
+}
+
+/** %2+1: yeni format alanı; eski dönem kayıtlarında toplam 2+1 dönüşüm
+ *  oranına (totalConversion) düşer. */
+export function getTwoPlusOnePercent(agent: Pick<SalesKpiAgent, "twoPlusOnePercent" | "totalConversion">): number {
+  return agent.twoPlusOnePercent ?? agent.totalConversion ?? 0;
+}
 
 export const qtManualEntrySchema = z.object({
   id: z.string(),

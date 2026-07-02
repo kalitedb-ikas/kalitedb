@@ -1,4 +1,4 @@
-import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, getTwoPlusOnePercent, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { SectionCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -238,7 +238,7 @@ function useSalesSideData(
     const rows: SuccessRow[] = kpiAgents.map((agent) => {
       const audit = auditMetrics.find((a) => a.agentKey === agent.agentKey);
       const manual = manualData[agent.agentKey];
-      const total21 = (agent.scaleCount ?? 0) + (agent.scalePlusCount ?? 0);
+      const total21 = getTwoPlusOneCount(agent);
       const totalLicenseForRatio = agent.licenseCount || 1;
       return {
         agentKey: agent.agentKey,
@@ -493,11 +493,12 @@ export function SalesComparePage() {
                 <CompareMetricRow label="Dönüşüm" leftValue={kpiA?.conversionRate} rightValue={kpiB?.conversionRate} format={formatPercent} />
                 <CompareMetricRow label="Arama Girişimi" leftValue={kpiA?.callAttempts} rightValue={kpiB?.callAttempts} format={(v) => formatNumber(v)} />
                 <CompareMetricRow label="Konuşma Süresi" leftValue={kpiA?.talkDurationSeconds} rightValue={kpiB?.talkDurationSeconds} format={formatHms} />
-                <CompareMetricRow label="Scale 2+1" leftValue={kpiA?.scaleCount} rightValue={kpiB?.scaleCount} format={(v) => formatNumber(v)} />
-                <CompareMetricRow label="Scale+ 2+1" leftValue={kpiA?.scalePlusCount} rightValue={kpiB?.scalePlusCount} format={(v) => formatNumber(v)} />
-                <CompareMetricRow label="Scale %" leftValue={kpiA?.scaleConversion} rightValue={kpiB?.scaleConversion} format={formatPercent} />
-                <CompareMetricRow label="Scale+ %" leftValue={kpiA?.scalePlusConversion} rightValue={kpiB?.scalePlusConversion} format={formatPercent} />
-                <CompareMetricRow label="Toplam Dönüşüm %" leftValue={kpiA?.totalConversion} rightValue={kpiB?.totalConversion} format={formatPercent} />
+                <CompareMetricRow label="2+1" leftValue={kpiA ? getTwoPlusOneCount(kpiA) : null} rightValue={kpiB ? getTwoPlusOneCount(kpiB) : null} format={(v) => formatNumber(v)} />
+                <CompareMetricRow label="%2+1" leftValue={kpiA ? getTwoPlusOnePercent(kpiA) : null} rightValue={kpiB ? getTwoPlusOnePercent(kpiB) : null} format={formatPercent} />
+                <CompareMetricRow label="Pre Onb" leftValue={kpiA?.preOnbCount} rightValue={kpiB?.preOnbCount} format={(v) => formatNumber(v)} />
+                <CompareMetricRow label="Hubspot" leftValue={kpiA?.hubspotScore} rightValue={kpiB?.hubspotScore} format={(v) => formatNumber(v, 3)} />
+                <CompareMetricRow label="Domain" leftValue={kpiA?.domainCount} rightValue={kpiB?.domainCount} format={(v) => formatNumber(v)} />
+                <CompareMetricRow label="Outbound / Eski Lead" leftValue={kpiA?.outboundLeadCount} rightValue={kpiB?.outboundLeadCount} format={(v) => formatNumber(v)} />
               </div>
             </div>
           </div>

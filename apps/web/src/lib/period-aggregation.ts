@@ -63,6 +63,10 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
     };
   }
 
+  // İki taraf da null ise null kalır (kolon hiç gelmemiş), aksi halde toplar
+  const sumNullable = (a: number | null | undefined, b: number | null | undefined): number | null =>
+    a == null && b == null ? null : (a ?? 0) + (b ?? 0);
+
   // Temsilcileri agentKey bazında birleştir
   const agentMap = new Map<string, { sums: SalesKpiAgent; count: number }>();
   for (const dataset of valid) {
@@ -77,6 +81,10 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
           talkDurationSeconds: existing.sums.talkDurationSeconds + agent.talkDurationSeconds,
           scaleCount: (existing.sums.scaleCount ?? 0) + (agent.scaleCount ?? 0),
           scalePlusCount: (existing.sums.scalePlusCount ?? 0) + (agent.scalePlusCount ?? 0),
+          twoPlusOneCount: sumNullable(existing.sums.twoPlusOneCount, agent.twoPlusOneCount),
+          preOnbCount: sumNullable(existing.sums.preOnbCount, agent.preOnbCount),
+          domainCount: sumNullable(existing.sums.domainCount, agent.domainCount),
+          outboundLeadCount: sumNullable(existing.sums.outboundLeadCount, agent.outboundLeadCount),
           // Oranları topluyoruz, sonra ortalama alacağız
           conversionRate: existing.sums.conversionRate + agent.conversionRate,
           avgLicensePrice: existing.sums.avgLicensePrice + agent.avgLicensePrice,
@@ -84,7 +92,9 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
           scaleConversion: (existing.sums.scaleConversion ?? 0) + (agent.scaleConversion ?? 0),
           scalePlusConversion:
             (existing.sums.scalePlusConversion ?? 0) + (agent.scalePlusConversion ?? 0),
-          totalConversion: (existing.sums.totalConversion ?? 0) + (agent.totalConversion ?? 0)
+          totalConversion: (existing.sums.totalConversion ?? 0) + (agent.totalConversion ?? 0),
+          twoPlusOnePercent: sumNullable(existing.sums.twoPlusOnePercent, agent.twoPlusOnePercent),
+          hubspotScore: sumNullable(existing.sums.hubspotScore, agent.hubspotScore)
         };
         existing.count++;
       } else {
@@ -100,7 +110,9 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
     perfScore: sums.perfScore !== null ? (sums.perfScore as number) / count : null,
     scaleConversion: (sums.scaleConversion ?? 0) / count,
     scalePlusConversion: (sums.scalePlusConversion ?? 0) / count,
-    totalConversion: (sums.totalConversion ?? 0) / count
+    totalConversion: (sums.totalConversion ?? 0) / count,
+    twoPlusOnePercent: sums.twoPlusOnePercent != null ? sums.twoPlusOnePercent / count : null,
+    hubspotScore: sums.hubspotScore != null ? sums.hubspotScore / count : null
   }));
 
   // Lisans özeti: toplama

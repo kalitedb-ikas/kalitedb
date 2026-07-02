@@ -1,5 +1,5 @@
 import { PageHeader, SurfaceCard } from "@kalitedb/ui";
-import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
@@ -313,7 +313,7 @@ export function SalesSuccessIndexPage() {
     const result: SuccessRow[] = agents.map((agent) => {
       const audit = auditMetrics.find((a) => a.agentKey === agent.agentKey);
       const manual = manualData[agent.agentKey];
-      const total21 = (agent.scaleCount ?? 0) + (agent.scalePlusCount ?? 0);
+      const total21 = getTwoPlusOneCount(agent);
       const totalLicenseForRatio = agent.licenseCount || 1;
       const twoplusRatio = total21 / totalLicenseForRatio;
       return {

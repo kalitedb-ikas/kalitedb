@@ -1,4 +1,4 @@
-import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, getTwoPlusOnePercent, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -396,11 +396,12 @@ export function SalesRepresentativesPage() {
     { key: "callAttempts", label: "Arama girişimi", getValue: (a) => a.callAttempts, format: (v) => formatNumber(v) },
     { key: "talkDurationSeconds", label: "Konuşma süresi", getValue: (a) => a.talkDurationSeconds, format: formatHms },
     { key: "avgLicensePrice", label: "Ort. lisans fiyatı", getValue: (a) => a.avgLicensePrice, format: formatTryCurrency },
-    { key: "scaleCount", label: "Scale 2+1", getValue: (a) => a.scaleCount, format: (v) => formatNumber(v) },
-    { key: "scalePlusCount", label: "Scale+ 2+1", getValue: (a) => a.scalePlusCount, format: (v) => formatNumber(v) },
-    { key: "scaleConversion", label: "Scale %", getValue: (a) => a.scaleConversion, format: (v) => formatPercent(v), tiebreaker: (a) => a.scaleCount ?? 0 },
-    { key: "scalePlusConversion", label: "Scale+ %", getValue: (a) => a.scalePlusConversion, format: (v) => formatPercent(v), tiebreaker: (a) => a.scalePlusCount ?? 0 },
-    { key: "totalConversion", label: "Toplam dönüşüm %", getValue: (a) => a.totalConversion, format: (v) => formatPercent(v), tiebreaker: (a) => (a.scaleCount ?? 0) + (a.scalePlusCount ?? 0) },
+    { key: "twoPlusOneCount", label: "2+1", getValue: (a) => getTwoPlusOneCount(a), format: (v) => formatNumber(v) },
+    { key: "twoPlusOnePercent", label: "%2+1", getValue: (a) => getTwoPlusOnePercent(a), format: (v) => formatPercent(v), tiebreaker: (a) => getTwoPlusOneCount(a) },
+    { key: "preOnbCount", label: "Pre Onb", getValue: (a) => a.preOnbCount, format: (v) => formatNumber(v) },
+    { key: "hubspotScore", label: "Hubspot", getValue: (a) => a.hubspotScore, format: (v) => formatNumber(v, 3) },
+    { key: "domainCount", label: "Domain", getValue: (a) => a.domainCount, format: (v) => formatNumber(v) },
+    { key: "outboundLeadCount", label: "Outbound / Eski Lead", getValue: (a) => a.outboundLeadCount, format: (v) => formatNumber(v) },
   ], []);
 
   const metricRankMap = useMemo(() => {
@@ -506,11 +507,12 @@ export function SalesRepresentativesPage() {
       callAttempts: avg(kpiAgents.map((a) => a.callAttempts)),
       talkDurationSeconds: avg(kpiAgents.map((a) => a.talkDurationSeconds)),
       avgLicensePrice: avg(kpiAgents.map((a) => a.avgLicensePrice)),
-      scaleCount: avg(kpiAgents.map((a) => a.scaleCount)),
-      scalePlusCount: avg(kpiAgents.map((a) => a.scalePlusCount)),
-      scaleConversion: avg(kpiAgents.map((a) => a.scaleConversion)),
-      scalePlusConversion: avg(kpiAgents.map((a) => a.scalePlusConversion)),
-      totalConversion: avg(kpiAgents.map((a) => a.totalConversion)),
+      twoPlusOneCount: avg(kpiAgents.map((a) => getTwoPlusOneCount(a))),
+      twoPlusOnePercent: avg(kpiAgents.map((a) => getTwoPlusOnePercent(a))),
+      preOnbCount: avg(kpiAgents.map((a) => a.preOnbCount)),
+      hubspotScore: avg(kpiAgents.map((a) => a.hubspotScore)),
+      domainCount: avg(kpiAgents.map((a) => a.domainCount)),
+      outboundLeadCount: avg(kpiAgents.map((a) => a.outboundLeadCount)),
       auditScore: avg(auditMetrics.map((a) => a.auditScore)),
     } as Record<string, number | null>;
   }, [kpiAgents, auditMetrics]);
@@ -542,11 +544,12 @@ export function SalesRepresentativesPage() {
             callAttempts: agent?.callAttempts ?? null,
             perfScore: agent?.perfScore ?? null,
             avgLicensePrice: agent?.avgLicensePrice ?? null,
-            scaleCount: agent?.scaleCount ?? null,
-            scalePlusCount: agent?.scalePlusCount ?? null,
-            scaleConversion: agent?.scaleConversion ?? null,
-            scalePlusConversion: agent?.scalePlusConversion ?? null,
-            totalConversion: agent?.totalConversion ?? null,
+            twoPlusOneCount: agent ? getTwoPlusOneCount(agent) : null,
+            twoPlusOnePercent: agent ? getTwoPlusOnePercent(agent) : null,
+            preOnbCount: agent?.preOnbCount ?? null,
+            hubspotScore: agent?.hubspotScore ?? null,
+            domainCount: agent?.domainCount ?? null,
+            outboundLeadCount: agent?.outboundLeadCount ?? null,
             isCurrent: period.id === periodId
           };
         })
@@ -599,11 +602,12 @@ export function SalesRepresentativesPage() {
         conversionRate: prev?.conversionRate ?? null,
         callAttempts: prev?.callAttempts ?? null,
         talkDurationSeconds: prev?.talkDurationSeconds ?? null,
-        scaleCount: prev?.scaleCount ?? null,
-        scalePlusCount: prev?.scalePlusCount ?? null,
-        scaleConversion: prev?.scaleConversion ?? null,
-        scalePlusConversion: prev?.scalePlusConversion ?? null,
-        totalConversion: prev?.totalConversion ?? null,
+        twoPlusOneCount: prev?.twoPlusOneCount ?? null,
+        twoPlusOnePercent: prev?.twoPlusOnePercent ?? null,
+        preOnbCount: prev?.preOnbCount ?? null,
+        hubspotScore: prev?.hubspotScore ?? null,
+        domainCount: prev?.domainCount ?? null,
+        outboundLeadCount: prev?.outboundLeadCount ?? null,
         avgLicensePrice: prev?.avgLicensePrice ?? null,
         auditScore: prevAudit?.auditScore ?? null,
       } as Record<string, number | null>;
@@ -622,11 +626,12 @@ export function SalesRepresentativesPage() {
       conversionRate: prevAgent?.conversionRate ?? null,
       callAttempts: prevAgent?.callAttempts ?? null,
       talkDurationSeconds: prevAgent?.talkDurationSeconds ?? null,
-      scaleCount: prevAgent?.scaleCount ?? null,
-      scalePlusCount: prevAgent?.scalePlusCount ?? null,
-      scaleConversion: prevAgent?.scaleConversion ?? null,
-      scalePlusConversion: prevAgent?.scalePlusConversion ?? null,
-      totalConversion: prevAgent?.totalConversion ?? null,
+      twoPlusOneCount: prevAgent ? getTwoPlusOneCount(prevAgent) : null,
+      twoPlusOnePercent: prevAgent ? getTwoPlusOnePercent(prevAgent) : null,
+      preOnbCount: prevAgent?.preOnbCount ?? null,
+      hubspotScore: prevAgent?.hubspotScore ?? null,
+      domainCount: prevAgent?.domainCount ?? null,
+      outboundLeadCount: prevAgent?.outboundLeadCount ?? null,
       avgLicensePrice: prevAgent?.avgLicensePrice ?? null,
       auditScore: prevAudit?.auditScore ?? null,
     } as Record<string, number | null>;
@@ -774,9 +779,12 @@ export function SalesRepresentativesPage() {
                         { metricKey: "licenseCount", label: "Lisans", value: formatOrNa(selectedKpi?.licenseCount, (v) => formatNumber(v)), raw: selectedKpi?.licenseCount, fmt: (v: number) => formatNumber(v) },
                         { metricKey: "talkDurationSeconds", label: "Konuşma", value: formatOrNa(selectedKpi?.talkDurationSeconds, formatHms), raw: selectedKpi?.talkDurationSeconds, fmt: formatHms },
                         { metricKey: "conversionRate", label: "Dönüşüm", value: formatOrNa(selectedKpi?.conversionRate, (v) => formatPercent(v)), raw: selectedKpi?.conversionRate, fmt: (v: number) => formatPercent(v) },
-                        { metricKey: "scaleCount", label: "Scale 2+1", value: formatOrNa(selectedKpi?.scaleCount, (v) => formatNumber(v)), raw: selectedKpi?.scaleCount, fmt: (v: number) => formatNumber(v) },
-                        { metricKey: "scalePlusCount", label: "Scale+ 2+1", value: formatOrNa(selectedKpi?.scalePlusCount, (v) => formatNumber(v)), raw: selectedKpi?.scalePlusCount, fmt: (v: number) => formatNumber(v) },
-                        { metricKey: "totalConversion", label: "Toplam %", value: formatOrNa(selectedKpi?.totalConversion, (v) => formatPercent(v)), raw: selectedKpi?.totalConversion, fmt: (v: number) => formatPercent(v) },
+                        { metricKey: "twoPlusOneCount", label: "2+1", value: formatOrNa(selectedKpi ? getTwoPlusOneCount(selectedKpi) : null, (v) => formatNumber(v)), raw: selectedKpi ? getTwoPlusOneCount(selectedKpi) : null, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "twoPlusOnePercent", label: "%2+1", value: formatOrNa(selectedKpi ? getTwoPlusOnePercent(selectedKpi) : null, (v) => formatPercent(v)), raw: selectedKpi ? getTwoPlusOnePercent(selectedKpi) : null, fmt: (v: number) => formatPercent(v) },
+                        { metricKey: "preOnbCount", label: "Pre Onb", value: formatOrNa(selectedKpi?.preOnbCount, (v) => formatNumber(v)), raw: selectedKpi?.preOnbCount, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "hubspotScore", label: "Hubspot", value: formatOrNa(selectedKpi?.hubspotScore, (v) => formatNumber(v, 3)), raw: selectedKpi?.hubspotScore, fmt: (v: number) => formatNumber(v, 3) },
+                        { metricKey: "domainCount", label: "Domain", value: formatOrNa(selectedKpi?.domainCount, (v) => formatNumber(v)), raw: selectedKpi?.domainCount, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "outboundLeadCount", label: "Outbound", value: formatOrNa(selectedKpi?.outboundLeadCount, (v) => formatNumber(v)), raw: selectedKpi?.outboundLeadCount, fmt: (v: number) => formatNumber(v) },
                       ] as const).map((card) => (
                         <RankedMetricCard
                           key={card.metricKey}
@@ -849,30 +857,42 @@ export function SalesRepresentativesPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="2+1 Dönüşüm">
+              <SectionCard title="2+1 ve Aktivite">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Scale 2+1</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">2+1</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                      {formatOrNa(selectedKpi?.scaleCount, (v) => formatNumber(v))}
+                      {formatOrNa(selectedKpi ? getTwoPlusOneCount(selectedKpi) : null, (v) => formatNumber(v))}
                     </p>
                   </div>
                   <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Scale %</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">%2+1</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                      {formatOrNa(selectedKpi?.scaleConversion, (v) => formatPercent(v))}
+                      {formatOrNa(selectedKpi ? getTwoPlusOnePercent(selectedKpi) : null, (v) => formatPercent(v))}
                     </p>
                   </div>
                   <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Scale Plus 2+1</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Pre Onb</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                      {formatOrNa(selectedKpi?.scalePlusCount, (v) => formatNumber(v))}
+                      {formatOrNa(selectedKpi?.preOnbCount, (v) => formatNumber(v))}
                     </p>
                   </div>
                   <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Scale Plus %</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Hubspot</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                      {formatOrNa(selectedKpi?.scalePlusConversion, (v) => formatPercent(v))}
+                      {formatOrNa(selectedKpi?.hubspotScore, (v) => formatNumber(v, 3))}
+                    </p>
+                  </div>
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Domain</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                      {formatOrNa(selectedKpi?.domainCount, (v) => formatNumber(v))}
+                    </p>
+                  </div>
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Outbound / Eski Lead</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                      {formatOrNa(selectedKpi?.outboundLeadCount, (v) => formatNumber(v))}
                     </p>
                   </div>
                 </div>

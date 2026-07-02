@@ -889,18 +889,32 @@ export function SalesAdminPage() {
         setSelectedPeriodId(periodId);
       }
 
-      // Hedef satırı (row 1, columns 1-7)
+      // ── Başlık satırı: kolonlar isimle eşlenir, sıra önemsiz (Q&T Team Report) ──
+      const columnIndex = resolveKpiCsvColumns(parsedRows[0]!);
+      const missingHeaders = KPI_CSV_REQUIRED.filter((f) => columnIndex[f.key] === undefined);
+      if (missingHeaders.length > 0) {
+        throw new Error(`CSV başlık satırında şu kolonlar bulunamadı: ${missingHeaders.map((f) => f.label).join(", ")}`);
+      }
+      const cellAt = (row: string[], key: KpiCsvField): string => {
+        const idx = columnIndex[key];
+        return idx === undefined ? "" : (row[idx] ?? "").trim();
+      };
+      // "Ort" / "*" = değerlendirme yok; "#DIV/0!" gibi formül artıkları null'a düşer
+      const parsePerf = (raw: string): number | null =>
+        raw === "" || raw === "*" || raw.toLocaleUpperCase("tr-TR") === "ORT" ? null : parseTurkishNumber(raw);
+
+      // Hedef satırı (row 1)
       const targetRow = parsedRows[1]!;
-      const talkDurationLabel = (targetRow[5] ?? "").trim();
+      const talkDurationLabel = cellAt(targetRow, "talkDurationSeconds");
       const targets = {
-        perfScore: parseTurkishNumber(targetRow[1] ?? "") ?? 0,
-        salesAmount: parseTurkishNumber(targetRow[2] ?? "") ?? 0,
-        licenseCount: parseTurkishNumber(targetRow[3] ?? "") ?? 0,
-        avgLicensePrice: parseTurkishNumber(targetRow[4] ?? "") ?? 0,
+        perfScore: parseTurkishNumber(cellAt(targetRow, "perfScore")) ?? 0,
+        salesAmount: parseTurkishNumber(cellAt(targetRow, "salesAmount")) ?? 0,
+        licenseCount: parseTurkishNumber(cellAt(targetRow, "licenseCount")) ?? 0,
+        avgLicensePrice: parseTurkishNumber(cellAt(targetRow, "avgLicensePrice")) ?? 0,
         talkDurationLabel,
         talkDurationTargetSeconds: parseTalkDurationLabelToSeconds(talkDurationLabel),
-        callAttempts: parseTurkishNumber(targetRow[6] ?? "") ?? 0,
-        conversionRate: parseTurkishNumber(targetRow[7] ?? "") ?? 0
+        callAttempts: parseTurkishNumber(cellAt(targetRow, "callAttempts")) ?? 0,
+        conversionRate: parseTurkishNumber(cellAt(targetRow, "conversionRate")) ?? 0
       };
 
       // ── Tablo 1: Ana KPI temsilci satırları (row 2+, ORTALAMA/TOPLAM'a kadar) ──
@@ -919,6 +933,12 @@ export function SalesAdminPage() {
         scaleConversion: number;
         scalePlusConversion: number;
         totalConversion: number;
+        twoPlusOneCount: number | null;
+        twoPlusOnePercent: number | null;
+        preOnbCount: number | null;
+        hubspotScore: number | null;
+        domainCount: number | null;
+        outboundLeadCount: number | null;
       }[] = [];
 
       for (let i = 2; i < parsedRows.length; i++) {
@@ -932,18 +952,24 @@ export function SalesAdminPage() {
         agents.push({
           agentKey: normalizeKey(name),
           agentName: name,
-          perfScore: (cols[1] ?? "").trim() === "*" ? null : parseTurkishNumber(cols[1] ?? ""),
-          salesAmount: parseTurkishNumber(cols[2] ?? "") ?? 0,
-          licenseCount: parseTurkishNumber(cols[3] ?? "") ?? 0,
-          avgLicensePrice: parseTurkishNumber(cols[4] ?? "") ?? 0,
-          talkDurationSeconds: parseHmsToSeconds(cols[5] ?? ""),
-          callAttempts: parseTurkishNumber(cols[6] ?? "") ?? 0,
-          conversionRate: parseTurkishNumber(cols[7] ?? "") ?? 0,
+          perfScore: parsePerf(cellAt(cols, "perfScore")),
+          salesAmount: parseTurkishNumber(cellAt(cols, "salesAmount")) ?? 0,
+          licenseCount: parseTurkishNumber(cellAt(cols, "licenseCount")) ?? 0,
+          avgLicensePrice: parseTurkishNumber(cellAt(cols, "avgLicensePrice")) ?? 0,
+          talkDurationSeconds: parseHmsToSeconds(cellAt(cols, "talkDurationSeconds")),
+          callAttempts: parseTurkishNumber(cellAt(cols, "callAttempts")) ?? 0,
+          conversionRate: parseTurkishNumber(cellAt(cols, "conversionRate")) ?? 0,
           scaleCount: 0,
           scalePlusCount: 0,
           scaleConversion: 0,
           scalePlusConversion: 0,
-          totalConversion: 0
+          totalConversion: 0,
+          twoPlusOneCount: parseTurkishNumber(cellAt(cols, "twoPlusOneCount")),
+          twoPlusOnePercent: parseTurkishNumber(cellAt(cols, "twoPlusOnePercent")),
+          preOnbCount: parseTurkishNumber(cellAt(cols, "preOnbCount")),
+          hubspotScore: parseHubspotScore(cellAt(cols, "hubspotScore")),
+          domainCount: parseTurkishNumber(cellAt(cols, "domainCount")),
+          outboundLeadCount: parseTurkishNumber(cellAt(cols, "outboundLeadCount"))
         });
       }
 
@@ -951,7 +977,10 @@ export function SalesAdminPage() {
         throw new Error("CSV dosyasında geçerli temsilci verisi bulunamadı.");
       }
 
-      // ── Tablo 2: 2+1 Dönüşüm verileri (Scale 2+1 başlığını bul) ──
+      // ── Tablo 2 (eski format): ayrı "SCALE 2+1" dönüşüm tablosu ──
+      // Yeni formatta 2+1 verisi ana tabloda; bu blok yalnız eski CSV'lerde
+      // veri bulur (yeni formattaki lisans özetinin "Scale 2+1" satırından
+      // sonra temsilci adı gelmediği için döngü hemen kırılır).
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i]!;
         const cell1 = (row[1] ?? "").trim().toLocaleUpperCase("tr-TR");
@@ -988,17 +1017,26 @@ export function SalesAdminPage() {
           const scalePlusRow = parsedRows[i + 3];
           const scalePlus21Row = parsedRows[i + 4];
 
-          const parseCount = (raw: string) => {
-            const cleaned = raw.replace(/\//g, "").trim();
-            return parseTurkishNumber(cleaned) ?? 0;
+          // Değer kolonu formata göre kayıyor (eski: 5, yeni: 7); etiketten
+          // sonraki İLK sayısal hücreyi al — "6 adet 3+2" gibi notlar değerden
+          // sonra geldiği için karışmaz.
+          const parseCount = (row: string[] | undefined): number => {
+            if (!row) return 0;
+            for (let c = 2; c < row.length; c++) {
+              const cleaned = (row[c] ?? "").replace(/\//g, "").trim();
+              if (!cleaned) continue;
+              const num = parseTurkishNumber(cleaned);
+              if (num !== null) return num;
+            }
+            return 0;
           };
 
           licenseSummary = {
-            preCount: parseCount(preRow?.[5] ?? preRow?.[4] ?? "0"),
-            scaleCount: parseCount(scaleRow?.[5] ?? scaleRow?.[4] ?? "0"),
-            scale2Plus1Count: parseCount(scale21Row?.[5] ?? scale21Row?.[4] ?? "0"),
-            scalePlusCount: parseCount(scalePlusRow?.[5] ?? scalePlusRow?.[4] ?? "0"),
-            scalePlus2Plus1Count: parseCount(scalePlus21Row?.[5] ?? scalePlus21Row?.[4] ?? "0")
+            preCount: parseCount(preRow),
+            scaleCount: parseCount(scaleRow),
+            scale2Plus1Count: parseCount(scale21Row),
+            scalePlusCount: parseCount(scalePlusRow),
+            scalePlus2Plus1Count: parseCount(scalePlus21Row)
           };
           break;
         }
@@ -2454,7 +2492,10 @@ function KpiSection(props: {
         <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">CSV İçe Aktarım</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-            CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">KPI's, PERF. DEĞ., [AY], LİSANS ADETİ, ORT. LİSANS FİYATI, TOPLAM KONUŞMA SÜRESİ, ARAMA DENEMESİ, DÖNÜŞÜM ORANI</code>
+            CSV formatı (Q&T Team Report): <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">PERF. DEĞ., [AY], LİSANS ADETİ, ORTALAMA LİSANS FİYATI, 2+1, %2+1, TOPLAM KONUŞMA SÜRESİ, ARAMA DENEMESİ, Pre Onb, Hubspot, Domain, Outbound / Eski Lead, DÖNÜŞÜM ORANI</code>
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-400 dark:text-slate-500">
+            Kolonlar başlık adına göre eşlenir; sıra farklı olabilir. NetGSM ve EK SÜRELER grupları içe aktarılmaz.
           </p>
           <div className="mt-4">
             <label
@@ -2481,12 +2522,19 @@ function KpiSection(props: {
 
 /* ── KPI Temsilci Tablosu (spreadsheet manuel giriş) ── */
 
-type KpiCellKind = "int" | "currency" | "percent" | "duration";
+type KpiCellKind = "int" | "decimal" | "currency" | "percent" | "duration";
 
 type KpiAgentNumericKey =
   | "perfScore" | "salesAmount" | "licenseCount" | "avgLicensePrice"
   | "talkDurationSeconds" | "callAttempts" | "conversionRate"
-  | "scaleCount" | "scaleConversion" | "scalePlusCount" | "scalePlusConversion" | "totalConversion";
+  | "twoPlusOneCount" | "twoPlusOnePercent"
+  | "preOnbCount" | "hubspotScore" | "domainCount" | "outboundLeadCount";
+
+/** Boş bırakılınca 0 yerine null yazılan alanlar (veri yok anlamında). */
+const NULLABLE_KPI_KEYS = new Set<KpiAgentNumericKey>([
+  "perfScore", "twoPlusOneCount", "twoPlusOnePercent",
+  "preOnbCount", "hubspotScore", "domainCount", "outboundLeadCount"
+]);
 
 type KpiGridColumn = {
   key: KpiAgentNumericKey;
@@ -2539,6 +2587,7 @@ function formatKpiCellValue(kind: KpiCellKind, value: number | null): string {
     case "currency": return formatTryMoney(value);
     case "percent": return `${formatTrDecimal(value, 2)}%`;
     case "duration": return formatSecondsToHms(value);
+    case "decimal": return formatTrDecimal(value, 3);
     case "int":
     default: return formatTrInt(value);
   }
@@ -2577,7 +2626,13 @@ function makeBlankKpiAgent(key: string, name: string) {
     scalePlusCount: 0,
     scaleConversion: 0,
     scalePlusConversion: 0,
-    totalConversion: 0
+    totalConversion: 0,
+    twoPlusOneCount: null as number | null,
+    twoPlusOnePercent: null as number | null,
+    preOnbCount: null as number | null,
+    hubspotScore: null as number | null,
+    domainCount: null as number | null,
+    outboundLeadCount: null as number | null
   };
 }
 
@@ -2600,19 +2655,21 @@ function KpiGrid(props: {
   const monthLabel = formatPeriodMonth(activePeriodMonth);
   const salesLabel = monthLabel === "-" ? "Satış (TRY)" : `${monthLabel} (TRY)`;
 
+  // Kolon sırası Q&T Team Report CSV'sini takip eder
   const columns = useMemo<KpiGridColumn[]>(() => [
     { key: "perfScore", label: "Perf. Değ.", kind: "int", hasTarget: true, sum: false },
     { key: "salesAmount", label: salesLabel, kind: "currency", hasTarget: true, sum: true },
     { key: "licenseCount", label: "Lisans Adedi", kind: "int", hasTarget: true, sum: true },
     { key: "avgLicensePrice", label: "Ort. Lisans Fiyatı", kind: "currency", hasTarget: true, sum: false },
+    { key: "twoPlusOneCount", label: "2+1", kind: "int", hasTarget: false, sum: true },
+    { key: "twoPlusOnePercent", label: "%2+1", kind: "percent", hasTarget: false, sum: false },
     { key: "talkDurationSeconds", label: "Konuşma Süresi", kind: "duration", hasTarget: true, sum: false },
     { key: "callAttempts", label: "Arama Denemesi", kind: "int", hasTarget: true, sum: true },
-    { key: "conversionRate", label: "Dönüşüm Oranı", kind: "percent", hasTarget: true, sum: false },
-    { key: "scaleCount", label: "Scale 2+1", kind: "int", hasTarget: false, sum: false },
-    { key: "scaleConversion", label: "Scale %", kind: "percent", hasTarget: false, sum: false },
-    { key: "scalePlusCount", label: "Scale+ 2+1", kind: "int", hasTarget: false, sum: false },
-    { key: "scalePlusConversion", label: "Scale+ %", kind: "percent", hasTarget: false, sum: false },
-    { key: "totalConversion", label: "Toplam %", kind: "percent", hasTarget: false, sum: false }
+    { key: "preOnbCount", label: "Pre Onb", kind: "int", hasTarget: false, sum: true },
+    { key: "hubspotScore", label: "Hubspot", kind: "decimal", hasTarget: false, sum: false },
+    { key: "domainCount", label: "Domain", kind: "int", hasTarget: false, sum: true },
+    { key: "outboundLeadCount", label: "Outbound / Eski Lead", kind: "int", hasTarget: false, sum: true },
+    { key: "conversionRate", label: "Dönüşüm Oranı", kind: "percent", hasTarget: true, sum: false }
   ], [salesLabel]);
 
   const [editing, setEditing] = useState<{ rowId: string; key: KpiAgentNumericKey | "agentName" } | null>(null);
@@ -2622,8 +2679,8 @@ function KpiGrid(props: {
 
   const emptyNewRow: Record<string, string> = {
     agentName: "", perfScore: "", salesAmount: "", licenseCount: "", avgLicensePrice: "",
-    talkDurationSeconds: "", callAttempts: "", conversionRate: "",
-    scaleCount: "", scaleConversion: "", scalePlusCount: "", scalePlusConversion: "", totalConversion: ""
+    twoPlusOneCount: "", twoPlusOnePercent: "", talkDurationSeconds: "", callAttempts: "",
+    preOnbCount: "", hubspotScore: "", domainCount: "", outboundLeadCount: "", conversionRate: ""
   };
   const [newRow, setNewRow] = useState<Record<string, string>>(emptyNewRow);
 
@@ -2677,8 +2734,9 @@ function KpiGrid(props: {
     if (key === "agentName") {
       const name = editValue.trim();
       if (name) updates.agentName = name;
-    } else if (key === "perfScore") {
-      updates.perfScore = editValue.trim() === "" ? null : parseKpiEditValue("int", editValue);
+    } else if (NULLABLE_KPI_KEYS.has(key)) {
+      const col = columns.find((c) => c.key === key);
+      updates[key] = editValue.trim() === "" ? null : parseKpiEditValue(col?.kind ?? "int", editValue);
     } else {
       const col = columns.find((c) => c.key === key);
       updates[key] = parseKpiEditValue(col?.kind ?? "int", editValue);
@@ -2726,20 +2784,23 @@ function KpiGrid(props: {
 
   const handleAdd = () => {
     if (!(newRow.agentName ?? "").trim()) return;
+    const nullable = (kind: KpiCellKind, raw: string | undefined) =>
+      (raw ?? "").trim() === "" ? null : parseKpiEditValue(kind, raw ?? "");
     addAgentMutation.mutate({
       agentName: (newRow.agentName ?? "").trim(),
-      perfScore: (newRow.perfScore ?? "").trim() === "" ? null : parseKpiEditValue("int", newRow.perfScore ?? ""),
+      perfScore: nullable("int", newRow.perfScore),
       salesAmount: parseKpiEditValue("currency", newRow.salesAmount ?? ""),
       licenseCount: parseKpiEditValue("int", newRow.licenseCount ?? ""),
       avgLicensePrice: parseKpiEditValue("currency", newRow.avgLicensePrice ?? ""),
       talkDurationSeconds: parseFlexibleHms(newRow.talkDurationSeconds ?? ""),
       callAttempts: parseKpiEditValue("int", newRow.callAttempts ?? ""),
       conversionRate: parseKpiEditValue("percent", newRow.conversionRate ?? ""),
-      scaleCount: parseKpiEditValue("int", newRow.scaleCount ?? ""),
-      scaleConversion: parseKpiEditValue("percent", newRow.scaleConversion ?? ""),
-      scalePlusCount: parseKpiEditValue("int", newRow.scalePlusCount ?? ""),
-      scalePlusConversion: parseKpiEditValue("percent", newRow.scalePlusConversion ?? ""),
-      totalConversion: parseKpiEditValue("percent", newRow.totalConversion ?? "")
+      twoPlusOneCount: nullable("int", newRow.twoPlusOneCount),
+      twoPlusOnePercent: nullable("percent", newRow.twoPlusOnePercent),
+      preOnbCount: nullable("int", newRow.preOnbCount),
+      hubspotScore: nullable("decimal", newRow.hubspotScore),
+      domainCount: nullable("int", newRow.domainCount),
+      outboundLeadCount: nullable("int", newRow.outboundLeadCount)
     });
     setNewRow(emptyNewRow);
   };
@@ -3026,6 +3087,82 @@ function parseTurkishNumber(raw: string): number | null {
   cleaned = cleaned.replace(/\./g, "").replace(",", ".");
   const num = Number.parseFloat(cleaned);
   return Number.isNaN(num) ? null : num;
+}
+
+/** Hubspot puanı 0-10 aralığında ondalıklı gelir ("9.916" / "9,916"); buradaki
+ *  nokta binlik ayracı DEĞİL ondalık ayraçtır, parseTurkishNumber kullanma. */
+function parseHubspotScore(raw: string): number | null {
+  const cleaned = (raw ?? "").replace(/%/g, "").trim();
+  if (!cleaned || cleaned === "*") return null;
+  const num = Number.parseFloat(cleaned.replace(",", "."));
+  return Number.isNaN(num) ? null : num;
+}
+
+/* KPI CSV kolonları başlık ADINA göre eşlenir (Q&T Team Report formatı);
+   kolon sırası değişse de import bozulmaz. Ay kolonu (satış cirosu) ay adıyla
+   gelir. NetGSM ve EK SÜRELER grupları bilinçli olarak alınmıyor. */
+
+type KpiCsvField =
+  | "perfScore" | "salesAmount" | "licenseCount" | "avgLicensePrice"
+  | "twoPlusOneCount" | "twoPlusOnePercent" | "talkDurationSeconds"
+  | "callAttempts" | "preOnbCount" | "hubspotScore" | "domainCount"
+  | "outboundLeadCount" | "conversionRate";
+
+const KPI_CSV_MONTH_HEADERS = [
+  "OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
+  "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"
+];
+
+const KPI_CSV_HEADER_ALIASES: Record<KpiCsvField, string[]> = {
+  perfScore: ["PERF DEĞ", "PERF DEĞERLENDİRME"],
+  salesAmount: KPI_CSV_MONTH_HEADERS,
+  licenseCount: ["LİSANS ADETİ", "LİSANS ADEDİ"],
+  avgLicensePrice: ["ORTALAMA LİSANS FİYATI", "ORT LİSANS FİYATI"],
+  twoPlusOneCount: ["2+1"],
+  twoPlusOnePercent: ["%2+1", "2+1 %"],
+  talkDurationSeconds: ["TOPLAM KONUŞMA SÜRESİ"],
+  callAttempts: ["ARAMA DENEMESİ"],
+  preOnbCount: ["PRE ONB", "PRE ONBOARDING"],
+  hubspotScore: ["HUBSPOT"],
+  // TR-upper "Domain" → "DOMAİN" (noktalı İ); iki yazımı da kabul et
+  domainCount: ["DOMAIN", "DOMAİN"],
+  outboundLeadCount: ["OUTBOUND / ESKİ LEAD", "OUTBOUND ESKİ LEAD", "OUTBOUND"],
+  conversionRate: ["DÖNÜŞÜM ORANI"]
+};
+
+const KPI_CSV_REQUIRED: { key: KpiCsvField; label: string }[] = [
+  { key: "perfScore", label: "PERF. DEĞ." },
+  { key: "salesAmount", label: "AY (ör. HAZİRAN)" },
+  { key: "licenseCount", label: "LİSANS ADETİ" },
+  { key: "avgLicensePrice", label: "ORTALAMA LİSANS FİYATI" },
+  { key: "talkDurationSeconds", label: "TOPLAM KONUŞMA SÜRESİ" },
+  { key: "callAttempts", label: "ARAMA DENEMESİ" },
+  { key: "conversionRate", label: "DÖNÜŞÜM ORANI" }
+];
+
+/** Başlık hücresini eşleme için normalize eder: TR-upper, noktasız, tek boşluk. */
+function normalizeKpiCsvHeader(raw: string): string {
+  return (raw ?? "")
+    .trim()
+    .toLocaleUpperCase("tr-TR")
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveKpiCsvColumns(headerRow: string[]): Partial<Record<KpiCsvField, number>> {
+  const map: Partial<Record<KpiCsvField, number>> = {};
+  headerRow.forEach((cell, idx) => {
+    const normalized = normalizeKpiCsvHeader(cell);
+    if (!normalized) return;
+    for (const [field, aliases] of Object.entries(KPI_CSV_HEADER_ALIASES) as [KpiCsvField, string[]][]) {
+      if (map[field] === undefined && aliases.includes(normalized)) {
+        map[field] = idx;
+        break;
+      }
+    }
+  });
+  return map;
 }
 
 type QuarterlyReport = {

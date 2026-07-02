@@ -45,7 +45,13 @@ const agentSchema = z.object({
   scalePlusCount: z.number().default(0),
   scaleConversion: z.number().default(0),
   scalePlusConversion: z.number().default(0),
-  totalConversion: z.number().default(0)
+  totalConversion: z.number().default(0),
+  twoPlusOneCount: z.number().nullable().optional().default(null),
+  twoPlusOnePercent: z.number().nullable().optional().default(null),
+  preOnbCount: z.number().nullable().optional().default(null),
+  hubspotScore: z.number().nullable().optional().default(null),
+  domainCount: z.number().nullable().optional().default(null),
+  outboundLeadCount: z.number().nullable().optional().default(null)
 });
 
 const patchSchema = z.discriminatedUnion("action", [

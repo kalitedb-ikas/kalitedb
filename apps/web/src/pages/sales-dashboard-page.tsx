@@ -7,7 +7,7 @@ import {
   StatCard,
   SurfaceCard
 } from "@kalitedb/ui";
-import { selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { SalesKpiAgent, LicenseSummary, ReportPeriod } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -18,7 +18,6 @@ import {
   CartesianGrid,
   Cell,
   LabelList,
-  Legend,
   Line,
   LineChart,
   Pie,
@@ -77,6 +76,7 @@ function computeDashboardSummary(agents: SalesKpiAgent[]) {
       totalCallAttempts: 0,
       totalScaleCount: 0,
       totalScalePlusCount: 0,
+      totalTwoPlusOneCount: 0,
       avgConversionRate: 0,
       avgLicensePrice: 0,
       topByAmount: null as SalesKpiAgent | null,
@@ -90,6 +90,7 @@ function computeDashboardSummary(agents: SalesKpiAgent[]) {
   const totalCallAttempts = agents.reduce((s, a) => s + a.callAttempts, 0);
   const totalScaleCount = agents.reduce((s, a) => s + (a.scaleCount ?? 0), 0);
   const totalScalePlusCount = agents.reduce((s, a) => s + (a.scalePlusCount ?? 0), 0);
+  const totalTwoPlusOneCount = agents.reduce((s, a) => s + getTwoPlusOneCount(a), 0);
   const avgConversionRate = agents.reduce((s, a) => s + a.conversionRate, 0) / count;
   const avgLicensePrice = agents.reduce((s, a) => s + a.avgLicensePrice, 0) / count;
 
@@ -102,6 +103,7 @@ function computeDashboardSummary(agents: SalesKpiAgent[]) {
     totalCallAttempts,
     totalScaleCount,
     totalScalePlusCount,
+    totalTwoPlusOneCount,
     avgConversionRate,
     avgLicensePrice,
     topByAmount: sortedByAmount[0] ?? null,
@@ -354,14 +356,13 @@ export function SalesDashboardPage() {
       .sort((a, b) => b.efficiency - a.efficiency);
   }, [agents]);
 
-  /* ── Turetilmis veri: Scale vs Scale+ ── */
-  const scaleComparison = useMemo(() => {
+  /* ── Turetilmis veri: temsilci bazlı 2+1 (eski dönemlerde Scale+Scale+ toplamı) ── */
+  const twoPlusOneComparison = useMemo(() => {
     return [...agents]
-      .sort((a, b) => ((b.scaleCount ?? 0) + (b.scalePlusCount ?? 0)) - ((a.scaleCount ?? 0) + (a.scalePlusCount ?? 0)))
+      .sort((a, b) => getTwoPlusOneCount(b) - getTwoPlusOneCount(a))
       .map((a) => ({
         name: a.agentName,
-        scale: a.scaleCount ?? 0,
-        scalePlus: a.scalePlusCount ?? 0
+        twoPlusOne: getTwoPlusOneCount(a)
       }));
   }, [agents]);
 
@@ -936,13 +937,13 @@ export function SalesDashboardPage() {
             </ExecutiveChartCard>
           ) : null}
 
-          {/* ── Bolum J: Scale vs Scale+ ── */}
-          {scaleComparison.some((a) => a.scale > 0 || a.scalePlus > 0) ? (
-            <ExecutiveChartCard title="Scale vs Scale+ Dağılımı" description="Temsilci bazlı ürün dağılımı">
+          {/* ── Bolum J: 2+1 Dağılımı ── */}
+          {twoPlusOneComparison.some((a) => a.twoPlusOne > 0) ? (
+            <ExecutiveChartCard title="2+1 Dağılımı" description="Temsilci bazlı 2+1 adedi">
               <div className="overflow-x-auto">
-                <div className="h-80" style={{ minWidth: Math.max(400, scaleComparison.length * 56) }}>
+                <div className="h-80" style={{ minWidth: Math.max(400, twoPlusOneComparison.length * 56) }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={scaleComparison}>
+                    <BarChart data={twoPlusOneComparison}>
                       <CartesianGrid strokeDasharray="3 3" stroke={gridMutedStroke} vertical={false} />
                       <XAxis
                         dataKey="name"
@@ -957,15 +958,9 @@ export function SalesDashboardPage() {
                       <YAxis tick={{ fontSize: 11, fill: axisMutedFill }} tickLine={false} />
                       <Tooltip
                         contentStyle={{ ...tooltipStyle, borderRadius: 10 }}
-                        formatter={((value: number, name: string) => [formatNumber(value), name === "scale" ? "Scale" : "Scale Plus"]) as any}
+                        formatter={((value: number) => [formatNumber(value), "2+1"]) as any}
                       />
-                      <Legend
-                        verticalAlign="top"
-                        height={36}
-                        formatter={(value: string) => (value === "scale" ? "Scale" : "Scale Plus")}
-                      />
-                      <Bar dataKey="scale" stackId="a" fill={salesInk} radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="scalePlus" stackId="a" fill={brand.accent} radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="twoPlusOne" fill={salesInk} radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
