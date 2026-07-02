@@ -1233,15 +1233,27 @@ export function SalesAdminPage() {
       const text = e.target?.result as string;
       if (!text) return;
 
-      const rows: EvaluationEntryRow[] = [];
       // CSV'deki çok satırlı alanları düzgün parse et
       const parsedRows = parseCsvRows(text);
+      if (parsedRows.length < 2) return;
 
+      // Kolonlar başlık adına göre eşlenir (Q&T Team Report: Puanlama, SORULAR,
+      // CEVAPLAR); başlık bulunamazsa eski sabit düzene (Puanlama,,Soru,Cevap) düşer.
+      const header = parsedRows[0]!.map((cell) => normalizeKpiCsvHeader(cell));
+      const findCol = (aliases: string[], legacyIndex: number) => {
+        const idx = header.findIndex((h) => aliases.includes(h));
+        return idx === -1 ? legacyIndex : idx;
+      };
+      const scoreCol = findCol(["PUANLAMA", "PUAN"], 0);
+      const questionCol = findCol(["SORULAR", "SORU"], 2);
+      const answerCol = findCol(["CEVAPLAR", "CEVAP"], 3);
+
+      const rows: EvaluationEntryRow[] = [];
       for (let i = 1; i < parsedRows.length; i++) {
         const cols = parsedRows[i]!;
-        const score = cols[0]?.trim() ?? "";
-        const question = cols[2]?.trim() ?? "";
-        const answer = cols[3]?.trim() ?? "";
+        const score = cols[scoreCol]?.trim() ?? "";
+        const question = cols[questionCol]?.trim() ?? "";
+        const answer = cols[answerCol]?.trim() ?? "";
 
         // Boş satırları ve sadece puan olan satırları (toplam satırı gibi) atla
         if (!question) continue;
@@ -2053,7 +2065,7 @@ function EvaluationSection(props: {
                   />
                 </label>
                 <span className="text-xs text-slate-400 dark:text-slate-500">
-                  Format: Puanlama,,Soru,Cevap
+                  Format: Puanlama, SORULAR, CEVAPLAR — kolonlar başlık adına göre eşlenir
                 </span>
               </div>
 
