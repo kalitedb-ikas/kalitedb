@@ -432,7 +432,11 @@ export function CsatPage() {
         />
       )
     }),
-    columnHelper.accessor("evaluationCount", { header: "Değerlendirme" })
+    columnHelper.accessor("evaluationCount", { header: "Değerlendirme" }),
+    columnHelper.accessor("evaluatedChatCount", { header: "Chat" }),
+    columnHelper.accessor("evaluatedMailCount", { header: "Mail" }),
+    columnHelper.accessor("classicTicketCount", { header: "Klasik Ticket" }),
+    columnHelper.accessor("newTicketCount", { header: "Yeni Ticket" })
   ];
 
   const tableSummaryRows = useMemo(() => {
@@ -473,7 +477,11 @@ export function CsatPage() {
       localCloseRate: formatPercent(average(enriched.map((r) => r.localCloseRate))),
       missedCalls: formatNumber(Math.round(sum(enriched.map((r) => r.missedCalls)) / enriched.length)),
       callEvaluationAverage: formatNumber(average(enriched.map((r) => r.callEvaluationAverage)), 3),
-      evaluationCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluationCount)) / enriched.length))
+      evaluationCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluationCount)) / enriched.length)),
+      evaluatedChatCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluatedChatCount)) / enriched.length)),
+      evaluatedMailCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluatedMailCount)) / enriched.length)),
+      classicTicketCount: formatNumber(Math.round(sum(enriched.map((r) => r.classicTicketCount)) / enriched.length)),
+      newTicketCount: formatNumber(Math.round(sum(enriched.map((r) => r.newTicketCount)) / enriched.length))
     };
     const totalRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
       _label: "TOPLAM",
@@ -489,7 +497,11 @@ export function CsatPage() {
       localCloseRate: "",
       missedCalls: formatNumber(sum(enriched.map((r) => r.missedCalls))),
       callEvaluationAverage: "",
-      evaluationCount: formatNumber(sum(enriched.map((r) => r.evaluationCount)))
+      evaluationCount: formatNumber(sum(enriched.map((r) => r.evaluationCount))),
+      evaluatedChatCount: formatNumber(sum(enriched.map((r) => r.evaluatedChatCount))),
+      evaluatedMailCount: formatNumber(sum(enriched.map((r) => r.evaluatedMailCount))),
+      classicTicketCount: formatNumber(sum(enriched.map((r) => r.classicTicketCount))),
+      newTicketCount: formatNumber(sum(enriched.map((r) => r.newTicketCount)))
     };
     return [avgRow, totalRow];
   }, [aggregatedSnapshotCsatAdjusted, badgeFilter, repsMap]);
@@ -613,7 +625,11 @@ export function CsatPage() {
                         "Lokal kapatma (%)",
                         "Kaçan çağrılar",
                         "CSAT ortalaması",
-                        "Değerlendirme"
+                        "Değerlendirme",
+                        "Chat",
+                        "Mail",
+                        "Klasik Ticket",
+                        "Yeni Ticket"
                       ],
                       filteredRows.map((r) => [
                         r.agentName,
@@ -627,7 +643,11 @@ export function CsatPage() {
                         r.localCloseRate,
                         r.missedCalls,
                         r.callEvaluationAverage,
-                        r.evaluationCount
+                        r.evaluationCount,
+                        r.evaluatedChatCount,
+                        r.evaluatedMailCount,
+                        r.classicTicketCount,
+                        r.newTicketCount
                       ])
                     );
                   }}

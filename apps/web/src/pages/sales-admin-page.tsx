@@ -1,6 +1,6 @@
 import { SurfaceCard } from "@kalitedb/ui";
 import { normalizeKey } from "@kalitedb/shared";
-import type { Representative, SalesMeeting, SalesKpiData, SalesKpiAgent } from "@kalitedb/shared";
+import type { Representative, SalesMeeting, SalesKpiData, SalesKpiAgent, TimelineEvent } from "@kalitedb/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, ClipboardCheck, FileQuestion, Handshake, LogOut, Maximize2, MessageSquare, MessageSquarePlus, Mic, Minimize2, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
@@ -181,7 +181,7 @@ export function SalesAdminPage() {
   });
 
   const createRepresentativeMutation = useMutation({
-    mutationFn: (input: { displayName: string; department: string }) =>
+    mutationFn: (input: { displayName: string; department: string; badges?: string[]; timeline?: TimelineEvent[] }) =>
       api.createRepresentative(auth.token, input as any),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["representatives"] });
@@ -1644,7 +1644,7 @@ export function SalesAdminPage() {
                   defaultDepartment="sales"
                   isSaving={createRepresentativeMutation.isPending}
                   onClose={() => setShowCreateRepModal(false)}
-                  onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "sales" })}
+                  onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "sales", badges: data.badges, timeline: data.timeline })}
                 />
               ) : null}
             </div>

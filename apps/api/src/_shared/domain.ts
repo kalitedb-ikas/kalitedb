@@ -107,7 +107,13 @@ export const agentMetricSchema = z.object({
   localCloseRate: nullableNumber,
   missedCalls: nullableInteger,
   callEvaluationAverage: nullableNumber,
-  evaluationCount: nullableInteger
+  evaluationCount: nullableInteger,
+  // 2026-06+ "QT ALL Özet Rapor" kolonları; eski dönem kayıtlarında bulunmaz.
+  email: z.string().nullable().optional().default(null),
+  evaluatedChatCount: nullableInteger.optional().default(null),
+  evaluatedMailCount: nullableInteger.optional().default(null),
+  classicTicketCount: nullableInteger.optional().default(null),
+  newTicketCount: nullableInteger.optional().default(null)
 });
 
 export const auditMetricSchema = z.object({

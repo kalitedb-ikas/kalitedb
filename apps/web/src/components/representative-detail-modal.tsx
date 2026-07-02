@@ -1,6 +1,7 @@
 import type { Department, Representative, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
 import { BarChart3, Briefcase, Crown, Handshake, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 
@@ -93,6 +94,19 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
 
   const photoSrc = representative ? getRepresentativePhotoSrc(representative.displayName) : undefined;
 
+  // Modal açıkken arka plan kaydırmasını kilitle + ESC ile kapat
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const toggleBadge = (key: string) => {
     setBadges((prev) => prev.includes(key) ? prev.filter((b) => b !== key) : [...prev, key]);
   };
@@ -140,7 +154,10 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
       ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
       : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
 
-  return (
+  // Admin-shell'in backdrop-blur'ü position:fixed için containing-block
+  // oluşturur ve modal viewport yerine karta göre konumlanır (altta kesik
+  // görünür); bu yüzden overlay'i body'ye portal ediyoruz.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div
         className="relative flex w-full max-w-3xl max-h-[min(680px,92vh)] flex-col overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_32px_80px_rgba(15,23,42,0.25)] dark:border-slate-600 dark:bg-slate-800"
@@ -378,6 +395,7 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

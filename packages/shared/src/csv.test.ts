@@ -201,6 +201,79 @@ describe("csv parser", () => {
     expect(preview.validRows.map((row) => row.agentName)).toEqual(["Ali Veli", "Ayşe Kaya"]);
   });
 
+  it("qt all ozet raporunu parse eder: ekip-arasi ortalama satirlarini atlar, yeni kolonlari okur", () => {
+    const preview = parseDatasetCsv({
+      datasetType: "agent-metrics",
+      expectedPeriod: "2026-06",
+      text: [
+        'E-Posta,M.T,"Audit \nSkoru","Önceki Audit \nDoğruluk Oranı","Çağrı\nAdedi","Chat / Mail \nAdedi","Ticket\nAdedi","Toplam Görüşme\nAdedi","Ortalama Konuşma\nSüresi","Lokal Kapatma \nOranı","Kaçan \nÇağrılar","Çağrı Değerlendirme \nOrtalaması","Değerlendirme \nAdeti",Chat,Mail,Klasik Ticket,Yeni Ticket,TOPLAM CHAT MAİL,TOPLAM TICKET',
+        'batuhan@ikas.com,Batuhan Demirci,"75,00","100,00",405,126,8,539,315,"97,71",7,"4,911",62,85,34,,8,119,8',
+        'dilay@ikas.com,Dilay Derin,"60,00",N/A,628,8,0,636,426,"75,30",7,"4,915",30,,3,,,3,0',
+        'Çağrı Ortalama,,,,389,142,30,560,395,,,"4,930",,,,,,-,0',
+        'afra@ikas.com,Afra Sak,,,0,428,0,428,0,"0,00",0,"4,969",12,50,10,,2,60,2',
+        'Mail & Ticket Ortalama,,,,,428,,,,,,"4,969",,,,,,,',
+        'fatma@ikas.com,Fatma Yılmaz,,,4,,,8,193,"0,00",0,"5,00",16,,19,,,,',
+        'START - Ortalama,,,,,,,,,,,"5,000",17,,,,,,'
+      ].join("\n")
+    });
+
+    if (preview.datasetType !== "agent-metrics") {
+      throw new Error("agent metrics preview bekleniyordu");
+    }
+
+    expect(preview.errors).toHaveLength(0);
+    expect(preview.validRows.map((row) => row.agentName)).toEqual([
+      "Batuhan Demirci",
+      "Dilay Derin",
+      "Afra Sak",
+      "Fatma Yılmaz"
+    ]);
+
+    const batuhan = preview.validRows[0]!;
+    expect(batuhan.email).toBe("batuhan@ikas.com");
+    expect(batuhan.totalCallCount).toBe(405);
+    expect(batuhan.totalChatMailCount).toBe(126);
+    expect(batuhan.totalTicketClosedCount).toBe(8);
+    expect(batuhan.totalConversationCount).toBe(539);
+    expect(batuhan.callEvaluationAverage).toBe(4.911);
+    expect(batuhan.evaluatedChatCount).toBe(85);
+    expect(batuhan.evaluatedMailCount).toBe(34);
+    expect(batuhan.classicTicketCount).toBeNull();
+    expect(batuhan.newTicketCount).toBe(8);
+
+    // Chat/mail ve ticket kolonları boşken sağlanan toplam görüşme adedi korunur
+    const fatma = preview.validRows[3]!;
+    expect(fatma.totalConversationCount).toBe(8);
+    expect(fatma.evaluatedMailCount).toBe(19);
+  });
+
+  it("qt all ozet raporunu audit veri kumesi olarak da parse eder (N/A bos sayilir)", () => {
+    const preview = parseDatasetCsv({
+      datasetType: "audit-metrics",
+      expectedPeriod: "2026-06",
+      text: [
+        'E-Posta,M.T,"Audit \nSkoru","Önceki Audit \nDoğruluk Oranı","Çağrı\nAdedi"',
+        'batuhan@ikas.com,Batuhan Demirci,"75,00","100,00",405',
+        'dilay@ikas.com,Dilay Derin,"60,00",N/A,628',
+        "Çağrı Ortalama,,,,389",
+        'afra@ikas.com,Afra Sak,"80,00","90,00",0'
+      ].join("\n")
+    });
+
+    if (preview.datasetType !== "audit-metrics") {
+      throw new Error("audit metrics preview bekleniyordu");
+    }
+
+    expect(preview.errors).toHaveLength(0);
+    expect(preview.validRows.map((row) => row.agentName)).toEqual([
+      "Batuhan Demirci",
+      "Dilay Derin",
+      "Afra Sak"
+    ]);
+    expect(preview.validRows[1]?.auditScore).toBe(60);
+    expect(preview.validRows[1]?.previousAuditAccuracy).toBeNull();
+  });
+
   it("dogru yanlis bosken dogruluk oranini kabul eder", () => {
     const preview = parseDatasetCsv({
       datasetType: "question-performance",

@@ -48,15 +48,22 @@ const HEADER_ALIASES: Record<DatasetType, Record<string, string[]>> = {
   "agent-metrics": {
     period: ["period"],
     agent_name: ["mt", "temsilci", "agentname"],
-    total_call_count: ["toplamcagriadedi", "totalcallcount"],
-    total_chat_mail_count: ["toplamchatmailadedi", "toplamchatepostaadedi", "totalchatmailcount"],
-    total_ticket_closed_count: ["toplamticketkapatmaadedi", "toplamticketadedi", "totalticketclosedcount"],
+    email: ["eposta", "email"],
+    total_call_count: ["toplamcagriadedi", "cagriadedi", "totalcallcount"],
+    total_chat_mail_count: ["toplamchatmailadedi", "toplamchatepostaadedi", "chatmailadedi", "totalchatmailcount"],
+    total_ticket_closed_count: ["toplamticketkapatmaadedi", "toplamticketadedi", "ticketadedi", "totalticketclosedcount"],
     totalConversationCount: ["toplamgorusmeadedi", "totalconversationcount"],
     avg_talk_duration_seconds: ["ortalamakonusmasuresi", "avgtalkdurationseconds"],
     local_close_rate: ["lokalkapatmaorani", "localcloserate"],
     missed_calls: ["kacancagrilar", "missedcalls"],
     call_evaluation_average: ["cagridegerlendirmeortalamasi", "callevaluationaverage"],
-    evaluation_count: ["degerlendirmeadeti", "evaluationcount"]
+    evaluation_count: ["degerlendirmeadeti", "evaluationcount"],
+    // Kanal bazında değerlendirme adetleri (QT ALL Özet Rapor). "TOPLAM CHAT
+    // MAİL" / "TOPLAM TICKET" kolonları bunların toplamı olduğu için alınmaz.
+    evaluated_chat_count: ["chat", "evaluatedchatcount"],
+    evaluated_mail_count: ["mail", "evaluatedmailcount"],
+    classic_ticket_count: ["klasikticket", "classicticketcount"],
+    new_ticket_count: ["yeniticket", "newticketcount"]
   },
   "audit-metrics": {
     period: ["period"],
@@ -99,15 +106,20 @@ const HEADER_ALIASES: Record<DatasetType, Record<string, string[]>> = {
 const HEADER_LABELS: Record<DatasetType, Record<string, string>> = {
   "agent-metrics": {
     agent_name: "Temsilci",
-    total_call_count: "Toplam çağrı adedi",
-    total_chat_mail_count: "Toplam chat / e-posta adedi",
-    total_ticket_closed_count: "Toplam ticket kapatma adedi",
+    email: "E-posta",
+    total_call_count: "Çağrı adedi",
+    total_chat_mail_count: "Chat / mail adedi",
+    total_ticket_closed_count: "Ticket adedi",
     totalConversationCount: "Toplam görüşme adedi",
     avg_talk_duration_seconds: "Ortalama konuşma süresi",
     local_close_rate: "Lokal kapatma oranı",
     missed_calls: "Kaçan çağrılar",
     call_evaluation_average: "Çağrı değerlendirme ortalaması",
-    evaluation_count: "Değerlendirme adedi"
+    evaluation_count: "Değerlendirme adedi",
+    evaluated_chat_count: "Chat",
+    evaluated_mail_count: "Mail",
+    classic_ticket_count: "Klasik ticket",
+    new_ticket_count: "Yeni ticket"
   },
   "audit-metrics": {
     agent_name: "Temsilci",
@@ -133,7 +145,10 @@ const HEADER_LABELS: Record<DatasetType, Record<string, string>> = {
 };
 
 const SUMMARY_ROW_MARKERS: Partial<Record<DatasetType, string[]>> = {
-  "agent-metrics": ["ortalama", "average", "geneltoplam", "grandtotal"]
+  "agent-metrics": ["ortalama", "average", "geneltoplam", "grandtotal"],
+  // Aynı "QT ALL Özet Rapor" dosyası audit alanına da yüklenebiliyor;
+  // ekip-arası özet satırları orada da atlanmalı.
+  "audit-metrics": ["ortalama", "average", "geneltoplam", "grandtotal"]
 };
 
 const REQUIRED_HEADERS: Record<Exclude<DatasetType, "qt-metrics">, string[]> = {
@@ -152,8 +167,8 @@ const QT_LEGACY_REQUIRED_HEADERS = ["representative_name", "listened_call_count"
 
 export const CSV_TEMPLATES: Record<DatasetType, string[]> = {
   "agent-metrics": [
-    "Temsilci,Toplam çağrı adedi,Toplam chat / e-posta adedi,Toplam ticket kapatma adedi,Toplam görüşme adedi,Ortalama konuşma süresi,Lokal kapatma oranı,Kaçan çağrılar,Çağrı değerlendirme ortalaması,Değerlendirme adedi",
-    "Örnek Temsilci,420,130,15,565,318,89,4,4.97,120"
+    "E-Posta,M.T,Çağrı Adedi,Chat / Mail Adedi,Ticket Adedi,Toplam Görüşme Adedi,Ortalama Konuşma Süresi,Lokal Kapatma Oranı,Kaçan Çağrılar,Çağrı Değerlendirme Ortalaması,Değerlendirme Adeti,Chat,Mail,Klasik Ticket,Yeni Ticket",
+    "ornek@ikas.com,Örnek Temsilci,420,130,15,565,318,89,4,4.97,120,85,34,2,8"
   ],
   "audit-metrics": [
     "Temsilci,Audit skoru,Önceki audit doğruluk oranı",
@@ -237,10 +252,10 @@ function canonicalizeRows(rows: CsvRow[], datasetType: DatasetType): CanonicalCs
   );
 }
 
-function isSummaryBoundaryRow(row: CsvRow, datasetType: DatasetType) {
+function getSummaryRowKind(row: CsvRow, datasetType: DatasetType): "none" | "skip" | "break" {
   const markers = SUMMARY_ROW_MARKERS[datasetType];
   if (!markers?.length) {
-    return false;
+    return "none";
   }
 
   const leadingValues = Object.values(row)
@@ -249,15 +264,30 @@ function isSummaryBoundaryRow(row: CsvRow, datasetType: DatasetType) {
     .slice(0, 2)
     .map(normalizeCellValue);
 
-  return leadingValues.some((value) => markers.includes(value));
+  // Birebir marker ("Ortalama", "Genel Toplam"): eski tek-bölümlü format —
+  // temsilci listesi bitti, sonrasındaki alt-tablo satırları alınmaz.
+  if (leadingValues.some((value) => markers.includes(value))) {
+    return "break";
+  }
+  // Marker'ı içeren ara özet satırı ("Çağrı Ortalama", "P.O - Ortalama" vb.):
+  // çok-bölümlü QT ALL formatı — satır atlanır, sonraki ekibin temsilcileri
+  // okunmaya devam eder.
+  if (leadingValues.some((value) => markers.some((marker) => value.includes(marker)))) {
+    return "skip";
+  }
+  return "none";
 }
 
 function filterImportRows(rows: CsvRow[], datasetType: DatasetType) {
   const filteredRows: CsvRow[] = [];
 
   for (const row of rows) {
-    if (isSummaryBoundaryRow(row, datasetType)) {
+    const kind = getSummaryRowKind(row, datasetType);
+    if (kind === "break") {
       break;
+    }
+    if (kind === "skip") {
+      continue;
     }
 
     filteredRows.push(row);
@@ -289,7 +319,9 @@ function readTextField(
 
 function parseNumberValue(value: string | undefined, integer = false) {
   const trimmed = value?.trim() ?? "";
-  if (!trimmed || trimmed === "-") {
+  // "N/A" ve formül artıkları veri-yok sayılır (QT ALL raporunda geçiyor)
+  const lowered = trimmed.toLowerCase();
+  if (!trimmed || trimmed === "-" || lowered === "n/a" || lowered === "na" || lowered === "#div/0!") {
     return { kind: "empty" as const };
   }
 
@@ -511,6 +543,39 @@ function parseAgentMetrics(rows: CanonicalCsvRow[], expectedPeriod: string, sha2
         row: rowNumber,
         field: "evaluation_count",
         label: getHeaderLabel("agent-metrics", "evaluation_count"),
+        errors: rowErrors,
+        integer: true,
+        nullable: true
+      }),
+      email: readTextField(row.email, rowNumber, "email", getHeaderLabel("agent-metrics", "email"), rowErrors) || null,
+      evaluatedChatCount: readNumberField(row.evaluated_chat_count, {
+        row: rowNumber,
+        field: "evaluated_chat_count",
+        label: getHeaderLabel("agent-metrics", "evaluated_chat_count"),
+        errors: rowErrors,
+        integer: true,
+        nullable: true
+      }),
+      evaluatedMailCount: readNumberField(row.evaluated_mail_count, {
+        row: rowNumber,
+        field: "evaluated_mail_count",
+        label: getHeaderLabel("agent-metrics", "evaluated_mail_count"),
+        errors: rowErrors,
+        integer: true,
+        nullable: true
+      }),
+      classicTicketCount: readNumberField(row.classic_ticket_count, {
+        row: rowNumber,
+        field: "classic_ticket_count",
+        label: getHeaderLabel("agent-metrics", "classic_ticket_count"),
+        errors: rowErrors,
+        integer: true,
+        nullable: true
+      }),
+      newTicketCount: readNumberField(row.new_ticket_count, {
+        row: rowNumber,
+        field: "new_ticket_count",
+        label: getHeaderLabel("agent-metrics", "new_ticket_count"),
         errors: rowErrors,
         integer: true,
         nullable: true

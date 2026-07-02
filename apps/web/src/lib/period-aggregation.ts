@@ -203,6 +203,15 @@ export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
       auditScoreCount: number;
       prevAuditSum: number;
       prevAuditCount: number;
+      email: string | null;
+      evaluatedChatSum: number;
+      evaluatedChatHasValue: boolean;
+      evaluatedMailSum: number;
+      evaluatedMailHasValue: boolean;
+      classicTicketSum: number;
+      classicTicketHasValue: boolean;
+      newTicketSum: number;
+      newTicketHasValue: boolean;
     }
   >();
 
@@ -249,6 +258,23 @@ export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
         existing.prevAuditSum += m.previousAuditAccuracy;
         existing.prevAuditCount += 1;
       }
+      if (m.email != null) existing.email = m.email;
+      if (m.evaluatedChatCount != null) {
+        existing.evaluatedChatSum += m.evaluatedChatCount;
+        existing.evaluatedChatHasValue = true;
+      }
+      if (m.evaluatedMailCount != null) {
+        existing.evaluatedMailSum += m.evaluatedMailCount;
+        existing.evaluatedMailHasValue = true;
+      }
+      if (m.classicTicketCount != null) {
+        existing.classicTicketSum += m.classicTicketCount;
+        existing.classicTicketHasValue = true;
+      }
+      if (m.newTicketCount != null) {
+        existing.newTicketSum += m.newTicketCount;
+        existing.newTicketHasValue = true;
+      }
     } else {
       grouped.set(m.agentKey, {
         id: m.id,
@@ -285,7 +311,16 @@ export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
         auditScoreSum: m.auditScore ?? 0,
         auditScoreCount: m.auditScore !== null ? 1 : 0,
         prevAuditSum: m.previousAuditAccuracy ?? 0,
-        prevAuditCount: m.previousAuditAccuracy !== null ? 1 : 0
+        prevAuditCount: m.previousAuditAccuracy !== null ? 1 : 0,
+        email: m.email ?? null,
+        evaluatedChatSum: m.evaluatedChatCount ?? 0,
+        evaluatedChatHasValue: m.evaluatedChatCount != null,
+        evaluatedMailSum: m.evaluatedMailCount ?? 0,
+        evaluatedMailHasValue: m.evaluatedMailCount != null,
+        classicTicketSum: m.classicTicketCount ?? 0,
+        classicTicketHasValue: m.classicTicketCount != null,
+        newTicketSum: m.newTicketCount ?? 0,
+        newTicketHasValue: m.newTicketCount != null
       });
     }
   }
@@ -314,7 +349,12 @@ export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
       localCloseRate: g.localCloseRateCount > 0 ? g.localCloseRateSum / g.localCloseRateCount : null,
       missedCalls: g.missedCallsHasValue ? g.missedCallsSum : null,
       callEvaluationAverage: csat,
-      evaluationCount: g.evaluationCountHasValue ? g.evaluationCountSum : null
+      evaluationCount: g.evaluationCountHasValue ? g.evaluationCountSum : null,
+      email: g.email,
+      evaluatedChatCount: g.evaluatedChatHasValue ? g.evaluatedChatSum : null,
+      evaluatedMailCount: g.evaluatedMailHasValue ? g.evaluatedMailSum : null,
+      classicTicketCount: g.classicTicketHasValue ? g.classicTicketSum : null,
+      newTicketCount: g.newTicketHasValue ? g.newTicketSum : null
     });
   }
 

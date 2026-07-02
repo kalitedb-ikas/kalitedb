@@ -15,6 +15,7 @@ import type {
   SalesKpiData,
   SalesMeeting,
   ThresholdConfig,
+  TimelineEvent,
   TrainingEvent,
   UserRoleAssignment,
   UserRoleEntry,
@@ -2147,7 +2148,7 @@ export const api = {
   },
   async createRepresentative(
     token: string | null,
-    body: { displayName: string; department: Department }
+    body: { displayName: string; department: Department; badges?: string[]; timeline?: TimelineEvent[] }
   ): Promise<Representative> {
     const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
     if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
@@ -2158,8 +2159,8 @@ export const api = {
         displayName: body.displayName,
         department: body.department,
         status: "active",
-        badges: [],
-        timeline: [],
+        badges: body.badges ?? [],
+        timeline: body.timeline ?? [],
         createdAt: now,
         updatedAt: now
       };

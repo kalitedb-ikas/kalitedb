@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "@/src/lib/auth";
 import { getRepository } from "@/src/lib/repository";
 import { handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/responses";
-import { normalizeKey } from "@kalitedb/shared";
+import { normalizeKey, timelineEventSchema } from "@kalitedb/shared";
 
 export const OPTIONS = optionsResponse;
 
@@ -11,7 +11,9 @@ const createRepresentativeSchema = z.object({
   displayName: z.string().min(1),
   department: z.enum(["cs", "sales", "quality", "partner"]),
   status: z.enum(["active", "departed", "department_changed"]).default("active"),
-  statusNote: z.string().optional()
+  statusNote: z.string().optional(),
+  badges: z.array(z.string()).default([]),
+  timeline: z.array(timelineEventSchema).default([])
 });
 
 export async function GET(request: Request) {
@@ -45,6 +47,8 @@ export async function POST(request: Request) {
       department: body.department,
       status: body.status,
       statusNote: body.statusNote,
+      badges: body.badges,
+      timeline: body.timeline,
       createdAt: now,
       updatedAt: now
     });

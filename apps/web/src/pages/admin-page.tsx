@@ -10,6 +10,7 @@ import {
   type KpiMetricKey,
   type QuestionPerformance,
   type Representative,
+  type TimelineEvent,
   type UserRoleAssignment
 } from "@kalitedb/shared";
 import { collection, doc, getDocs, setDoc, writeBatch } from "firebase/firestore";
@@ -390,7 +391,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const createRepresentativeMutation = useMutation({
-    mutationFn: (input: { displayName: string; department: string }) =>
+    mutationFn: (input: { displayName: string; department: string; badges?: string[]; timeline?: TimelineEvent[] }) =>
       api.createRepresentative(auth.token, input as any),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["representatives"] });
@@ -1390,7 +1391,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     defaultDepartment="cs"
                     isSaving={createRepresentativeMutation.isPending}
                     onClose={() => setShowCreateRepModal(false)}
-                    onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "cs" })}
+                    onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "cs", badges: data.badges, timeline: data.timeline })}
                   />
                 ) : null}
               </div>

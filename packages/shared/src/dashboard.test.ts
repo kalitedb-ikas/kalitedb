@@ -44,7 +44,12 @@ function buildAgentMetric(
     localCloseRate: overrides.localCloseRate ?? 82,
     missedCalls: overrides.missedCalls ?? 3,
     callEvaluationAverage: overrides.callEvaluationAverage ?? null,
-    evaluationCount: overrides.evaluationCount ?? 20
+    evaluationCount: overrides.evaluationCount ?? 20,
+    email: overrides.email ?? null,
+    evaluatedChatCount: overrides.evaluatedChatCount ?? null,
+    evaluatedMailCount: overrides.evaluatedMailCount ?? null,
+    classicTicketCount: overrides.classicTicketCount ?? null,
+    newTicketCount: overrides.newTicketCount ?? null
   };
 }
 
