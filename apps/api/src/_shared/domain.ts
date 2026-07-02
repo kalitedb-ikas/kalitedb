@@ -76,6 +76,12 @@ export const timelineEventSchema = z.object({
   type: timelineEventTypeSchema.optional()
 });
 
+/** Temsilcinin tamamen gizlendiği CS yüzeyleri (tablo + ortalama + grafikler).
+ *  Koda gömülü AUDIT_AVERAGE_EXCLUDED_KEYS'ten farklı: o yalnız ortalamadan
+ *  çıkarır, bu tümüyle gizler. */
+export const representativeExclusionSurfaceSchema = z.enum(["audit", "csat", "dashboard"]);
+export type RepresentativeExclusionSurface = z.infer<typeof representativeExclusionSurfaceSchema>;
+
 export const representativeSchema = z.object({
   key: z.string(),
   displayName: z.string().min(1),
@@ -84,6 +90,7 @@ export const representativeSchema = z.object({
   statusNote: z.string().optional(),
   badges: z.array(z.string()).default([]),
   timeline: z.array(timelineEventSchema).default([]),
+  exclusions: z.array(representativeExclusionSurfaceSchema).default([]),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });

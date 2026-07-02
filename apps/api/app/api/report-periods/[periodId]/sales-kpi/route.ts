@@ -21,6 +21,9 @@ async function autoRegisterSalesAgents(agents: Array<{ agentKey: string; agentNa
           displayName: agent.agentName,
           department: "sales",
           status: "active",
+          badges: [],
+          timeline: [],
+          exclusions: [],
           createdAt: now,
           updatedAt: now
         });

@@ -1,4 +1,4 @@
-import { timelineEventSchema } from "@kalitedb/shared";
+import { representativeExclusionSurfaceSchema, timelineEventSchema } from "@kalitedb/shared";
 import { z } from "zod";
 
 import { requireAuth } from "@/src/lib/auth";
@@ -13,7 +13,8 @@ const patchRepresentativeSchema = z.object({
   displayName: z.string().min(1).optional(),
   statusNote: z.string().optional(),
   badges: z.array(z.string()).optional(),
-  timeline: z.array(timelineEventSchema).optional()
+  timeline: z.array(timelineEventSchema).optional(),
+  exclusions: z.array(representativeExclusionSurfaceSchema).optional()
 });
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ key: string }> }) {
@@ -52,6 +53,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ke
       ...(body.statusNote != null ? { statusNote: body.statusNote } : {}),
       ...(body.badges != null ? { badges: body.badges } : {}),
       ...(body.timeline != null ? { timeline: body.timeline } : {}),
+      ...(body.exclusions != null ? { exclusions: body.exclusions } : {}),
       updatedAt: new Date().toISOString()
     });
 

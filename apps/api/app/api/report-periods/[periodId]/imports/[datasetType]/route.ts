@@ -128,6 +128,9 @@ export async function POST(
               displayName: row.agentName,
               department,
               status: "active",
+              badges: [],
+              timeline: [],
+              exclusions: [],
               createdAt: now,
               updatedAt: now
             });

@@ -28,7 +28,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatDelta, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
-import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
+import { excludeAgentsFromSnapshot, useRepresentativeKeysExcludedFrom, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { brand, chart } from "../theme/colors";
 
 const TREND_DATASET_TYPES = ["agent-metrics", "audit-metrics"] as const;
@@ -108,7 +108,7 @@ export function DashboardPage() {
     queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
     staleTime: 5 * 60 * 1000
   });
-  const aggregatedSnapshot = useMemo(() => {
+  const aggregatedSnapshotUnfiltered = useMemo(() => {
     if (!baseSnapshot) return undefined;
     if (periodRange.viewMode === "aylik") return baseSnapshot;
     if (activePeriodIds.length === 0) return baseSnapshot;
@@ -134,6 +134,14 @@ export function DashboardPage() {
       thresholds: baseSnapshot.thresholds
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
+
+  // Temsilci yönetiminde "dashboard" alanından hariç tutulanlar bu sayfadan
+  // tamamen çıkar (tablo + ortalama + grafikler).
+  const dashboardExcludedKeys = useRepresentativeKeysExcludedFrom("dashboard");
+  const aggregatedSnapshot = useMemo(
+    () => excludeAgentsFromSnapshot(aggregatedSnapshotUnfiltered, dashboardExcludedKeys),
+    [aggregatedSnapshotUnfiltered, dashboardExcludedKeys]
+  );
 
   // "Premium Onboarding" etiketlilerin CSAT skoru null'lanır → ortalama, leaderboard,
   // champion ve tablo CSAT sütunundan otomatik düşer.
@@ -222,18 +230,18 @@ export function DashboardPage() {
   const rawYearlyTrend = yearlyTrendQuery.data ?? [];
   // Yıllık trend grafiği CSAT serisi: Premium Onboarding'i hariç tut
   const yearlyTrend = useMemo(() => {
-    if (premiumOnboardingKeys.size === 0) return rawYearlyTrend;
+    if (premiumOnboardingKeys.size === 0 && dashboardExcludedKeys.size === 0) return rawYearlyTrend;
     const agentMap = agentMetricsBulkQuery.data;
     if (!agentMap) return rawYearlyTrend;
     return rawYearlyTrend.map((point) => {
       const agents = agentMap[point.periodId];
       if (!agents) return point;
       const csatValues = agents
-        .filter((a) => !premiumOnboardingKeys.has(a.agentKey))
+        .filter((a) => !premiumOnboardingKeys.has(a.agentKey) && !dashboardExcludedKeys.has(a.agentKey))
         .map((a) => a.callEvaluationAverage);
       return { ...point, csat: average(csatValues) };
     });
-  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys]);
+  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys, dashboardExcludedKeys]);
 
   return (
     <div className="space-y-8">

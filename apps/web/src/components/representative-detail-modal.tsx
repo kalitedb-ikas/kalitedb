@@ -1,4 +1,4 @@
-import type { Department, Representative, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
+import type { Department, Representative, RepresentativeExclusionSurface, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
 import { BarChart3, Briefcase, Crown, Handshake, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -64,7 +64,16 @@ type SaveData = {
   department?: Department;
   badges: string[];
   timeline: TimelineEvent[];
+  exclusions: RepresentativeExclusionSurface[];
 };
+
+/** Temsilcinin dahil edilebileceği CS yüzeyleri; kapalıysa o sayfada tablo,
+ *  ortalama ve grafiklerden tamamen çıkar. */
+const EXCLUSION_SURFACES: { key: RepresentativeExclusionSurface; label: string }[] = [
+  { key: "audit", label: "Audit" },
+  { key: "csat", label: "CSAT" },
+  { key: "dashboard", label: "Genel Bakış" }
+];
 
 type Props = {
   representative?: Representative;
@@ -81,6 +90,7 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
   const [department, setDepartment] = useState<Department>((representative?.department as Department) ?? defaultDepartment);
   const [badges, setBadges] = useState<string[]>(representative?.badges ?? []);
   const [timeline, setTimeline] = useState<TimelineEvent[]>(representative?.timeline ?? []);
+  const [exclusions, setExclusions] = useState<RepresentativeExclusionSurface[]>(representative?.exclusions ?? []);
 
   // Timeline form state
   const [showTimelineForm, setShowTimelineForm] = useState(false);
@@ -109,6 +119,10 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
 
   const toggleBadge = (key: string) => {
     setBadges((prev) => prev.includes(key) ? prev.filter((b) => b !== key) : [...prev, key]);
+  };
+
+  const toggleExclusion = (key: RepresentativeExclusionSurface) => {
+    setExclusions((prev) => prev.includes(key) ? prev.filter((e) => e !== key) : [...prev, key]);
   };
 
   const addTimelineEvent = () => {
@@ -143,7 +157,8 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
       ...(isCreate || displayName !== representative?.displayName ? { displayName } : {}),
       department,
       badges,
-      timeline
+      timeline,
+      exclusions
     });
   };
 
@@ -248,6 +263,35 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
                 >
                   {def.icon}
                   {def.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Dahil olduğu alanlar ── */}
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Dahil Olduğu Alanlar</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Kapalı olan alanlarda temsilci tablo, ortalama ve grafiklerde gösterilmez.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {EXCLUSION_SURFACES.map((surface) => {
+              const included = !exclusions.includes(surface.key);
+              return (
+                <button
+                  key={surface.key}
+                  className={[
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                    included
+                      ? "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
+                      : "border-slate-200 bg-white text-slate-400 line-through hover:border-slate-300 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:border-slate-500 dark:hover:text-slate-300"
+                  ].join(" ")}
+                  onClick={() => toggleExclusion(surface.key)}
+                  title={included ? `${surface.label} sayfasında gösteriliyor — gizlemek için tıkla` : `${surface.label} sayfasında gizli — dahil etmek için tıkla`}
+                  type="button"
+                >
+                  {surface.label}
                 </button>
               );
             })}

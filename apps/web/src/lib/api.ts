@@ -460,6 +460,7 @@ async function deriveRepresentativesFromFallback(): Promise<Representative[]> {
       key,
       displayName: info.name,
       department: info.department,
+      exclusions: [],
       status: "active" as const,
       badges: [],
       timeline: [],
@@ -2122,7 +2123,7 @@ export const api = {
   async updateRepresentative(
     token: string | null,
     key: string,
-    body: { displayName?: string; status?: string; department?: string; statusNote?: string; badges?: string[]; timeline?: Array<{ id: string; title: string; startDate: string; endDate?: string; department?: string }> }
+    body: { displayName?: string; status?: string; department?: string; statusNote?: string; badges?: string[]; timeline?: Array<{ id: string; title: string; startDate: string; endDate?: string; department?: string }>; exclusions?: string[] }
   ): Promise<Representative> {
     const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
     if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
@@ -2137,6 +2138,7 @@ export const api = {
       if (body.statusNote != null) updates.statusNote = body.statusNote;
       if (body.badges != null) updates.badges = body.badges;
       if (body.timeline != null) updates.timeline = body.timeline;
+      if (body.exclusions != null) updates.exclusions = body.exclusions;
       await setDoc(repDoc, { ...current, ...updates });
       return { ...current, ...updates } as unknown as Representative;
     }
@@ -2148,7 +2150,7 @@ export const api = {
   },
   async createRepresentative(
     token: string | null,
-    body: { displayName: string; department: Department; badges?: string[]; timeline?: TimelineEvent[] }
+    body: { displayName: string; department: Department; badges?: string[]; timeline?: TimelineEvent[]; exclusions?: string[] }
   ): Promise<Representative> {
     const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
     if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
@@ -2161,6 +2163,7 @@ export const api = {
         status: "active",
         badges: body.badges ?? [],
         timeline: body.timeline ?? [],
+        exclusions: body.exclusions ?? [],
         createdAt: now,
         updatedAt: now
       };

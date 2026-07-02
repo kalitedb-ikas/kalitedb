@@ -30,7 +30,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
-import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
+import { excludeAgentsFromSnapshot, useRepresentativeKeysExcludedFrom, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
@@ -144,7 +144,7 @@ export function CsatPage() {
   });
 
   const baseSnapshot = dashboardQuery.data;
-  const aggregatedSnapshot = useMemo(() => {
+  const aggregatedSnapshotUnfiltered = useMemo(() => {
     if (!baseSnapshot) return undefined;
     if (periodRange.viewMode === "aylik") return baseSnapshot;
     if (activePeriodIds.length === 0) return baseSnapshot;
@@ -170,6 +170,14 @@ export function CsatPage() {
       thresholds: baseSnapshot.thresholds
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
+
+  // Temsilci yönetiminde "csat" alanından hariç tutulanlar bu sayfadan
+  // tamamen çıkar (tablo + ortalama + grafikler).
+  const csatExcludedKeys = useRepresentativeKeysExcludedFrom("csat");
+  const aggregatedSnapshot = useMemo(
+    () => excludeAgentsFromSnapshot(aggregatedSnapshotUnfiltered, csatExcludedKeys),
+    [aggregatedSnapshotUnfiltered, csatExcludedKeys]
+  );
 
   // "Premium Onboarding" etiketlilerin CSAT skoru null'lanır → ortalama, leaderboard,
   // champion ve tablo CSAT sütunundan otomatik düşer; her ay ölçülmeyen bir temsilcinin
@@ -252,18 +260,18 @@ export function CsatPage() {
   // Yıllık trend grafiği CSAT serisi: Premium Onboarding'i hariç tut (aylık nokta bazında
   // yeniden hesapla ki Mart gibi onların yüksek skor aldığı aylar ortalamayı şişirmesin).
   const yearlyTrend = useMemo(() => {
-    if (premiumOnboardingKeys.size === 0 && startTeamKeys.size === 0) return rawYearlyTrend;
+    if (premiumOnboardingKeys.size === 0 && startTeamKeys.size === 0 && csatExcludedKeys.size === 0) return rawYearlyTrend;
     const agentMap = agentMetricsBulkQuery.data;
     if (!agentMap) return rawYearlyTrend;
     return rawYearlyTrend.map((point) => {
       const agents = agentMap[point.periodId];
       if (!agents) return point;
       const csatValues = agents
-        .filter((a) => !premiumOnboardingKeys.has(a.agentKey) && !startTeamKeys.has(a.agentKey))
+        .filter((a) => !premiumOnboardingKeys.has(a.agentKey) && !startTeamKeys.has(a.agentKey) && !csatExcludedKeys.has(a.agentKey))
         .map((a) => a.callEvaluationAverage);
       return { ...point, csat: average(csatValues) };
     });
-  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys, startTeamKeys]);
+  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys, startTeamKeys, csatExcludedKeys]);
   const rows = useMemo(() => {
     if (!tableSnapshot) return [];
 

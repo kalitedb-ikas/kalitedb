@@ -166,12 +166,13 @@ export function SalesAdminPage() {
   });
 
   const updateRepresentativeMutation = useMutation({
-    mutationFn: (input: { key: string; displayName?: string; department?: string; badges?: string[]; timeline?: Array<Record<string, unknown>> }) => {
+    mutationFn: (input: { key: string; displayName?: string; department?: string; badges?: string[]; timeline?: Array<Record<string, unknown>>; exclusions?: string[] }) => {
       const body: Record<string, unknown> = {};
       if (input.displayName != null) body.displayName = input.displayName;
       if (input.department != null) body.department = input.department;
       if (input.badges != null) body.badges = input.badges;
       if (input.timeline != null) body.timeline = input.timeline;
+      if (input.exclusions != null) body.exclusions = input.exclusions;
       return api.updateRepresentative(auth.token, input.key, body as any);
     },
     onSuccess: async () => {
@@ -181,7 +182,7 @@ export function SalesAdminPage() {
   });
 
   const createRepresentativeMutation = useMutation({
-    mutationFn: (input: { displayName: string; department: string; badges?: string[]; timeline?: TimelineEvent[] }) =>
+    mutationFn: (input: { displayName: string; department: string; badges?: string[]; timeline?: TimelineEvent[]; exclusions?: string[] }) =>
       api.createRepresentative(auth.token, input as any),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["representatives"] });
@@ -305,6 +306,7 @@ export function SalesAdminPage() {
           displayName: agent.name,
           department: "sales",
           status: "active",
+          exclusions: [],
           badges: [],
           timeline: [],
           createdAt: now,
@@ -1644,7 +1646,7 @@ export function SalesAdminPage() {
                   defaultDepartment="sales"
                   isSaving={createRepresentativeMutation.isPending}
                   onClose={() => setShowCreateRepModal(false)}
-                  onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "sales", badges: data.badges, timeline: data.timeline })}
+                  onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "sales", badges: data.badges, timeline: data.timeline, exclusions: data.exclusions })}
                 />
               ) : null}
             </div>
