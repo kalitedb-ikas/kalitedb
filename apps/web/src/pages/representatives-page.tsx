@@ -292,12 +292,13 @@ export function RepresentativesPage() {
 
   const chatMailKeys = useRepresentativeKeysWithBadge("chat_mail");
 
-  /* ── "En'ler" — temsilci bu metrikte 1. sıradaysa.
+  /* ── "En'ler" — temsilci bu metrikte 1. veya sonuncu sıradaysa.
        CSAT'te premium_onboarding, Konuşma süresi'nde chat_mail etiketliler sıralamadan hariç. ── */
-  const topMetricLabels = useMemo(() => {
-    if (!selectedRepresentative) return [] as string[];
+  const rankedMetricLabels = useMemo(() => {
+    const empty = { top: [] as string[], low: [] as string[] };
+    if (!selectedRepresentative) return empty;
     const agents = snapshot?.datasets.agentMetrics ?? [];
-    if (agents.length < 2) return [];
+    if (agents.length < 2) return empty;
     const key = selectedRepresentative.agentKey;
     type Def = { label: string; getValue: (a: typeof agents[number]) => number | null | undefined; direction?: "higher" | "lower"; excludeKeys?: Set<string> };
     const defs: Def[] = [
@@ -311,7 +312,8 @@ export function RepresentativesPage() {
       { label: "Konuşma süresi", getValue: (a) => a.avgTalkDurationSeconds, direction: "lower", excludeKeys: chatMailKeys },
       { label: "Kaçan çağrı", getValue: (a) => a.missedCalls, direction: "lower" }
     ];
-    const labels: string[] = [];
+    const top: string[] = [];
+    const low: string[] = [];
     for (const def of defs) {
       const valid = agents.filter((a) => def.getValue(a) != null && !def.excludeKeys?.has(a.agentKey));
       if (valid.length < 2) continue;
@@ -322,7 +324,12 @@ export function RepresentativesPage() {
         const v = def.getValue(a) as number;
         return def.direction === "lower" ? v < myValue : v > myValue;
       });
-      if (!hasBetter) labels.push(def.label);
+      const hasWorse = valid.some((a) => {
+        const v = def.getValue(a) as number;
+        return def.direction === "lower" ? v > myValue : v < myValue;
+      });
+      if (!hasBetter) top.push(def.label);
+      if (!hasWorse) low.push(def.label);
     }
     // Audit — tie-aware
     const validAudit = auditMetrics.filter((a) => a.auditScore != null);
@@ -331,11 +338,15 @@ export function RepresentativesPage() {
       if (me) {
         const myScore = me.auditScore ?? 0;
         const hasBetter = validAudit.some((a) => (a.auditScore ?? 0) > myScore);
-        if (!hasBetter) labels.push("Audit");
+        const hasWorse = validAudit.some((a) => (a.auditScore ?? 0) < myScore);
+        if (!hasBetter) top.push("Audit");
+        if (!hasWorse) low.push("Audit");
       }
     }
-    return labels;
+    return { top, low };
   }, [selectedRepresentative, snapshot?.datasets.agentMetrics, auditMetrics, premiumOnboardingKeys, chatMailKeys]);
+  const topMetricLabels = rankedMetricLabels.top;
+  const lowMetricLabels = rankedMetricLabels.low;
 
   const [showCareerModal, setShowCareerModal] = useState(false);
 
@@ -562,11 +573,16 @@ export function RepresentativesPage() {
                           Kariyer yolu
                         </button>
                       </div>
-                      {topMetricLabels.length > 0 ? (
+                      {topMetricLabels.length > 0 || lowMetricLabels.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {topMetricLabels.map((label) => (
-                            <span key={label} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            <span key={`top-${label}`} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
                               <span className="text-amber-500">&#9733;</span> {label} birincisi
+                            </span>
+                          ))}
+                          {lowMetricLabels.map((label) => (
+                            <span key={`low-${label}`} className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-700/40 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                              <span className="text-rose-500">&#9660;</span> {label} en düşük
                             </span>
                           ))}
                         </div>

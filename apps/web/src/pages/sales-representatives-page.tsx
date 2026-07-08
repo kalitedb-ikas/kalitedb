@@ -460,6 +460,17 @@ export function SalesRepresentativesPage() {
     return labels;
   }, [metricDefs, metricRankMap]);
 
+  const lowMetricLabels = useMemo(() => {
+    const labels: string[] = [];
+    for (const def of metricDefs) {
+      const r = metricRankMap[def.key];
+      if (r && r.total >= 2 && r.rank === r.total) labels.push(def.label);
+    }
+    const auditRank = metricRankMap["auditScore"];
+    if (auditRank && auditRank.total >= 2 && auditRank.rank === auditRank.total) labels.push("Audit skoru");
+    return labels;
+  }, [metricDefs, metricRankMap]);
+
   const [rankingModalMetric, setRankingModalMetric] = useState<string | null>(null);
   const [showCareerModal, setShowCareerModal] = useState(false);
 
@@ -752,11 +763,16 @@ export function SalesRepresentativesPage() {
                           Kariyer yolu
                         </button>
                       </div>
-                      {topMetricLabels.length > 0 ? (
+                      {topMetricLabels.length > 0 || lowMetricLabels.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {topMetricLabels.map((label) => (
-                            <span key={label} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            <span key={`top-${label}`} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
                               <span className="text-amber-500">&#9733;</span> {label} birincisi
+                            </span>
+                          ))}
+                          {lowMetricLabels.map((label) => (
+                            <span key={`low-${label}`} className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-700/40 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                              <span className="text-rose-500">&#9660;</span> {label} en düşük
                             </span>
                           ))}
                         </div>
