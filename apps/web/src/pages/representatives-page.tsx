@@ -295,7 +295,8 @@ export function RepresentativesPage() {
   /* ── "En'ler" — temsilci bu metrikte 1. veya sonuncu sıradaysa.
        CSAT'te premium_onboarding, Konuşma süresi'nde chat_mail etiketliler sıralamadan hariç. ── */
   const rankedMetricLabels = useMemo(() => {
-    const empty = { top: [] as string[], low: [] as string[] };
+    type LowLabel = { label: string; suffix: string };
+    const empty = { top: [] as string[], low: [] as LowLabel[] };
     if (!selectedRepresentative) return empty;
     const agents = snapshot?.datasets.agentMetrics ?? [];
     if (agents.length < 2) return empty;
@@ -313,7 +314,7 @@ export function RepresentativesPage() {
       { label: "Kaçan çağrı", getValue: (a) => a.missedCalls, direction: "lower" }
     ];
     const top: string[] = [];
-    const low: string[] = [];
+    const low: LowLabel[] = [];
     for (const def of defs) {
       const valid = agents.filter((a) => def.getValue(a) != null && !def.excludeKeys?.has(a.agentKey));
       if (valid.length < 2) continue;
@@ -329,7 +330,9 @@ export function RepresentativesPage() {
         return def.direction === "lower" ? v > myValue : v < myValue;
       });
       if (!hasBetter) top.push(def.label);
-      if (!hasWorse) low.push(def.label);
+      // "lower" yönlü metriklerde (Konuşma süresi, Kaçan çağrı) en kötü durum en YÜKSEK
+      // değerdir — "en düşük" değil "en fazla" demek gerekir.
+      if (!hasWorse) low.push({ label: def.label, suffix: def.direction === "lower" ? "en fazla" : "en düşük" });
     }
     // Audit — tie-aware
     const validAudit = auditMetrics.filter((a) => a.auditScore != null);
@@ -340,7 +343,7 @@ export function RepresentativesPage() {
         const hasBetter = validAudit.some((a) => (a.auditScore ?? 0) > myScore);
         const hasWorse = validAudit.some((a) => (a.auditScore ?? 0) < myScore);
         if (!hasBetter) top.push("Audit");
-        if (!hasWorse) low.push("Audit");
+        if (!hasWorse) low.push({ label: "Audit", suffix: "en düşük" });
       }
     }
     return { top, low };
@@ -580,9 +583,9 @@ export function RepresentativesPage() {
                               <span className="text-amber-500">&#9733;</span> {label} birincisi
                             </span>
                           ))}
-                          {lowMetricLabels.map((label) => (
-                            <span key={`low-${label}`} className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-700/40 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
-                              <span className="text-rose-500">&#9660;</span> {label} en düşük
+                          {lowMetricLabels.map((item) => (
+                            <span key={`low-${item.label}`} className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-700/40 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                              <span className="text-rose-500">&#9660;</span> {item.label} {item.suffix}
                             </span>
                           ))}
                         </div>
