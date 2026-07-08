@@ -68,8 +68,8 @@ export function QuestionsPage() {
   const strongestQuestions = useMemo(() => snapshot?.rankings.strongestQuestions ?? [], [snapshot]);
 
   const rows = useMemo(() => {
-    if (!topic) return allQuestions;
-    return allQuestions.filter((item) => item.topic === topic);
+    const filtered = topic ? allQuestions.filter((item) => item.topic === topic) : allQuestions;
+    return [...filtered].sort((a, b) => a.accuracyRate - b.accuracyRate);
   }, [allQuestions, topic]);
 
   const topics = useMemo(() => Array.from(new Set(allQuestions.map((item) => item.topic))), [allQuestions]);

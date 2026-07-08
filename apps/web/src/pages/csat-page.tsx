@@ -20,7 +20,7 @@ import {
 } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, PhoneCall, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Eye, EyeOff, Gauge, PhoneCall, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
@@ -186,6 +186,7 @@ export function CsatPage() {
   const repsMap = useRepresentativesMap();
   const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
   const [agentSearch, setAgentSearch] = useUrlParam("search", "");
+  const [showDepartedReps, setShowDepartedReps] = useState(false);
   const aggregatedSnapshotCsatAdjusted = useMemo(() => {
     if (!aggregatedSnapshot) return undefined;
     if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
@@ -350,6 +351,9 @@ export function CsatPage() {
 
   const filteredRows = useMemo(() => {
     let out = rows;
+    if (!showDepartedReps) {
+      out = out.filter((r) => repsMap.get(r.agentKey)?.status !== "departed");
+    }
     if (badgeFilter) {
       out = out.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
     }
@@ -357,7 +361,7 @@ export function CsatPage() {
       out = out.filter((r) => matchesAgentSearch(r.agentName, agentSearch));
     }
     return out;
-  }, [rows, badgeFilter, agentSearch, repsMap]);
+  }, [rows, showDepartedReps, badgeFilter, agentSearch, repsMap]);
 
   const columns: ColumnDef<CsatRow, any>[] = [
     columnHelper.accessor("agentName", {
@@ -583,6 +587,20 @@ export function CsatPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <AgentSearch onChange={setAgentSearch} value={agentSearch} />
                 <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+                <button
+                  className={[
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-medium transition",
+                    showDepartedReps
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300"
+                  ].join(" ")}
+                  onClick={() => setShowDepartedReps((v) => !v)}
+                  title={showDepartedReps ? "Ayrılanları gizle" : "Ayrılanları da göster"}
+                  type="button"
+                >
+                  {showDepartedReps ? <Eye size={14} /> : <EyeOff size={14} />}
+                  Ayrılanlar {showDepartedReps ? "gösteriliyor" : "gizli"}
+                </button>
                 <CsvDownloadButton
                   disabled={filteredRows.length === 0}
                   onClick={() => {
