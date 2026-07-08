@@ -127,7 +127,8 @@ function truncateName(name: string, max = 10): string {
 const DONUT_KEYS = [
   { key: "scaleCount", label: "Scale" },
   { key: "scalePlusCount", label: "Scale Plus" },
-  { key: "preCount", label: "Pre" }
+  { key: "preCount", label: "Pre" },
+  { key: "scale3Plus2Count", label: "3+2" }
 ] as const;
 
 type DonutSubItem = { name: string; value: number };
@@ -144,9 +145,12 @@ function computeLicenseDonut(
   agents: SalesKpiAgent[],
   salesInk: string
 ): DonutSlice[] {
-  const donutColors = [salesInk, brand.accent, brand.sky];
+  const donutColors = [salesInk, brand.accent, brand.sky, brand.emerald];
   const lsTotal = licenseSummary
-    ? licenseSummary.preCount + licenseSummary.scaleCount + licenseSummary.scalePlusCount
+    ? licenseSummary.preCount +
+      licenseSummary.scaleCount +
+      licenseSummary.scalePlusCount +
+      licenseSummary.scale3Plus2Count
     : 0;
 
   if (licenseSummary && lsTotal > 0) {
@@ -382,13 +386,13 @@ export function SalesDashboardPage() {
   }, [agents]);
 
   /* ── Lisans Dağılımı: bağımsız iki grafik için ayrı period state'leri ── */
-  // Sol grafik: bu yılı (default 2026) yıllık olarak gösterir
-  const [donut1Period, setDonut1Period] = useState<PeriodRangeValue>(() => ({
-    year: String(now.getFullYear()),
-    viewMode: "yillik",
-    monthPeriodId: undefined,
-    quarter: undefined
-  }));
+  // Sol grafik: diğer grafik gibi ay bazlı, default önceki ay
+  const [donut1Period, setDonut1Period] = useState<PeriodRangeValue>(() => {
+    const prevMonth = now.getMonth();
+    const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
+    const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
+    return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
+  });
   // Sağ grafik: kullanıcının kıyaslamak için seçeceği dönem (default ay bazlı, önceki ay)
   const [donut2Period, setDonut2Period] = useState<PeriodRangeValue>(() => {
     const prevMonth = now.getMonth();
