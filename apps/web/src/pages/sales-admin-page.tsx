@@ -2,7 +2,7 @@ import { normalizeKey } from "@kalitedb/shared";
 import type { Representative, SalesMeeting, SalesKpiData, SalesKpiAgent, TimelineEvent } from "@kalitedb/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, ClipboardCheck, FileQuestion, Handshake, LogOut, Maximize2, MessageSquare, MessageSquarePlus, Mic, Minimize2, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
+import { BookOpen, ClipboardCheck, Eye, EyeOff, FileQuestion, Handshake, LogOut, Maximize2, MessageSquare, MessageSquarePlus, Mic, Minimize2, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -138,6 +138,7 @@ export function SalesAdminPage() {
   // Representatives state
   const [selectedRepKey, setSelectedRepKey] = useState<string | null>(null);
   const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
+  const [showDepartedReps, setShowDepartedReps] = useState(false);
 
   const activePeriodMonth = `${selectedYear}-${selectedMonthValue}`;
 
@@ -331,9 +332,13 @@ export function SalesAdminPage() {
     }
 
     let reps = [...registered, ...derived];
-    if (repStatusFilter !== "all") reps = reps.filter((r) => r.status === repStatusFilter);
+    if (repStatusFilter !== "all") {
+      reps = reps.filter((r) => r.status === repStatusFilter);
+    } else if (!showDepartedReps) {
+      reps = reps.filter((r) => r.status !== "departed");
+    }
     return reps;
-  }, [representativesQuery.data, allSalesAgentsQuery.data, repStatusFilter]);
+  }, [representativesQuery.data, allSalesAgentsQuery.data, repStatusFilter, showDepartedReps]);
 
   const selectedRep = filteredSalesReps.find((r) => r.key === selectedRepKey) ?? null;
 
@@ -1628,6 +1633,21 @@ export function SalesAdminPage() {
                   Yeni Temsilci
                 </button>
                 <div className="ml-auto flex items-center gap-2">
+                  <button
+                    className={cx(
+                      "inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-2 text-sm font-medium transition",
+                      showDepartedReps
+                        ? "border-[var(--adm-accent-border)] bg-[var(--adm-accent-soft)] text-[var(--adm-accent-text)]"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300"
+                    )}
+                    disabled={repStatusFilter !== "all"}
+                    onClick={() => setShowDepartedReps((v) => !v)}
+                    title={repStatusFilter !== "all" ? "Yalnızca \"Tüm Durumlar\" seçiliyken kullanılabilir" : undefined}
+                    type="button"
+                  >
+                    {showDepartedReps ? <Eye size={14} /> : <EyeOff size={14} />}
+                    Ayrılanlar {showDepartedReps ? "gösteriliyor" : "gizli"}
+                  </button>
                   <select
                     className="rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
                     value={repStatusFilter}
