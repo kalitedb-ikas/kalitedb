@@ -159,17 +159,19 @@ export function DashboardPage() {
     });
   }, [aggregatedSnapshot, premiumOnboardingKeys]);
 
-  // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
-  // özet/ortalama hesaplarına dahil edilir.
+  // "Satıcı Operasyon" ve "Start" etiketli temsilciler lider tablolarından
+  // gizlenir, özet/ortalama hesaplarına dahil edilir.
   const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
+  const startTeamKeys = useRepresentativeKeysWithBadge("start");
   const snapshot = useMemo(() => {
     if (!aggregatedSnapshotCsatAdjusted) return undefined;
-    if (hiddenAgentKeys.size === 0) return aggregatedSnapshotCsatAdjusted;
+    const rankingExcluded = new Set<string>([...hiddenAgentKeys, ...startTeamKeys]);
+    if (rankingExcluded.size === 0) return aggregatedSnapshotCsatAdjusted;
     const filteredAgents = aggregatedSnapshotCsatAdjusted.datasets.agentMetrics.filter(
-      (a) => !hiddenAgentKeys.has(a.agentKey)
+      (a) => !rankingExcluded.has(a.agentKey)
     );
     const filteredAudits = aggregatedSnapshotCsatAdjusted.datasets.auditMetrics.filter(
-      (a) => !hiddenAgentKeys.has(a.agentKey)
+      (a) => !rankingExcluded.has(a.agentKey)
     );
     const rebuilt = buildDashboardSnapshot({
       period: aggregatedSnapshotCsatAdjusted.period,
@@ -181,7 +183,7 @@ export function DashboardPage() {
       thresholds: aggregatedSnapshotCsatAdjusted.thresholds
     });
     return { ...rebuilt, summary: aggregatedSnapshotCsatAdjusted.summary };
-  }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys]);
+  }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys, startTeamKeys]);
 
   const yearlyTrendQuery = useQuery({
     enabled: yearPeriods.length > 0,

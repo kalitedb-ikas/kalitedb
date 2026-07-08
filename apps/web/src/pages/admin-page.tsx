@@ -49,6 +49,7 @@ import {
   InputField
 } from "../components/admin-ui";
 import { DataTable } from "../components/data-table";
+import { BadgeFilter } from "../components/badge-filter";
 import { FancySelect } from "../components/fancy-select";
 import { RecordEditor } from "../components/record-editor";
 import { AuditScoreEditorModal, type AuditScoreDraft } from "../components/audit-score-editor";
@@ -210,7 +211,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const auth = useAuth();
   const queryClient = useQueryClient();
   const now = new Date();
-  const isAdminUser = true;
+  const isAdminUser = props.currentUserRole === "admin";
   const [selectedSection, setSelectedSection] = useState<AdminSection>("periods");
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
@@ -226,6 +227,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const [editingRoleEmail, setEditingRoleEmail] = useState<string | null>(null);
   const [repDepartmentFilter, setRepDepartmentFilter] = useState<"all" | "cs" | "sales" | "quality" | "partner">("all");
   const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
+  const [repBadgeFilter, setRepBadgeFilter] = useState("");
   const [sidebarQuery, setSidebarQuery] = useState("");
   const [auditEditorState, setAuditEditorState] = useState<
     | { mode: "create" }
@@ -585,8 +587,9 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     let reps = representativesQuery.data ?? [];
     if (repDepartmentFilter !== "all") reps = reps.filter((r) => r.department === repDepartmentFilter);
     if (repStatusFilter !== "all") reps = reps.filter((r) => r.status === repStatusFilter);
+    if (repBadgeFilter) reps = reps.filter((r) => (r.badges ?? []).includes(repBadgeFilter));
     return reps;
-  }, [representativesQuery.data, repDepartmentFilter, repStatusFilter]);
+  }, [representativesQuery.data, repDepartmentFilter, repStatusFilter, repBadgeFilter]);
 
   const representativeColumns = useMemo<ColumnDef<Representative>[]>(
     () => [
@@ -1344,6 +1347,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       value={repStatusFilter}
                       onChange={(v) => setRepStatusFilter(v as typeof repStatusFilter)}
                     />
+                    <BadgeFilter value={repBadgeFilter} onChange={setRepBadgeFilter} />
                   </div>
                 </div>
                 {representativesQuery.isLoading ? (

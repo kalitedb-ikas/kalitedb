@@ -733,8 +733,8 @@ export function SalesRepresentativesPage() {
         {selectedRepresentative ? (
           <div className="space-y-6">
             <section className="surface-default rounded-[10px] border border-white/75 p-4 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:shadow-none">
-              <div className="flex gap-5">
-                <div className="w-44 shrink-0 self-stretch overflow-hidden rounded-[10px] border border-slate-200 dark:border-slate-600/40">
+              <div className="flex items-start gap-5">
+                <div className="aspect-[3/4] w-44 shrink-0 overflow-hidden rounded-[10px] border border-slate-200 dark:border-slate-600/40">
                   <img
                     alt={selectedName}
                     className="h-full w-full object-cover"

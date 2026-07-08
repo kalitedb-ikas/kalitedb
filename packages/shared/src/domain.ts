@@ -516,7 +516,9 @@ export const licenseSummarySchema = z.object({
   scaleCount: z.number(),
   scale2Plus1Count: z.number(),
   scalePlusCount: z.number(),
-  scalePlus2Plus1Count: z.number()
+  scalePlus2Plus1Count: z.number(),
+  /** "3+2" paketiyle satılan lisans adedi — eski dönem kayıtlarında yok, varsayılan 0. */
+  scale3Plus2Count: z.number().optional().default(0)
 });
 
 export const salesKpiDataSchema = z.object({

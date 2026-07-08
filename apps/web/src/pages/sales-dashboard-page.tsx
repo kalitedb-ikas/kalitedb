@@ -39,6 +39,7 @@ import { useDarkMode } from "../lib/use-dark-mode";
 import { api } from "../lib/api";
 import { formatNumber, formatPeriodMonth } from "../lib/format";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
+import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { brand, chart, chartDark, chartTooltipLight, chartTooltipDark } from "../theme/colors";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import {
@@ -67,7 +68,13 @@ function formatShortMonth(period: string) {
   return label.charAt(0).toLocaleUpperCase("tr-TR") + label.slice(1);
 }
 
-function computeDashboardSummary(agents: SalesKpiAgent[]) {
+/**
+ * `rankableAgents` verilmezse tüm `agents` sıralamaya dahil olur. "Start"
+ * etiketli temsilcileri lider tablolarından/şampiyon kartından gizlemek için
+ * çağıran taraf bu alanı önceden filtrelenmiş bir liste ile geçer; toplamlar
+ * ve ortalamalar her zaman tam `agents` listesinden hesaplanır.
+ */
+function computeDashboardSummary(agents: SalesKpiAgent[], rankableAgents: SalesKpiAgent[] = agents) {
   const count = agents.length;
   if (count === 0) {
     return {
@@ -94,8 +101,8 @@ function computeDashboardSummary(agents: SalesKpiAgent[]) {
   const avgConversionRate = agents.reduce((s, a) => s + a.conversionRate, 0) / count;
   const avgLicensePrice = agents.reduce((s, a) => s + a.avgLicensePrice, 0) / count;
 
-  const sortedByAmount = [...agents].sort((a, b) => b.salesAmount - a.salesAmount);
-  const sortedByLicense = [...agents].sort((a, b) => b.licenseCount - a.licenseCount);
+  const sortedByAmount = [...rankableAgents].sort((a, b) => b.salesAmount - a.salesAmount);
+  const sortedByLicense = [...rankableAgents].sort((a, b) => b.licenseCount - a.licenseCount);
 
   return {
     totalSalesAmount,
@@ -306,7 +313,15 @@ export function SalesDashboardPage() {
   const agents: SalesKpiAgent[] = kpiData && "agents" in kpiData ? (kpiData as any).agents ?? [] : [];
   const targets = kpiData && "targets" in kpiData ? (kpiData as any).targets ?? null : null;
 
-  const summary = useMemo(() => computeDashboardSummary(agents), [agents]);
+  // "Start" etiketli temsilciler lider tablosu/şampiyon kartından gizlenir;
+  // toplam/ortalama hesapları tam temsilci listesinden yapılmaya devam eder.
+  const startTeamKeys = useRepresentativeKeysWithBadge("start");
+  const rankableAgents = useMemo(
+    () => (startTeamKeys.size === 0 ? agents : agents.filter((agent) => !startTeamKeys.has(agent.agentKey))),
+    [agents, startTeamKeys]
+  );
+
+  const summary = useMemo(() => computeDashboardSummary(agents, rankableAgents), [agents, rankableAgents]);
 
   /* ── Yillik trend verisi ── */
   const yearlyTrendQuery = useQuery({
@@ -851,7 +866,7 @@ export function SalesDashboardPage() {
           <div className="grid gap-6 xl:grid-cols-2">
             <Leaderboard
               title="Satış Lider Tablosu"
-              items={[...agents]
+              items={[...rankableAgents]
                 .sort((a, b) => b.salesAmount - a.salesAmount)
                 .slice(0, 5)
                 .map((agent) => ({
@@ -864,7 +879,7 @@ export function SalesDashboardPage() {
             />
             <Leaderboard
               title="Lisans Lider Tablosu"
-              items={[...agents]
+              items={[...rankableAgents]
                 .sort((a, b) => b.licenseCount - a.licenseCount)
                 .slice(0, 5)
                 .map((agent) => ({

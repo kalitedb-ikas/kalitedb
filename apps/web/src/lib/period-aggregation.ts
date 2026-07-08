@@ -57,7 +57,8 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
         scaleCount: 0,
         scale2Plus1Count: 0,
         scalePlusCount: 0,
-        scalePlus2Plus1Count: 0
+        scalePlus2Plus1Count: 0,
+        scale3Plus2Count: 0
       },
       targets: null
     };
@@ -121,7 +122,8 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
     scaleCount: 0,
     scale2Plus1Count: 0,
     scalePlusCount: 0,
-    scalePlus2Plus1Count: 0
+    scalePlus2Plus1Count: 0,
+    scale3Plus2Count: 0
   };
   for (const dataset of valid) {
     if (dataset.licenseSummary) {
@@ -130,6 +132,7 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
       licenseSummary.scale2Plus1Count += dataset.licenseSummary.scale2Plus1Count;
       licenseSummary.scalePlusCount += dataset.licenseSummary.scalePlusCount;
       licenseSummary.scalePlus2Plus1Count += dataset.licenseSummary.scalePlus2Plus1Count;
+      licenseSummary.scale3Plus2Count += dataset.licenseSummary.scale3Plus2Count ?? 0;
     }
   }
 

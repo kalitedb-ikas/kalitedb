@@ -18,6 +18,7 @@ import { MonthlyTable, buildAgentAvatar, type MonthlyAgentRow } from "../compone
 import { BadgeFilter } from "../components/badge-filter";
 import { CompactStatCard } from "../components/compact-stat-card";
 import { RepNameCell } from "../components/rep-name-cell";
+import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -207,9 +208,17 @@ export function SalesPerformancePage() {
     [aggregatedAgents]
   );
 
+  /* ── "Start" etiketli temsilciler öne çıkanlardan (champion, lider tablosu,
+   * en düşük performans) hariç tutulur; takım ortalaması etkilenmez. ── */
+  const startTeamKeys = useRepresentativeKeysWithBadge("start");
+  const highlightAgents = useMemo(
+    () => (startTeamKeys.size === 0 ? aggregatedAgents : aggregatedAgents.filter((a) => !startTeamKeys.has(a.agentKey))),
+    [aggregatedAgents, startTeamKeys]
+  );
+
   /* ── Şampiyon & en düşük ── */
   const perfLeaders = useMemo(() => {
-    const scored = aggregatedAgents.filter(
+    const scored = highlightAgents.filter(
       (a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null
     );
     if (scored.length === 0) return [];
@@ -218,18 +227,18 @@ export function SalesPerformancePage() {
       .filter((a) => a.perfScore === topScore)
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"))
       .map((a, i) => ({ name: a.agentName, imageAlt: a.agentName, imageSrc: buildAgentAvatar(a.agentName, i) }));
-  }, [aggregatedAgents]);
+  }, [highlightAgents]);
   const perfLeaderNames = perfLeaders.map((l) => l.name).join(", ");
 
   const topPerfScore = useMemo(() => {
-    const scored = aggregatedAgents
+    const scored = highlightAgents
       .map((a) => a.perfScore)
       .filter((v): v is number => v !== null);
     return scored.length > 0 ? Math.max(...scored) : null;
-  }, [aggregatedAgents]);
+  }, [highlightAgents]);
 
   const lowestPerfGroup = useMemo(() => {
-    const scored = aggregatedAgents.filter(
+    const scored = highlightAgents.filter(
       (a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null
     );
     if (scored.length === 0) return null;
@@ -238,16 +247,16 @@ export function SalesPerformancePage() {
       .filter((a) => a.perfScore === lowestScore)
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
     return { names: leaders.map((a) => a.agentName).join(", "), score: lowestScore };
-  }, [aggregatedAgents]);
+  }, [highlightAgents]);
 
   /* ── Lider tablosu (top 5) ── */
   const perfLeaderboardItems = useMemo(() => {
-    return aggregatedAgents
+    return highlightAgents
       .filter((a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null)
       .sort((a, b) => b.perfScore - a.perfScore || a.agentName.localeCompare(b.agentName, "tr"))
       .slice(0, 5)
       .map((a) => ({ id: a.agentKey, label: a.agentName, value: formatPerfScore(a.perfScore) }));
-  }, [aggregatedAgents]);
+  }, [highlightAgents]);
 
   /* ── Yıl trend grafiği (aylık takım ortalaması) ── */
   const perfHistory = useMemo(() => {

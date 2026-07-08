@@ -209,7 +209,10 @@ export async function getOptionalAuth(request: NextRequest, allowedRoles?: Role[
     return null;
   }
 
-  // Tüm rollere admin yetkisi verildi — rol kısıtlaması devre dışı
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return null;
+  }
+
   return user;
 }
 
@@ -221,6 +224,9 @@ export async function requireAuth(request: NextRequest, allowedRoles?: Role[]): 
   }
 
   const user = await authenticateToken(token);
-  // Tüm rollere admin yetkisi verildi — rol kısıtlaması devre dışı
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    throw new ApiError(403, "Bu işlem için yetkiniz yok.");
+  }
+
   return user;
 }

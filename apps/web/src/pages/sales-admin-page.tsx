@@ -1022,7 +1022,7 @@ export function SalesAdminPage() {
       }
 
       // ── Tablo 3: Aylık lisans özeti (Pre., Scale, Scale 2+1, Scale Plus, Scale Plus 2+1) ──
-      let licenseSummary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number } | undefined;
+      let licenseSummary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number } | undefined;
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i]!;
         const cell1 = (row[1] ?? "").trim().toLocaleUpperCase("tr-TR");
@@ -1053,7 +1053,11 @@ export function SalesAdminPage() {
             scaleCount: parseCount(scaleRow),
             scale2Plus1Count: parseCount(scale21Row),
             scalePlusCount: parseCount(scalePlusRow),
-            scalePlus2Plus1Count: parseCount(scalePlus21Row)
+            scalePlus2Plus1Count: parseCount(scalePlus21Row),
+            // CSV'de "3+2" adedi serbest metin not olarak geçebilir (örn. "6 adet 3+2"),
+            // otomatik ayrıştırılmıyor — Aylık Lisans Özeti'nden manuel girilir. Mevcut
+            // değeri koru ki CSV'yi yeniden yüklemek manuel girilen sayıyı silmesin.
+            scale3Plus2Count: (kpiDataQuery.data as any)?.licenseSummary?.scale3Plus2Count ?? 0
           };
           break;
         }
@@ -1212,7 +1216,7 @@ export function SalesAdminPage() {
   });
 
   const updateLicenseSummaryMutation = useMutation({
-    mutationFn: (summary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number }) =>
+    mutationFn: (summary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number }) =>
       api.updateLicenseSummary(auth.token, selectedPeriodId, summary),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["sales-kpi"] }); }
   });
@@ -2388,7 +2392,7 @@ function KpiSection(props: {
   deleteAgentMutation: { mutate: (k: string) => void; isPending: boolean };
   resetAgentsMutation: { mutate: () => void; isPending: boolean };
   updateTargetsMutation: { mutate: (t: Record<string, unknown>) => void; isPending: boolean };
-  updateLicenseSummaryMutation: { mutate: (s: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number }) => void; isPending: boolean };
+  updateLicenseSummaryMutation: { mutate: (s: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number }) => void; isPending: boolean };
 }) {
   const {
     kpiAgentCount, kpiData, kpiImportSuccess,
@@ -2406,7 +2410,8 @@ function KpiSection(props: {
         scaleCount: String(ls.scaleCount ?? 0),
         scale2Plus1Count: String(ls.scale2Plus1Count ?? 0),
         scalePlusCount: String(ls.scalePlusCount ?? 0),
-        scalePlus2Plus1Count: String(ls.scalePlus2Plus1Count ?? 0)
+        scalePlus2Plus1Count: String(ls.scalePlus2Plus1Count ?? 0),
+        scale3Plus2Count: String(ls.scale3Plus2Count ?? 0)
       });
     }
   }, [(kpiData as any)?.licenseSummary]);
@@ -2417,7 +2422,8 @@ function KpiSection(props: {
       scaleCount: Number(licenseSummaryDraft.scaleCount) || 0,
       scale2Plus1Count: Number(licenseSummaryDraft.scale2Plus1Count) || 0,
       scalePlusCount: Number(licenseSummaryDraft.scalePlusCount) || 0,
-      scalePlus2Plus1Count: Number(licenseSummaryDraft.scalePlus2Plus1Count) || 0
+      scalePlus2Plus1Count: Number(licenseSummaryDraft.scalePlus2Plus1Count) || 0,
+      scale3Plus2Count: Number(licenseSummaryDraft.scale3Plus2Count) || 0
     });
     setEditingLicenseSummary(false);
   };
@@ -2459,12 +2465,13 @@ function KpiSection(props: {
           </div>
           {editingLicenseSummary ? (
             <div className="mt-4 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                 <MiniInput label="Pre." value={licenseSummaryDraft.preCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, preCount: v }))} type="number" />
                 <MiniInput label="Scale" value={licenseSummaryDraft.scaleCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scaleCount: v }))} type="number" />
                 <MiniInput label="Scale 2+1" value={licenseSummaryDraft.scale2Plus1Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scale2Plus1Count: v }))} type="number" />
                 <MiniInput label="Scale Plus" value={licenseSummaryDraft.scalePlusCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scalePlusCount: v }))} type="number" />
                 <MiniInput label="Scale Plus 2+1" value={licenseSummaryDraft.scalePlus2Plus1Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scalePlus2Plus1Count: v }))} type="number" />
+                <MiniInput label="3+2" value={licenseSummaryDraft.scale3Plus2Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scale3Plus2Count: v }))} type="number" />
               </div>
               <button
                 className="h-10 rounded-[10px] bg-[var(--adm-accent)] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
@@ -2482,6 +2489,7 @@ function KpiSection(props: {
               <div><span className="text-slate-500">Scale 2+1:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scale2Plus1Count}</span></div>
               <div><span className="text-slate-500">Scale Plus:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scalePlusCount}</span></div>
               <div><span className="text-slate-500">Scale Plus 2+1:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scalePlus2Plus1Count}</span></div>
+              <div><span className="text-slate-500">3+2:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scale3Plus2Count ?? 0}</span></div>
             </div>
           ) : (
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Henüz lisans özeti girilmemiş. Düzenle butonuyla ekleyin.</p>

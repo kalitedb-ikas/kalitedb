@@ -142,9 +142,14 @@ export function AuditPage() {
   );
 
   const snapshot = aggregatedSnapshot;
-  // "Diğer" badge'li temsilciler tablo + ortalamalarda kalır, öne çıkanlardan (champion,
-  // lider tablosu, insight tile) hariç tutulur.
-  const highlightExcludedKeys = useRepresentativeKeysWithBadge("diger");
+  // "Diğer" ve "Start" badge'li temsilciler tablo + ortalamalarda kalır,
+  // öne çıkanlardan (champion, lider tablosu, insight tile) hariç tutulur.
+  const otherBadgeExcludedKeys = useRepresentativeKeysWithBadge("diger");
+  const startTeamKeys = useRepresentativeKeysWithBadge("start");
+  const highlightExcludedKeys = useMemo(
+    () => new Set<string>([...otherBadgeExcludedKeys, ...startTeamKeys]),
+    [otherBadgeExcludedKeys, startTeamKeys]
+  );
   // "Satıcı Operasyon" etiketlileri tablo ve öne çıkanlardan gizler;
   // ortalama satırı `tableSummaryRows` aggregatedSnapshot üzerinden hesaplandığı için etkilenmez.
   const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
