@@ -199,62 +199,25 @@ export function CsatPage() {
     });
   }, [aggregatedSnapshot, premiumOnboardingKeys]);
 
-  // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
-  // ama özet (summary / ortalama / toplam) hesaplarında korunur.
-  const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
   // "Start" ekibi: CSAT kart ve grafiklerinde (champion, lider tablosu, en güçlü/izlenmesi
   // gereken, takım CSAT ortalaması, yıllık trend) gösterilmez; ayrıntı tablosunda KALIR.
   const startTeamKeys = useRepresentativeKeysWithBadge("start");
 
-  // Ayrıntı tablosu snapshot'ı: 'satıcı operasyon' gizli, 'start' ekibi DAHİL.
-  const tableSnapshot = useMemo(() => {
-    if (!aggregatedSnapshotCsatAdjusted) return undefined;
-    if (hiddenAgentKeys.size === 0) return aggregatedSnapshotCsatAdjusted;
-
-    const filteredAgents = aggregatedSnapshotCsatAdjusted.datasets.agentMetrics.filter(
-      (a) => !hiddenAgentKeys.has(a.agentKey)
-    );
-    const filteredAudits = aggregatedSnapshotCsatAdjusted.datasets.auditMetrics.filter(
-      (a) => !hiddenAgentKeys.has(a.agentKey)
-    );
-    const rebuilt = buildDashboardSnapshot({
-      period: aggregatedSnapshotCsatAdjusted.period,
-      datasets: {
-        ...aggregatedSnapshotCsatAdjusted.datasets,
-        agentMetrics: filteredAgents,
-        auditMetrics: filteredAudits
-      },
-      thresholds: aggregatedSnapshotCsatAdjusted.thresholds
-    });
-    return { ...rebuilt, summary: aggregatedSnapshotCsatAdjusted.summary };
-  }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys]);
-
-  // Kart/grafik snapshot'ı: rankings & highlights'tan 'satıcı operasyon' (mevcut) + 'start'
-  // ekibi çıkarılır. Takım CSAT ortalaması/agentCount satıcı operasyonu korur (mevcut davranış)
-  // ama 'start' ekibini hariç tutar; 'premium_onboarding' null'lama davranışı da korunur.
+  // Kart/grafik snapshot'ı: rankings & highlights'tan 'start' ekibi çıkarılır. Takım CSAT
+  // ortalaması/agentCount 'start' ekibini hariç tutar; 'premium_onboarding' null'lama
+  // davranışı da korunur.
   const snapshot = useMemo(() => {
     if (!aggregatedSnapshotCsatAdjusted) return undefined;
     const base = aggregatedSnapshotCsatAdjusted;
-    const rankingExcluded = new Set<string>([...hiddenAgentKeys, ...startTeamKeys]);
-    const rankingAgents = base.datasets.agentMetrics.filter((a) => !rankingExcluded.has(a.agentKey));
-    const rankingAudits = base.datasets.auditMetrics.filter((a) => !rankingExcluded.has(a.agentKey));
-    const rebuilt = buildDashboardSnapshot({
+    if (startTeamKeys.size === 0) return base;
+    const rankingAgents = base.datasets.agentMetrics.filter((a) => !startTeamKeys.has(a.agentKey));
+    const rankingAudits = base.datasets.auditMetrics.filter((a) => !startTeamKeys.has(a.agentKey));
+    return buildDashboardSnapshot({
       period: base.period,
       datasets: { ...base.datasets, agentMetrics: rankingAgents, auditMetrics: rankingAudits },
       thresholds: base.thresholds
     });
-    if (startTeamKeys.size === 0) {
-      return { ...rebuilt, summary: base.summary };
-    }
-    const summaryAgents = base.datasets.agentMetrics.filter((a) => !startTeamKeys.has(a.agentKey));
-    const summaryAudits = base.datasets.auditMetrics.filter((a) => !startTeamKeys.has(a.agentKey));
-    const summarySnapshot = buildDashboardSnapshot({
-      period: base.period,
-      datasets: { ...base.datasets, agentMetrics: summaryAgents, auditMetrics: summaryAudits },
-      thresholds: base.thresholds
-    });
-    return { ...rebuilt, summary: summarySnapshot.summary };
-  }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys, startTeamKeys]);
+  }, [aggregatedSnapshotCsatAdjusted, startTeamKeys]);
 
   const rawYearlyTrend = yearlyTrendQuery.data ?? [];
   // Yıllık trend grafiği CSAT serisi: Premium Onboarding'i hariç tut (aylık nokta bazında
@@ -273,10 +236,10 @@ export function CsatPage() {
     });
   }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys, startTeamKeys, csatExcludedKeys]);
   const rows = useMemo(() => {
-    if (!tableSnapshot) return [];
+    if (!aggregatedSnapshotCsatAdjusted) return [];
 
     const auditMap = new Map(
-      selectAuditMetrics(tableSnapshot.datasets).map((record) => [
+      selectAuditMetrics(aggregatedSnapshotCsatAdjusted.datasets).map((record) => [
         record.agentKey,
         {
           auditScore: record.auditScore,
@@ -285,7 +248,7 @@ export function CsatPage() {
       ])
     );
 
-    return tableSnapshot.datasets.agentMetrics
+    return aggregatedSnapshotCsatAdjusted.datasets.agentMetrics
       .map((item) => {
         const audit = auditMap.get(item.agentKey);
         return {
@@ -316,7 +279,7 @@ export function CsatPage() {
 
         return left.agentName.localeCompare(right.agentName, "tr");
       });
-  }, [tableSnapshot]);
+  }, [aggregatedSnapshotCsatAdjusted]);
   const csatLeaders = useMemo(() => {
     // Champion podyumu 'start' ekibini göstermez (ayrıntı tablosunda kalsalar da).
     const scoredAgents = rows.filter(

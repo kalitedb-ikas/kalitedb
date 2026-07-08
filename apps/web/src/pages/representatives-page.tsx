@@ -3,7 +3,7 @@ import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
 import { GitCompareArrows, Route } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   CartesianGrid,
@@ -22,6 +22,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { useDarkMode } from "../lib/use-dark-mode";
 import { api } from "../lib/api";
+import { hasConfettiFired, markConfettiFired } from "../lib/confetti-once";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -481,8 +482,7 @@ export function RepresentativesPage() {
   };
   const labelFill = (lineColor: string) => (isDark ? lineColor : (LIGHT_LABEL_FILL[lineColor] ?? "#1F2839"));
 
-  /* ── Konfeti: URL'de seçim yokken otomatik seçilen "en iyi" temsilci için, her unique key başına bir kez patlar ── */
-  const confettiFiredRef = useRef<Set<string>>(new Set());
+  /* ── Konfeti: URL'de seçim yokken otomatik seçilen "en iyi" temsilci için, dönem başına bir kez patlar ── */
   const fireConfetti = useCallback(() => {
     const end = Date.now() + 2500;
     const frame = () => {
@@ -496,10 +496,12 @@ export function RepresentativesPage() {
   useEffect(() => {
     if (rawId || legacyKey) return; // kullanıcı URL ile geldi — otomatik seçim değil
     if (!defaultBestKey || selectedAgentKey !== defaultBestKey) return;
-    if (confettiFiredRef.current.has(defaultBestKey)) return;
-    confettiFiredRef.current.add(defaultBestKey);
+    if (activePeriodIds.length === 0) return;
+    const storageKey = `cs-rep:${defaultBestKey}:${activePeriodIds.join(",")}`;
+    if (hasConfettiFired(storageKey)) return;
+    markConfettiFired(storageKey);
     fireConfetti();
-  }, [rawId, legacyKey, defaultBestKey, selectedAgentKey, fireConfetti]);
+  }, [rawId, legacyKey, defaultBestKey, selectedAgentKey, activePeriodIds, fireConfetti]);
 
   const handleRepresentativeChange = (agentKey: string) => {
     const next = new URLSearchParams(searchParams);

@@ -225,7 +225,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     totalTicketClosedCount: ""
   });
   const [editingRoleEmail, setEditingRoleEmail] = useState<string | null>(null);
-  const [repDepartmentFilter, setRepDepartmentFilter] = useState<"all" | "cs" | "sales" | "quality" | "partner">("all");
+  const [repDepartmentFilter, setRepDepartmentFilter] = useState<"all" | "cs" | "quality" | "partner">("all");
   const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
   const [repBadgeFilter, setRepBadgeFilter] = useState("");
   const [sidebarQuery, setSidebarQuery] = useState("");
@@ -584,7 +584,11 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     [periodsQuery.data]
   );
   const filteredRepresentatives = useMemo(() => {
-    let reps = representativesQuery.data ?? [];
+    // CS yönetim paneli Temsilciler listesi Satış departmanını ve RevOps etiketlilerini
+    // hiç göstermez — onlar kendi (Satış) yönetim panelinden yönetilir.
+    let reps = (representativesQuery.data ?? []).filter(
+      (r) => r.department !== "sales" && !(r.badges ?? []).includes("revops")
+    );
     if (repDepartmentFilter !== "all") reps = reps.filter((r) => r.department === repDepartmentFilter);
     if (repStatusFilter !== "all") reps = reps.filter((r) => r.status === repStatusFilter);
     if (repBadgeFilter) reps = reps.filter((r) => (r.badges ?? []).includes(repBadgeFilter));
@@ -1328,7 +1332,6 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       options={[
                         { value: "all", label: "Tüm Departmanlar" },
                         { value: "cs", label: "CS" },
-                        { value: "sales", label: "Satış" },
                         { value: "quality", label: "Kalite" },
                         { value: "partner", label: "Partner" }
                       ]}

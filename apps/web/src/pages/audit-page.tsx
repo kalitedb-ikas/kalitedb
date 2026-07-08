@@ -12,7 +12,7 @@ import {
   type AuditMetric
 } from "@kalitedb/shared";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
@@ -150,9 +150,6 @@ export function AuditPage() {
     () => new Set<string>([...otherBadgeExcludedKeys, ...startTeamKeys]),
     [otherBadgeExcludedKeys, startTeamKeys]
   );
-  // "Satıcı Operasyon" etiketlileri tablo ve öne çıkanlardan gizler;
-  // ortalama satırı `tableSummaryRows` aggregatedSnapshot üzerinden hesaplandığı için etkilenmez.
-  const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
   const repsMap = useRepresentativesMap();
   const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
   const [agentSearch, setAgentSearch] = useUrlParam("search", "");
@@ -162,9 +159,8 @@ export function AuditPage() {
   }, [snapshot?.period.month]);
   const currentAudits = useMemo(() => {
     if (!snapshot) return [];
-    const all = selectAuditMetrics(snapshot.datasets);
-    return all.filter((a) => !hiddenAgentKeys.has(a.agentKey));
-  }, [snapshot, hiddenAgentKeys]);
+    return selectAuditMetrics(snapshot.datasets);
+  }, [snapshot]);
   const highlightAudits = useMemo(
     () => currentAudits.filter((a) => !highlightExcludedKeys.has(a.agentKey)),
     [currentAudits, highlightExcludedKeys]
@@ -193,12 +189,10 @@ export function AuditPage() {
         }
       ])
     );
-    const agentKeys = new Set(
-      [
-        ...snapshot.datasets.agentMetrics.map((agent) => agent.agentKey),
-        ...currentAudits.map((record) => record.agentKey)
-      ].filter((k) => !hiddenAgentKeys.has(k))
-    );
+    const agentKeys = new Set([
+      ...snapshot.datasets.agentMetrics.map((agent) => agent.agentKey),
+      ...currentAudits.map((record) => record.agentKey)
+    ]);
 
     const sortedAgents = Array.from(agentKeys)
       .map((agentKey) => {
@@ -240,7 +234,7 @@ export function AuditPage() {
       ...agent,
       listIndex: index + 1
     }));
-  }, [currentAudits, snapshot, hiddenAgentKeys]);
+  }, [currentAudits, snapshot]);
   const filteredAgents = useMemo(() => {
     let out = agents;
     if (badgeFilter) {
@@ -508,32 +502,6 @@ export function AuditPage() {
     })
   ];
 
-  const tableSummaryRows = useMemo(() => {
-    // Ortalama satırı 'satıcı operasyon' etiketlileri de içerir.
-    // Etiket filtresi aktifse ortalama yalnızca filtrelenmiş temsilciler üzerinden hesaplanır.
-    // Audit ortalaması doğrudan audit import'undan (auditMetrics) hesaplanır; agent-metrics
-    // (CSAT) ile birleştirilmez. AUDIT_AVERAGE_EXCLUDED_KEYS'teki temsilciler ortalamaya girmez.
-    let fullAudits = aggregatedSnapshot ? selectAuditMetrics(aggregatedSnapshot.datasets) : [];
-    if (badgeFilter) {
-      fullAudits = fullAudits.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
-    }
-    const includedAudits = fullAudits.filter((a) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey));
-    const auditScores = includedAudits.map((a) => a.auditScore);
-    const prevAuditScores = includedAudits.map((a) => a.previousAuditAccuracy);
-    if (auditScores.every((v) => v === null)) {
-      return [] as Array<Record<string, ReactNode> & { _tone?: "emerald" }>;
-    }
-    return [
-      {
-        _tone: "emerald" as const,
-        listIndex: "",
-        agentName: "ORTALAMA",
-        auditScoreDisplay: formatAuditScore(average(auditScores)),
-        previousAuditAccuracyDisplay: formatPercent(average(prevAuditScores))
-      }
-    ];
-  }, [aggregatedSnapshot, badgeFilter, repsMap]);
-
   return (
     <div className="space-y-6">
       <PageHeader title="Audit" actions={<PeriodRangeFilter onChange={setPeriodRange} periods={sortedPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />} />
@@ -662,7 +630,6 @@ export function AuditPage() {
               density="comfortable"
               variant="emerald"
               striped
-              summaryRows={tableSummaryRows}
               emptyState="Seçilen dönemde gösterilecek audit kaydı bulunamadı."
             />
           </SurfaceCard>

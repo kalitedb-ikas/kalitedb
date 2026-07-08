@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
+import { hasConfettiFired, markConfettiFired } from "../lib/confetti-once";
 import { firebaseDb } from "../lib/firebase";
 import { formatNumber, formatPeriodMonth } from "../lib/format";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -410,7 +411,6 @@ export function SalesSuccessIndexPage() {
   const hasData = agents.length > 0;
 
   const [podiumModalOpen, setPodiumModalOpen] = useState(true);
-  const podiumConfettiFired = useRef(false);
   const top3 = useMemo(() => {
     const scored = [...rows].sort((a, b) => b.score - a.score);
     return scored.slice(0, 3);
@@ -428,11 +428,12 @@ export function SalesSuccessIndexPage() {
   }, []);
 
   useEffect(() => {
-    if (podiumModalOpen && podiumReady && !podiumConfettiFired.current) {
-      podiumConfettiFired.current = true;
-      setTimeout(firePodiumConfetti, 500);
-    }
-  }, [podiumModalOpen, podiumReady, firePodiumConfetti]);
+    if (!podiumModalOpen || !podiumReady || activePeriodIds.length === 0) return;
+    const storageKey = `sales-podium:${activePeriodIds.join(",")}`;
+    if (hasConfettiFired(storageKey)) return;
+    markConfettiFired(storageKey);
+    setTimeout(firePodiumConfetti, 500);
+  }, [podiumModalOpen, podiumReady, activePeriodIds, firePodiumConfetti]);
 
   const tdCls = "px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap";
   const tdCenterCls = "px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap text-center";

@@ -4,7 +4,7 @@ import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
 import { GitCompareArrows, Route } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   CartesianGrid,
@@ -23,6 +23,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { useDarkMode } from "../lib/use-dark-mode";
 import { api } from "../lib/api";
+import { hasConfettiFired, markConfettiFired } from "../lib/confetti-once";
 import { formatNumber, formatPercent, parseTalkDurationLabelToSeconds } from "../lib/format";
 import { brand, chart, chartDark, chartTooltipLight, chartTooltipDark } from "../theme/colors";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -373,9 +374,7 @@ export function SalesRepresentativesPage() {
       ? null
       : representativeRanking.findIndex((item) => item.agentKey === selectedRepresentative.agentKey) + 1 || null;
 
-  /* ── Confetti: herhangi bir metrikte #1 olan temsilcide bir kereye mahsus patlar ── */
-  const confettiFiredRef = useRef<Set<string>>(new Set());
-
+  /* ── Confetti: herhangi bir metrikte #1 olan temsilcide, dönem başına bir kereye mahsus patlar ── */
   const fireConfetti = useCallback(() => {
     const end = Date.now() + 2500;
     const frame = () => {
@@ -445,15 +444,12 @@ export function SalesRepresentativesPage() {
   }, [selectedRepresentative, metricRankMap]);
 
   useEffect(() => {
-    if (
-      isTopInAnyMetric &&
-      selectedRepresentative &&
-      !confettiFiredRef.current.has(selectedRepresentative.agentKey)
-    ) {
-      confettiFiredRef.current.add(selectedRepresentative.agentKey);
-      fireConfetti();
-    }
-  }, [isTopInAnyMetric, selectedRepresentative, fireConfetti]);
+    if (!isTopInAnyMetric || !selectedRepresentative || !activePeriodIdsKey) return;
+    const storageKey = `sales-rep:${selectedRepresentative.agentKey}:${activePeriodIdsKey}`;
+    if (hasConfettiFired(storageKey)) return;
+    markConfettiFired(storageKey);
+    fireConfetti();
+  }, [isTopInAnyMetric, selectedRepresentative, activePeriodIdsKey, fireConfetti]);
 
   const topMetricLabels = useMemo(() => {
     const labels: string[] = [];
