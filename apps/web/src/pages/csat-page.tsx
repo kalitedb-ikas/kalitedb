@@ -277,6 +277,11 @@ export function CsatPage() {
           return rightCsat - leftCsat;
         }
 
+        const conversationDiff = (right.totalConversationCount ?? 0) - (left.totalConversationCount ?? 0);
+        if (conversationDiff !== 0) {
+          return conversationDiff;
+        }
+
         return left.agentName.localeCompare(right.agentName, "tr");
       });
   }, [aggregatedSnapshotCsatAdjusted]);
