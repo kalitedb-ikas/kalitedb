@@ -1,4 +1,3 @@
-import { SurfaceCard } from "@kalitedb/ui";
 import { normalizeKey } from "@kalitedb/shared";
 import type { Representative, SalesMeeting, SalesKpiData, SalesKpiAgent, TimelineEvent } from "@kalitedb/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -14,6 +13,22 @@ import { api } from "../lib/api";
 import { firebaseDb } from "../lib/firebase";
 import { formatPeriodMonth, parseTalkDurationLabelToSeconds } from "../lib/format";
 import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
+import {
+  AddRowButton,
+  AdminButton,
+  AdminCard,
+  AdminDropzone,
+  ADMIN_INPUT,
+  ADMIN_INPUT_BASE,
+  ADMIN_TEXTAREA,
+  cx,
+  DeleteRowButton,
+  EmptyBlock,
+  ErrorBanner,
+  HeaderPill,
+  MiniInput,
+  SuccessBanner
+} from "../components/admin-ui";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { LossReasonSelect } from "../components/loss-reason-select";
@@ -338,7 +353,7 @@ export function SalesAdminPage() {
         header: "İsim",
         accessorKey: "displayName",
         cell: ({ row }) => (
-          <button className="text-left font-medium text-slate-900 hover:text-[#2f6b7a] hover:underline dark:text-slate-200 dark:hover:text-sky-400" onClick={() => setSelectedRepKey(row.original.key)} type="button">
+          <button className="text-left font-medium text-slate-900 hover:text-[var(--adm-accent)] hover:underline dark:text-slate-200 dark:hover:text-sky-400" onClick={() => setSelectedRepKey(row.original.key)} type="button">
             {row.original.displayName}
           </button>
         )
@@ -1422,35 +1437,38 @@ export function SalesAdminPage() {
 
   const sidebarHeader = (
     <div className="space-y-3">
-      <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+      <p className="truncate text-xs font-medium text-slate-400">
         {auth.user?.email ?? "Yerel yönetim erişimi"}
       </p>
-      <div className="grid grid-cols-2 gap-2">
-        <FancySelect
-          size="md"
-          className="w-full"
-          panelWidthClass="w-36"
-          options={availableYears.map((year) => ({ value: year, label: year }))}
-          value={selectedYear}
-          onChange={setSelectedYear}
-          placeholder="Yıl"
-        />
-        <FancySelect
-          size="md"
-          className="w-full"
-          panelWidthClass="w-40"
-          options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
-          value={selectedMonthValue}
-          onChange={setSelectedMonthValue}
-          placeholder="Ay"
-        />
+      <div>
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Dönem</p>
+        <div className="grid grid-cols-2 gap-2">
+          <FancySelect
+            size="md"
+            className="w-full"
+            panelWidthClass="w-36"
+            options={availableYears.map((year) => ({ value: year, label: year }))}
+            value={selectedYear}
+            onChange={setSelectedYear}
+            placeholder="Yıl"
+          />
+          <FancySelect
+            size="md"
+            className="w-full"
+            panelWidthClass="w-40"
+            options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
+            value={selectedMonthValue}
+            onChange={setSelectedMonthValue}
+            placeholder="Ay"
+          />
+        </div>
       </div>
     </div>
   );
 
   const sidebarFooter = (
     <button
-      className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400 transition hover:text-slate-900 dark:hover:text-slate-200"
+      className="inline-flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white"
       onClick={() => void auth.logout()}
       type="button"
     >
@@ -1462,24 +1480,18 @@ export function SalesAdminPage() {
   const headerActions = (
     <>
       {showSaveAction ? (
-        <button
-          className="inline-flex min-h-10 items-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-100 px-4 text-sm font-semibold text-white dark:text-slate-900 transition hover:bg-slate-800 dark:hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+        <AdminButton
+          icon={<Save size={14} />}
+          variant="primary"
           disabled={isSaving || validRowCount === 0}
           onClick={handleSave}
-          type="button"
         >
-          <Save size={14} />
           {isSaving ? "Kaydediliyor..." : "Kaydet"}
-        </button>
+        </AdminButton>
       ) : null}
-      <button
-        className="inline-flex min-h-10 items-center gap-2 rounded-[10px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-600"
-        onClick={() => void refreshCurrentView()}
-        type="button"
-      >
-        <RefreshCw size={14} />
+      <AdminButton icon={<RefreshCw size={14} />} onClick={() => void refreshCurrentView()}>
         Yenile
-      </button>
+      </AdminButton>
     </>
   );
 
@@ -1493,8 +1505,11 @@ export function SalesAdminPage() {
 
   return (
     <AdminShell
+      accent="sales"
       sidebar={
         <AdminShellSidebar
+          title="Yönetim Paneli"
+          subtitle="Satış"
           header={sidebarHeader}
           search={{ value: sidebarQuery, onChange: setSidebarQuery, placeholder: "Bölüm ara..." }}
           groups={navGroups}
@@ -1601,7 +1616,7 @@ export function SalesAdminPage() {
             <div className="space-y-6">
               <div className="flex flex-wrap items-center gap-3">
                 <button
-                  className="inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a]"
+                  className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--adm-accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)]"
                   onClick={() => setShowCreateRepModal(true)}
                   type="button"
                 >
@@ -1627,9 +1642,9 @@ export function SalesAdminPage() {
               ) : filteredSalesReps.length === 0 ? (
                 <EmptyBlock message="Henüz satış temsilcisi kaydı yok. Veri içe aktarıldığında temsilciler otomatik oluşturulur." />
               ) : (
-                <SurfaceCard title={`Satış Temsilcileri (${filteredSalesReps.length})`} description="Temsilci durumlarını görüntüleyin ve düzenleyin." variant="default">
+                <AdminCard title={`Satış Temsilcileri (${filteredSalesReps.length})`} description="Temsilci durumlarını görüntüleyin ve düzenleyin." variant="default">
                   <DataTable columns={representativeColumns} data={filteredSalesReps} density="compact" />
-                </SurfaceCard>
+                </AdminCard>
               )}
               {selectedRep ? (
                 <RepresentativeDetailModal
@@ -1725,7 +1740,7 @@ function AuditSection(props: {
 
         {auditSaveSuccess ? <SuccessBanner message="Veriler başarıyla kaydedildi." /> : null}
 
-        <SurfaceCard
+        <AdminCard
           description="Her satır bir temsilciyi temsil eder. Temsilci adı dolu olan satırlar kaydedilir."
           title="Audit Skoru Girişi"
           variant="default"
@@ -1734,12 +1749,12 @@ function AuditSection(props: {
             <EmptyBlock message="Dönem hazırlanıyor..." />
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+              <div className="overflow-x-auto rounded-[14px] border border-slate-200 dark:border-slate-700">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/50">
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Temsilci adı</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Audit skoru</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Temsilci adı</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Audit skoru</th>
                       <th className="w-12 px-4 py-3" />
                     </tr>
                   </thead>
@@ -1755,7 +1770,7 @@ function AuditSection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <input
-                            className="h-11 w-32 rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_INPUT_BASE, "w-32")}
                             inputMode="decimal"
                             onChange={(e) => onUpdateRow(row.id, "auditScore", e.target.value)}
                             placeholder="0–100"
@@ -1774,7 +1789,7 @@ function AuditSection(props: {
 
               <div className="flex flex-wrap items-center gap-3">
                 <AddRowButton onClick={onAddRow} />
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300 dark:hover:border-slate-500">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-[var(--adm-accent)] hover:bg-[var(--adm-accent-soft)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300">
                   <Upload size={13} />
                   CSV'den doldur
                   <input
@@ -1804,7 +1819,7 @@ function AuditSection(props: {
               ) : null}
             </div>
           )}
-        </SurfaceCard>
+        </AdminCard>
     </div>
   );
 }
@@ -1857,7 +1872,7 @@ function RoleplaySection(props: {
 
         {roleplaySaveSuccess ? <SuccessBanner message="Role-Play verileri başarıyla kaydedildi." /> : null}
 
-        <SurfaceCard
+        <AdminCard
           description="Her satır bir temsilciyi temsil eder. Temsilci adı dolu olan satırlar kaydedilir."
           title="Role-Play Veri Girişi"
           variant="default"
@@ -1866,14 +1881,14 @@ function RoleplaySection(props: {
             <EmptyBlock message="Dönem hazırlanıyor..." />
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+              <div className="overflow-x-auto rounded-[14px] border border-slate-200 dark:border-slate-700">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/50">
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Temsilci adı</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">IS Role-Play Adet</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">RevOPS</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Not</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Temsilci adı</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">IS Role-Play Adet</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">RevOPS</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Not</th>
                       <th className="w-12 px-4 py-3" />
                     </tr>
                   </thead>
@@ -1882,7 +1897,7 @@ function RoleplaySection(props: {
                       <tr key={row.id} className="bg-white dark:bg-slate-800">
                         <td className="px-4 py-2">
                           <select
-                            className="h-11 w-full min-w-[180px] rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                            className={cx(ADMIN_INPUT, "min-w-[180px]")}
                             onChange={(e) => onUpdateRow(row.id, "agentName", e.target.value)}
                             value={row.agentName}
                           >
@@ -1900,7 +1915,7 @@ function RoleplaySection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <input
-                            className="h-11 w-32 rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_INPUT_BASE, "w-32")}
                             min={0}
                             onChange={(e) => onUpdateRow(row.id, "rolePlayCount", e.target.value)}
                             placeholder="0"
@@ -1910,7 +1925,7 @@ function RoleplaySection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <input
-                            className="h-11 w-32 rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_INPUT_BASE, "w-32")}
                             min={0}
                             onChange={(e) => onUpdateRow(row.id, "revOpsCount", e.target.value)}
                             placeholder="0"
@@ -1944,7 +1959,7 @@ function RoleplaySection(props: {
 
               <div className="flex flex-wrap items-center gap-3">
                 <AddRowButton onClick={onAddRow} />
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300 dark:hover:border-slate-500">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-[var(--adm-accent)] hover:bg-[var(--adm-accent-soft)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300">
                   <Upload size={13} />
                   CSV'den doldur
                   <input
@@ -1975,7 +1990,7 @@ function RoleplaySection(props: {
               ) : null}
             </div>
           )}
-        </SurfaceCard>
+        </AdminCard>
 
       {noteModalRow && (
         <NoteModal
@@ -2039,7 +2054,7 @@ function EvaluationSection(props: {
 
         {evaluationSaveSuccess ? <SuccessBanner message="Değerlendirme soruları başarıyla kaydedildi." /> : null}
 
-        <SurfaceCard
+        <AdminCard
           description="Her satır bir değerlendirme sorusunu temsil eder. CSV dosyasından toplu aktarım yapabilirsiniz."
           title="Soru Girişi"
           variant="default"
@@ -2050,7 +2065,7 @@ function EvaluationSection(props: {
             <div className="space-y-4">
               {/* CSV Import */}
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-[10px] border border-sky-200 bg-sky-50 px-5 text-sm font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 dark:border-sky-700/40 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:border-sky-600/60 dark:hover:bg-sky-900/50">
+                <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-[12px] border border-[var(--adm-accent-border)] bg-[var(--adm-accent-soft)] px-5 text-sm font-semibold text-[var(--adm-accent-text)] transition hover:brightness-95">
                   <Upload size={14} />
                   CSV Yükle
                   <input
@@ -2071,13 +2086,13 @@ function EvaluationSection(props: {
                 </span>
               </div>
 
-              <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+              <div className="overflow-x-auto rounded-[14px] border border-slate-200 dark:border-slate-700">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/50">
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Soru</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Cevap</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 w-28">Puan</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Soru</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Cevap</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 w-28">Puan</th>
                       <th className="w-12 px-4 py-3" />
                     </tr>
                   </thead>
@@ -2086,7 +2101,7 @@ function EvaluationSection(props: {
                       <tr key={row.id} className="bg-white dark:bg-slate-800">
                         <td className="px-4 py-2">
                           <textarea
-                            className="min-h-[44px] w-full resize-y rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_TEXTAREA, "min-h-[44px]")}
                             onChange={(e) => onUpdateRow(row.id, "questionText", e.target.value)}
                             placeholder="Soru metni"
                             rows={2}
@@ -2095,7 +2110,7 @@ function EvaluationSection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <textarea
-                            className="min-h-[44px] w-full resize-y rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_TEXTAREA, "min-h-[44px]")}
                             onChange={(e) => onUpdateRow(row.id, "answer", e.target.value)}
                             placeholder="Cevap"
                             rows={2}
@@ -2104,7 +2119,7 @@ function EvaluationSection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <input
-                            className="h-11 w-24 rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_INPUT_BASE, "w-24")}
                             inputMode="decimal"
                             onChange={(e) => onUpdateRow(row.id, "score", e.target.value)}
                             placeholder="0"
@@ -2144,7 +2159,7 @@ function EvaluationSection(props: {
               ) : null}
             </div>
           )}
-        </SurfaceCard>
+        </AdminCard>
     </div>
   );
 }
@@ -2191,14 +2206,6 @@ function MeetingsSection(props: {
     [meetings]
   );
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      saveMeetingsMutation.mutate(file);
-      e.target.value = "";
-    }
-  };
-
   const handleManualAdd = () => {
     if (!manualForm.customerName.trim() || !manualForm.salesRepresentative.trim()) return;
     const isLost = manualForm.status === "kaybedildi";
@@ -2228,7 +2235,7 @@ function MeetingsSection(props: {
         </div>
 
         {/* Manuel Ekleme */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Manuel Toplantı Ekle</h3>
             <button
@@ -2275,7 +2282,7 @@ function MeetingsSection(props: {
               ) : null}
               <div className="flex items-end">
                 <button
-                  className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+                  className="h-10 rounded-[10px] bg-[var(--adm-accent)] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
                   disabled={createMeetingMutation.isPending || !manualForm.customerName.trim() || !manualForm.salesRepresentative.trim()}
                   onClick={handleManualAdd}
                   type="button"
@@ -2288,26 +2295,13 @@ function MeetingsSection(props: {
         </section>
 
         {/* CSV Import */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">CSV İçe Aktarım</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
             CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu</code>
           </p>
           <div className="mt-4">
-            <label
-              className={[
-                "flex cursor-pointer flex-col items-center justify-center rounded-[10px] border-2 border-dashed px-6 py-8 transition",
-                saveMeetingsMutation.isPending
-                  ? "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
-                  : "border-slate-300 bg-white hover:border-sky-400 hover:bg-sky-50/40 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-sky-500 dark:hover:bg-sky-900/20"
-              ].join(" ")}
-            >
-              <Upload className="text-slate-400" size={24} />
-              <span className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
-                {saveMeetingsMutation.isPending ? "Yükleniyor..." : "CSV dosyası seçin veya sürükleyin"}
-              </span>
-              <input accept=".csv" className="hidden" disabled={saveMeetingsMutation.isPending} onChange={handleFileSelect} type="file" />
-            </label>
+            <AdminDropzone busy={saveMeetingsMutation.isPending} onFile={(file) => saveMeetingsMutation.mutate(file)} />
           </div>
           {saveMeetingsMutation.isError ? <div className="mt-3"><ErrorBanner message={(saveMeetingsMutation.error as Error)?.message ?? "Bir hata oluştu."} /></div> : null}
           {meetingsImportSuccess ? <SuccessBanner message="Toplantı verileri başarıyla içe aktarıldı." /> : null}
@@ -2417,14 +2411,6 @@ function KpiSection(props: {
     }
   }, [(kpiData as any)?.licenseSummary]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      saveKpiMutation.mutate(file);
-      e.target.value = "";
-    }
-  };
-
   const handleSaveLicenseSummary = () => {
     updateLicenseSummaryMutation.mutate({
       preCount: Number(licenseSummaryDraft.preCount) || 0,
@@ -2459,7 +2445,7 @@ function KpiSection(props: {
         />
 
         {/* Lisans Özet Tablosu */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Aylık Lisans Özeti</h3>
             <button
@@ -2481,7 +2467,7 @@ function KpiSection(props: {
                 <MiniInput label="Scale Plus 2+1" value={licenseSummaryDraft.scalePlus2Plus1Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scalePlus2Plus1Count: v }))} type="number" />
               </div>
               <button
-                className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+                className="h-10 rounded-[10px] bg-[var(--adm-accent)] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
                 disabled={updateLicenseSummaryMutation.isPending}
                 onClick={handleSaveLicenseSummary}
                 type="button"
@@ -2503,7 +2489,7 @@ function KpiSection(props: {
         </section>
 
         {/* CSV Import */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">CSV İçe Aktarım</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
             CSV formatı (Q&T Team Report): <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">PERF. DEĞ., [AY], LİSANS ADETİ, ORTALAMA LİSANS FİYATI, 2+1, %2+1, TOPLAM KONUŞMA SÜRESİ, ARAMA DENEMESİ, Pre Onb, Hubspot, Domain, Outbound / Eski Lead, DÖNÜŞÜM ORANI</code>
@@ -2512,20 +2498,7 @@ function KpiSection(props: {
             Kolonlar başlık adına göre eşlenir; sıra farklı olabilir. NetGSM ve EK SÜRELER grupları içe aktarılmaz.
           </p>
           <div className="mt-4">
-            <label
-              className={[
-                "flex cursor-pointer flex-col items-center justify-center rounded-[10px] border-2 border-dashed px-6 py-8 transition",
-                saveKpiMutation.isPending
-                  ? "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
-                  : "border-slate-300 bg-white hover:border-sky-400 hover:bg-sky-50/40 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-sky-500 dark:hover:bg-sky-900/20"
-              ].join(" ")}
-            >
-              <Upload className="text-slate-400" size={24} />
-              <span className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
-                {saveKpiMutation.isPending ? "Yükleniyor..." : "CSV dosyası seçin veya sürükleyin"}
-              </span>
-              <input accept=".csv" className="hidden" disabled={saveKpiMutation.isPending} onChange={handleFileSelect} type="file" />
-            </label>
+            <AdminDropzone busy={saveKpiMutation.isPending} onFile={(file) => saveKpiMutation.mutate(file)} />
           </div>
           {saveKpiMutation.isError ? <div className="mt-3"><ErrorBanner message={(saveKpiMutation.error as Error)?.message ?? "Bir hata oluştu."} /></div> : null}
           {kpiImportSuccess ? <SuccessBanner message="KPI verileri başarıyla içe aktarıldı." /> : null}
@@ -2839,7 +2812,7 @@ function KpiGrid(props: {
 
   if (!kpiData || !targets) {
     return (
-      <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+      <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
         <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Temsilci KPI Tablosu</h3>
         <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
           Bu dönem{monthLabel !== "-" ? ` (${monthLabel})` : ""} için henüz KPI verisi yok.{" "}
@@ -2849,7 +2822,7 @@ function KpiGrid(props: {
           Dilerseniz aşağıdaki <span className="font-medium text-slate-700 dark:text-slate-300">CSV İçe Aktarım</span> ile toplu da yükleyebilirsiniz.
         </p>
         <button
-          className="mt-4 inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+          className="mt-4 inline-flex items-center gap-2 rounded-[10px] bg-[var(--adm-accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
           disabled={initKpiMutation.isPending}
           onClick={() => initKpiMutation.mutate()}
           type="button"
@@ -2868,7 +2841,7 @@ function KpiGrid(props: {
   const gridContent = (
     <section className={maximized
       ? "fixed inset-0 z-50 flex flex-col border-0 bg-white p-3 dark:bg-slate-900 sm:p-4"
-      : "rounded-[10px] border border-slate-200/80 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/60 sm:p-5"}>
+      : "rounded-[16px] border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900 sm:p-5"}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Temsilci KPI Tablosu</h3>
@@ -2878,7 +2851,7 @@ function KpiGrid(props: {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[#2f6b7a] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#285d6a]"
+            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--adm-accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)]"
             onClick={() => setAddOpen((v) => !v)}
             type="button"
           >
@@ -2887,7 +2860,7 @@ function KpiGrid(props: {
           </button>
           {missingReps.length > 0 ? (
             <button
-              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[#2f6b7a]/30 bg-[#2f6b7a]/5 px-3 py-1.5 text-xs font-semibold text-[#2f6b7a] transition hover:bg-[#2f6b7a]/10 disabled:opacity-50 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--adm-accent-border)] bg-[var(--adm-accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-accent-text)] transition hover:brightness-95 disabled:opacity-50 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
               disabled={fillRepsMutation.isPending}
               onClick={() => fillRepsMutation.mutate()}
               title="Tabloda olmayan aktif temsilcileri ekle"
@@ -3041,7 +3014,7 @@ function KpiGrid(props: {
                 ))}
                 <td className="border-l border-sky-200/60 px-2 py-1 text-right dark:border-sky-800/30">
                   <button
-                    className="rounded-md bg-[#2f6b7a] px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-[#285d6a] disabled:opacity-50"
+                    className="rounded-md bg-[var(--adm-accent)] px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
                     disabled={addAgentMutation.isPending || !(newRow.agentName ?? "").trim()}
                     onClick={handleAdd}
                     type="button"
@@ -3373,7 +3346,7 @@ function AgentCombobox(props: { agents: string[]; value: string; onChange: (v: s
     <>
       <input
         ref={inputRef}
-        className="h-11 w-full rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+        className={ADMIN_INPUT}
         onChange={(e) => { props.onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         placeholder="Temsilci seçin veya yazın"
@@ -3403,131 +3376,6 @@ function AgentCombobox(props: { agents: string[]; value: string; onChange: (v: s
   );
 }
 
-function SidebarButton(props: { active: boolean; label: string; icon?: ReactNode; onClick: () => void }) {
-  return (
-    <button
-      className={[
-        "flex w-full items-center gap-2.5 rounded-[10px] border px-4 py-3 text-left text-sm font-semibold transition",
-        props.active
-          ? "border-[#2f6b7a] bg-[#2f6b7a] text-white shadow-[0_16px_34px_rgba(47,107,122,0.22)]"
-          : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-100"
-      ].join(" ")}
-      onClick={props.onClick}
-      type="button"
-    >
-      {props.icon}
-      {props.label}
-    </button>
-  );
-}
-
-function SidebarSectionTitle(props: { children: ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{props.children}</p>;
-}
-
-function SidebarActionButton(props: {
-  children: ReactNode;
-  icon: ReactNode;
-  onClick: () => void;
-  primary?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      className={[
-        "inline-flex w-full items-center justify-center gap-2 rounded-[10px] px-4 py-3 text-sm font-semibold transition",
-        props.primary
-          ? "bg-[#2f6b7a] text-white shadow-[0_14px_28px_rgba(47,107,122,0.18)] hover:bg-[#285d6a]"
-          : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-600",
-        props.disabled ? "cursor-not-allowed opacity-50" : ""
-      ].join(" ")}
-      disabled={props.disabled}
-      onClick={props.onClick}
-      type="button"
-    >
-      {props.icon}
-      {props.children}
-    </button>
-  );
-}
-
-function HeaderPill(props: { children: ReactNode; tone?: "neutral" | "accent" | "success" }) {
-  const tone = props.tone ?? "neutral";
-  return (
-    <span
-      className={[
-        "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
-        tone === "accent"
-          ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-700/40 dark:bg-sky-900/30 dark:text-sky-400"
-          : tone === "success"
-            ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
-            : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-400"
-      ].join(" ")}
-    >
-      {props.children}
-    </span>
-  );
-}
-
-function InputField(props: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{props.label}</span>
-      {props.children}
-    </label>
-  );
-}
-
-function EmptyBlock(props: { message: string }) {
-  return (
-    <div className="rounded-[10px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700/30 dark:text-slate-400">
-      {props.message}
-    </div>
-  );
-}
-
-function ErrorBanner(props: { message: string; prefix?: string }) {
-  return (
-    <div className="rounded-[10px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400">
-      {props.prefix ? `${props.prefix}: ` : ""}{props.message}
-    </div>
-  );
-}
-
-function SuccessBanner(props: { message: string }) {
-  return (
-    <div className="rounded-[10px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400">
-      {props.message}
-    </div>
-  );
-}
-
-function DeleteRowButton(props: { onClick: () => void }) {
-  return (
-    <button
-      className="inline-flex size-9 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:text-rose-500 dark:border-slate-600 dark:text-slate-500 dark:hover:border-rose-700/40 dark:hover:text-rose-400"
-      onClick={props.onClick}
-      title="Satırı sil"
-      type="button"
-    >
-      <Trash2 size={13} />
-    </button>
-  );
-}
-
-function AddRowButton(props: { onClick: () => void }) {
-  return (
-    <button
-      className="inline-flex h-11 items-center gap-2 rounded-[10px] border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-600"
-      onClick={props.onClick}
-      type="button"
-    >
-      <Plus size={14} />
-      Satır ekle
-    </button>
-  );
-}
-
 function NoteModal(props: {
   agentName: string;
   isSaving?: boolean;
@@ -3540,7 +3388,7 @@ function NoteModal(props: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={props.onClose}>
       <div
-        className="mx-4 w-full max-w-md rounded-[10px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.18)] dark:border-slate-600 dark:bg-slate-800"
+        className="mx-4 w-full max-w-md rounded-[18px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.18)] dark:border-slate-600 dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -3571,7 +3419,7 @@ function NoteModal(props: {
             Vazgeç
           </button>
           <button
-            className="rounded-[10px] bg-[#2f6b7a] px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(47,107,122,0.18)] transition hover:bg-[#285d6a] disabled:opacity-50"
+            className="rounded-[10px] bg-[var(--adm-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(47,107,122,0.18)] transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
             disabled={props.isSaving}
             onClick={() => props.onSave(draft)}
             type="button"
@@ -3709,23 +3557,6 @@ function EditableSavedData(props: {
   );
 }
 
-function MiniInput(props: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
-  // type="number" virgüllü ondalık değerleri (7,5) kabul etmez, text+inputMode kullan
-  const isNumeric = props.type === "number";
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{props.label}</span>
-      <input
-        className="h-10 rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-sky-300 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
-        inputMode={isNumeric ? "decimal" : undefined}
-        onChange={(e) => props.onChange(e.target.value)}
-        type={isNumeric ? "text" : (props.type ?? "text")}
-        value={props.value}
-      />
-    </div>
-  );
-}
-
 /* ── RAMP Giriş Bölümü ── */
 
 type RampRowData = { agentKey: string; agentName: string; pipeline: string; growAmount: string; scaleAmount: string; scalePlusAmount: string };
@@ -3826,7 +3657,7 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
       {saveSuccess ? <SuccessBanner message="RAMP verileri başarıyla kaydedildi." /> : null}
 
       {/* Hedefler */}
-      <SurfaceCard title="RAMP Hedefleri" description="Varsayılan hedefleri dönem bazında ayarlayabilirsiniz." variant="default">
+      <AdminCard title="RAMP Hedefleri" description="Varsayılan hedefleri dönem bazında ayarlayabilirsiniz." variant="default">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-500">Dokunma Hedefi</label>
@@ -3845,10 +3676,10 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
             <input className={inputCls} value={targets.pipelineCoverage} onChange={(e) => setTargets((p) => ({ ...p, pipelineCoverage: e.target.value }))} />
           </div>
         </div>
-      </SurfaceCard>
+      </AdminCard>
 
       {/* Temsilci Verileri */}
-      <SurfaceCard title="Temsilci RAMP Verileri" description="Pipeline ve paket bazlı satış tutarlarını girin." variant="default">
+      <AdminCard title="Temsilci RAMP Verileri" description="Pipeline ve paket bazlı satış tutarlarını girin." variant="default">
         {!selectedPeriodId ? (
           <p className="text-sm text-slate-500">Önce sol panelden ay ve yıl seçerek bir dönem oluşturun.</p>
         ) : !loaded ? (
@@ -3856,7 +3687,7 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
         ) : rows.length === 0 ? (
           <p className="text-sm text-slate-500">Seçili dönemde KPI verisi bulunamadı. Önce KPI verilerini yükleyin.</p>
         ) : (
-          <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+          <div className="overflow-x-auto rounded-[14px] border border-slate-200 dark:border-slate-700">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-700/50">
@@ -3883,7 +3714,7 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
         )}
         <div className="mt-4 flex justify-end">
           <button
-            className="inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--adm-accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
             disabled={saving || rows.length === 0}
             onClick={() => void handleSave()}
             type="button"
@@ -3892,7 +3723,7 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
             {saving ? "Kaydediliyor..." : "Kaydet"}
           </button>
         </div>
-      </SurfaceCard>
+      </AdminCard>
     </div>
   );
 }

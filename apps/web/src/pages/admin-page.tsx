@@ -14,13 +14,11 @@ import {
   type UserRoleAssignment
 } from "@kalitedb/shared";
 import { collection, doc, getDocs, setDoc, writeBatch } from "firebase/firestore";
-import { SurfaceCard } from "@kalitedb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarRange,
   ClipboardCheck,
   FileDown,
-  FileSpreadsheet,
   LogOut,
   Plus,
   RefreshCw,
@@ -33,11 +31,23 @@ import {
   UserPlus,
   Users
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
+import {
+  AdminButton,
+  AdminCard,
+  AdminDangerZone,
+  AdminDropzone,
+  ADMIN_INPUT,
+  Banner,
+  EmptyBlock,
+  ErrorBanner,
+  HeaderPill,
+  InputField
+} from "../components/admin-ui";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { RecordEditor } from "../components/record-editor";
@@ -584,7 +594,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         header: "İsim",
         accessorKey: "displayName",
         cell: ({ row }) => (
-          <button className="text-left font-medium text-slate-900 hover:text-[#2f6b7a] hover:underline dark:text-slate-200 dark:hover:text-sky-400" onClick={() => setSelectedRepKey(row.original.key)} type="button">
+          <button className="text-left font-medium text-slate-900 hover:text-[var(--adm-accent)] hover:underline dark:text-slate-200 dark:hover:text-sky-400" onClick={() => setSelectedRepKey(row.original.key)} type="button">
             {row.original.displayName}
           </button>
         )
@@ -685,7 +695,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         id: "action",
         cell: ({ row }) => (
           <button
-            className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[var(--adm-accent-border)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
             onClick={() => {
               setEditingRoleEmail(row.original.email);
               roleForm.reset({
@@ -800,7 +810,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           id: "action",
           cell: ({ row }) => (
             <button
-              className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[var(--adm-accent-border)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
               onClick={() => setSelectedRecordId(row.original.id)}
               type="button"
             >
@@ -832,7 +842,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           id: "action",
           cell: ({ row }) => (
             <button
-              className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[var(--adm-accent-border)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
               onClick={() => {
                 setAuditEditorError(null);
                 setAuditEditorState({ mode: "edit", record: row.original as AuditMetric });
@@ -881,7 +891,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           id: "action",
           cell: ({ row }) => (
             <button
-              className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[var(--adm-accent-border)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
               onClick={() => setSelectedRecordId(row.original.id)}
               type="button"
             >
@@ -897,35 +907,38 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
   const sidebarHeader = (
     <div className="space-y-3">
-      <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+      <p className="truncate text-xs font-medium text-slate-400">
         {auth.user?.email ?? "Yerel yönetim erişimi"}
       </p>
-      <div className="grid grid-cols-2 gap-2">
-        <FancySelect
-          size="md"
-          className="w-full"
-          panelWidthClass="w-36"
-          options={availableYears.map((year) => ({ value: year, label: year }))}
-          value={selectedYear}
-          onChange={setSelectedYear}
-          placeholder="Yıl"
-        />
-        <FancySelect
-          size="md"
-          className="w-full"
-          panelWidthClass="w-40"
-          options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
-          value={selectedMonthValue}
-          onChange={setSelectedMonthValue}
-          placeholder="Ay"
-        />
+      <div>
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Dönem</p>
+        <div className="grid grid-cols-2 gap-2">
+          <FancySelect
+            size="md"
+            className="w-full"
+            panelWidthClass="w-36"
+            options={availableYears.map((year) => ({ value: year, label: year }))}
+            value={selectedYear}
+            onChange={setSelectedYear}
+            placeholder="Yıl"
+          />
+          <FancySelect
+            size="md"
+            className="w-full"
+            panelWidthClass="w-40"
+            options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
+            value={selectedMonthValue}
+            onChange={setSelectedMonthValue}
+            placeholder="Ay"
+          />
+        </div>
       </div>
     </div>
   );
 
   const sidebarFooter = (
     <button
-      className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400 transition hover:text-slate-900 dark:hover:text-slate-200"
+      className="inline-flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white"
       onClick={() => void auth.logout()}
       type="button"
     >
@@ -937,44 +950,28 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   const headerActions = (
     <>
       {selectedSection === "periods" ? (
-        <button
-          className="inline-flex min-h-10 items-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-100 px-4 text-sm font-semibold text-white dark:text-slate-900 transition hover:bg-slate-800 dark:hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+        <AdminButton
+          icon={<Save size={14} />}
+          variant="primary"
           disabled={!selectedPeriodId}
           onClick={() => publishMutation.mutate(selectedPeriod?.status === "published" ? "reopen" : "publish")}
-          type="button"
         >
-          <Save size={14} />
           {selectedPeriod?.status === "published" ? "Taslağa geri al" : "Şimdi kaydet"}
-        </button>
+        </AdminButton>
       ) : null}
       {selectedSection === "thresholds" ? (
-        <button
-          className="inline-flex min-h-10 items-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-100 px-4 text-sm font-semibold text-white dark:text-slate-900 transition hover:bg-slate-800 dark:hover:bg-slate-200"
-          onClick={() => thresholdMutation.mutate()}
-          type="button"
-        >
-          <Save size={14} />
+        <AdminButton icon={<Save size={14} />} variant="primary" onClick={() => thresholdMutation.mutate()}>
           Eşikleri kaydet
-        </button>
+        </AdminButton>
       ) : null}
       {activeDatasetType ? (
-        <button
-          className="inline-flex min-h-10 items-center gap-2 rounded-[10px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-600"
-          onClick={() => downloadCsvTemplate(activeDatasetType)}
-          type="button"
-        >
-          <FileDown size={14} />
+        <AdminButton icon={<FileDown size={14} />} onClick={() => downloadCsvTemplate(activeDatasetType)}>
           Şablon indir
-        </button>
+        </AdminButton>
       ) : null}
-      <button
-        className="inline-flex min-h-10 items-center gap-2 rounded-[10px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-600"
-        onClick={() => void refreshCurrentView()}
-        type="button"
-      >
-        <RefreshCw size={14} />
+      <AdminButton icon={<RefreshCw size={14} />} onClick={() => void refreshCurrentView()}>
         Yenile
-      </button>
+      </AdminButton>
     </>
   );
 
@@ -988,8 +985,11 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
   return (
     <AdminShell
+      accent="cs"
       sidebar={
         <AdminShellSidebar
+          title="Yönetim Paneli"
+          subtitle="Customer Success"
           header={sidebarHeader}
           search={{ value: sidebarQuery, onChange: setSidebarQuery, placeholder: "Bölüm ara..." }}
           groups={navGroups}
@@ -1007,7 +1007,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
           <div className="space-y-6">
             {selectedSection === "periods" ? (
-              <SurfaceCard
+              <AdminCard
                 description="Seçili dönem için en son alınan import kayıtları."
                 title="Son Importlar"
                 variant="default"
@@ -1037,40 +1037,34 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                 ) : (
                   <EmptyBlock message="Seçili dönem için import kaydı bulunmuyor." />
                 )}
-              </SurfaceCard>
+              </AdminCard>
             ) : null}
 
             {activeDatasetType ? (
               <div className="space-y-6">
 
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50/70 dark:bg-rose-900/30 px-5 py-4">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-rose-900 dark:text-rose-400">Seçili ay verisini sıfırla</p>
-                    <p className="text-sm text-rose-700 dark:text-rose-400">
-                      {datasetLabels[activeDatasetType]} için {formatPeriodChip(activePeriodMonth)} dönemindeki mevcut kayıtları temizler.
-                    </p>
-                  </div>
-                  <button
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-rose-300 dark:border-rose-700/40 bg-white dark:bg-rose-900/30 px-4 text-sm font-semibold text-rose-700 dark:text-rose-400 transition hover:border-rose-400 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={!selectedPeriodId || resetDatasetMutation.isPending}
-                    onClick={handleResetDataset}
-                    type="button"
-                  >
-                    <Trash2 size={15} />
-                    {resetDatasetMutation.isPending ? "Sıfırlanıyor..." : "Bu ayın verisini sıfırla"}
-                  </button>
-                </div>
+                <AdminDangerZone
+                  title="Seçili ay verisini sıfırla"
+                  description={`${datasetLabels[activeDatasetType]} için ${formatPeriodChip(activePeriodMonth)} dönemindeki mevcut kayıtları temizler.`}
+                  actionLabel="Bu ayın verisini sıfırla"
+                  busyLabel="Sıfırlanıyor..."
+                  busy={resetDatasetMutation.isPending}
+                  disabled={!selectedPeriodId}
+                  onAction={handleResetDataset}
+                />
 
                 {resetDatasetMutation.isError ? (
-                  <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                    {resetDatasetMutation.error instanceof Error
-                      ? resetDatasetMutation.error.message
-                      : "Veri sıfırlanırken bir hata oluştu."}
-                  </div>
+                  <ErrorBanner
+                    message={
+                      resetDatasetMutation.error instanceof Error
+                        ? resetDatasetMutation.error.message
+                        : "Veri sıfırlanırken bir hata oluştu."
+                    }
+                  />
                 ) : null}
 
                 {activeDatasetType === "agent-metrics" ? (
-                  <SurfaceCard
+                  <AdminCard
                     description="CSV import olmadan CSAT üst kartlarındaki toplam çağrı, chat / e-posta ve ticket sayılarını buradan girin. Boş bırakıp kaydederseniz sistem satır toplamlarını kullanır."
                     title="CSAT kartları için manuel giriş"
                     variant="default"
@@ -1078,7 +1072,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     <div className="grid gap-4 md:grid-cols-3">
                       <InputField label="Toplam çağrı">
                         <input
-                          className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                          className={ADMIN_INPUT}
                           inputMode="numeric"
                           onChange={(event) =>
                             setManualCsatInputs((current) => ({
@@ -1093,7 +1087,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       </InputField>
                       <InputField label="Chat / e-posta">
                         <input
-                          className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                          className={ADMIN_INPUT}
                           inputMode="numeric"
                           onChange={(event) =>
                             setManualCsatInputs((current) => ({
@@ -1108,7 +1102,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       </InputField>
                       <InputField label="Ticket adedi">
                         <input
-                          className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                          className={ADMIN_INPUT}
                           inputMode="numeric"
                           onChange={(event) =>
                             setManualCsatInputs((current) => ({
@@ -1127,74 +1121,65 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       <p className="text-sm text-slate-500 dark:text-slate-400">
                         Alanı boş bırakıp kaydetmek manuel değeri kaldırır.
                       </p>
-                      <button
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-700 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700/50"
+                      <AdminButton
+                        icon={<Save size={15} />}
+                        variant="primary"
+                        size="lg"
                         disabled={!selectedPeriodId || manualCsatMutation.isPending}
                         onClick={() => manualCsatMutation.mutate(manualCsatInputs)}
-                        type="button"
                       >
-                        <Save size={15} />
                         {manualCsatMutation.isPending ? "Kaydediliyor..." : "Manuel değerleri kaydet"}
-                      </button>
+                      </AdminButton>
                     </div>
 
                     {manualCsatMutation.isError ? (
-                      <div className="mt-4 rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                        {manualCsatMutation.error instanceof Error
-                          ? manualCsatMutation.error.message
-                          : "Manuel değerler kaydedilirken bir hata oluştu."}
+                      <div className="mt-4">
+                        <ErrorBanner
+                          message={
+                            manualCsatMutation.error instanceof Error
+                              ? manualCsatMutation.error.message
+                              : "Manuel değerler kaydedilirken bir hata oluştu."
+                          }
+                        />
                       </div>
                     ) : null}
-                  </SurfaceCard>
+                  </AdminCard>
                 ) : null}
 
                 <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-                  <SurfaceCard
+                  <AdminCard
                     description={datasetDescriptions[activeDatasetType]}
                     title="CSV ile İçe Aktar"
                     variant="default"
                   >
                     <div className="space-y-4">
-                      <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-[10px] border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50/70 dark:bg-slate-700/30 px-4 text-center transition hover:border-primary/40 hover:bg-sky-50/50 dark:hover:bg-slate-700/50">
-                        <FileSpreadsheet className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">CSV dosyası seçin</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {selectedFiles[activeDatasetType]?.name ?? "Henüz dosya seçilmedi"}
-                        </span>
-                        <input
-                          className="hidden"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) {
-                              setSelectedFiles((current) => ({ ...current, [activeDatasetType]: file }));
-                            }
-                          }}
-                          type="file"
-                        />
-                      </label>
+                      <AdminDropzone
+                        title="CSV dosyası seçin"
+                        hint={selectedFiles[activeDatasetType]?.name ?? "Henüz dosya seçilmedi"}
+                        onFile={(file) => setSelectedFiles((current) => ({ ...current, [activeDatasetType]: file }))}
+                      />
 
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <button
-                          className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
+                        <AdminButton
+                          size="lg"
                           onClick={() => importMutation.mutate({ datasetType: activeDatasetType, commit: false })}
-                          type="button"
                         >
                           Ön izleme
-                        </button>
-                        <button
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-700 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 dark:hover:bg-slate-600"
+                        </AdminButton>
+                        <AdminButton
+                          icon={<Upload size={15} />}
+                          variant="primary"
+                          size="lg"
                           onClick={() => importMutation.mutate({ datasetType: activeDatasetType, commit: true })}
-                          type="button"
                         >
-                          <Upload size={15} />
                           CSV içe aktar
-                        </button>
+                        </AdminButton>
                       </div>
 
                       {importMutation.isError ? (
-                        <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                          {importMutation.error instanceof Error ? importMutation.error.message : "CSV işlemi sırasında bir hata oluştu."}
-                        </div>
+                        <ErrorBanner
+                          message={importMutation.error instanceof Error ? importMutation.error.message : "CSV işlemi sırasında bir hata oluştu."}
+                        />
                       ) : null}
 
                       {importResult ? (
@@ -1225,23 +1210,23 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                         </div>
                       ) : null}
                     </div>
-                  </SurfaceCard>
+                  </AdminCard>
 
-                  <SurfaceCard
+                  <AdminCard
                     actions={
                       activeDatasetType === "audit-metrics" && selectedPeriodId ? (
-                        <button
-                          className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                        <AdminButton
+                          icon={<Plus size={14} />}
+                          variant="primary"
+                          size="sm"
                           disabled={!selectedPeriod}
                           onClick={() => {
                             setAuditEditorError(null);
                             setAuditEditorState({ mode: "create" });
                           }}
-                          type="button"
                         >
-                          <Plus size={14} />
                           Manuel Skor Ekle
-                        </button>
+                        </AdminButton>
                       ) : null
                     }
                     description={
@@ -1258,7 +1243,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       density="compact"
                       emptyState="Kayıt bulunmuyor. CSV ile veri aktararak başlayabilirsiniz."
                     />
-                  </SurfaceCard>
+                  </AdminCard>
                 </div>
 
                 {activeDatasetType !== "audit-metrics" ? (
@@ -1291,7 +1276,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                   }
 
                   return (
-                    <SurfaceCard
+                    <AdminCard
                       description="Kırmızı, sarı ve yeşil sınırlarını bu alandan güncelleyin."
                       key={key}
                       title={threshold.label}
@@ -1304,7 +1289,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             label={band === "red" ? "Kırmızı" : band === "yellow" ? "Sarı" : "Yeşil"}
                           >
                             <input
-                              className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                              className={ADMIN_INPUT}
                               onChange={(event) =>
                                 queryClient.setQueryData(["thresholds", auth.token], (current: typeof thresholdsQuery.data) =>
                                   current
@@ -1321,7 +1306,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                           </InputField>
                         ))}
                       </div>
-                    </SurfaceCard>
+                    </AdminCard>
                   );
                 })}
               </div>
@@ -1330,14 +1315,9 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
             {selectedSection === "representatives" ? (
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    className="inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a]"
-                    onClick={() => setShowCreateRepModal(true)}
-                    type="button"
-                  >
-                    <Plus size={15} />
+                  <AdminButton icon={<Plus size={15} />} variant="primary" onClick={() => setShowCreateRepModal(true)}>
                     Yeni Temsilci
-                  </button>
+                  </AdminButton>
                   <div className="ml-auto flex items-center gap-2">
                     <FancySelect
                       ariaLabel="Departman filtresi"
@@ -1371,9 +1351,9 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                 ) : filteredRepresentatives.length === 0 ? (
                   <EmptyBlock message="Henüz temsilci kaydı yok. Veri içe aktarıldığında temsilciler otomatik oluşturulur." />
                 ) : (
-                  <SurfaceCard title={`Temsilciler (${filteredRepresentatives.length})`} description="Temsilci durumlarını görüntüleyin ve düzenleyin." variant="default">
+                  <AdminCard title={`Temsilciler (${filteredRepresentatives.length})`} description="Temsilci durumlarını görüntüleyin ve düzenleyin." variant="default">
                     <DataTable columns={representativeColumns} data={filteredRepresentatives} density="compact" />
-                  </SurfaceCard>
+                  </AdminCard>
                 )}
 
                 {selectedRep ? (
@@ -1400,7 +1380,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
 
             {selectedSection === "roles" ? (
               <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
-                <SurfaceCard
+                <AdminCard
                   description={
                     editingRoleEmail
                       ? "Seçtiğiniz kullanıcının rolünü güncelleyin. Düzenleme modunda e-posta sabit tutulur."
@@ -1411,25 +1391,20 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                 >
                   <form className="grid gap-4" onSubmit={roleForm.handleSubmit((values) => roleMutation.mutate(values))}>
                     {editingRoleEmail ? (
-                      <div className="rounded-[10px] border border-sky-200 dark:border-sky-700/40 bg-sky-50 dark:bg-sky-900/30 px-4 py-3 text-sm text-sky-800 dark:text-sky-400">
+                      <Banner tone="info">
                         <span className="font-semibold">{editingRoleEmail}</span> için düzenleme modundasınız.
-                      </div>
+                      </Banner>
                     ) : null}
                     <InputField label="E-posta">
                       <input
-                        className={[
-                          "h-11 w-full rounded-[10px] border px-3.5 text-sm transition focus:border-primary/40 focus:outline-none",
-                          editingRoleEmail
-                            ? "cursor-not-allowed border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400"
-                            : "border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-700 dark:text-slate-200"
-                        ].join(" ")}
+                        className={ADMIN_INPUT}
                         disabled={Boolean(editingRoleEmail)}
                         {...roleForm.register("email")}
                       />
                     </InputField>
                     <InputField label="Rol">
                       <select
-                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                        className={ADMIN_INPUT}
                         {...roleForm.register("role")}
                       >
                         {roleOptions.map((option) => (
@@ -1447,7 +1422,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                             <label key={dep} className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer select-none">
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary/30"
+                                className="h-4 w-4 rounded border-slate-300 accent-[var(--adm-accent)] dark:border-slate-600"
                                 checked={checked}
                                 onChange={(e) => {
                                   const current = roleForm.getValues("departments") ?? [];
@@ -1482,20 +1457,25 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                       </InputField>
                     ) : null}
                     {(roleForm.formState.errors.email || roleForm.formState.errors.role || roleForm.formState.errors.representativeKey) ? (
-                      <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                        {roleForm.formState.errors.email?.message
-                          ?? roleForm.formState.errors.role?.message
-                          ?? roleForm.formState.errors.representativeKey?.message}
-                      </div>
+                      <ErrorBanner
+                        message={
+                          roleForm.formState.errors.email?.message
+                            ?? roleForm.formState.errors.role?.message
+                            ?? roleForm.formState.errors.representativeKey?.message
+                            ?? "Form doğrulanamadı."
+                        }
+                      />
                     ) : null}
                     {roleMutation.isError ? (
-                      <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                        {roleMutation.error instanceof Error ? roleMutation.error.message : "Rol kaydedilirken bir hata oluştu."}
-                      </div>
+                      <ErrorBanner
+                        message={roleMutation.error instanceof Error ? roleMutation.error.message : "Rol kaydedilirken bir hata oluştu."}
+                      />
                     ) : null}
                     <div className="flex flex-wrap gap-3">
-                      <button
-                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[10px] bg-slate-950 dark:bg-slate-700 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700/50"
+                      <AdminButton
+                        className="flex-1"
+                        variant="primary"
+                        size="lg"
                         disabled={roleMutation.isPending}
                         type="submit"
                       >
@@ -1504,30 +1484,29 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                           : editingRoleEmail
                             ? "Rolü güncelle"
                             : "Rol ekle"}
-                      </button>
+                      </AdminButton>
                       {editingRoleEmail ? (
-                        <button
-                          className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-5 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700/30"
+                        <AdminButton
+                          size="lg"
                           onClick={() => {
                             setEditingRoleEmail(null);
                             roleForm.reset({ email: "", role: "team", departments: [], representativeKey: "" });
                           }}
-                          type="button"
                         >
                           Vazgeç
-                        </button>
+                        </AdminButton>
                       ) : null}
                     </div>
                   </form>
-                </SurfaceCard>
+                </AdminCard>
 
-                <SurfaceCard
+                <AdminCard
                   description="Tanımlı roller tablo halinde listelenir. Düzenlemek için satırdaki aksiyonu kullanın."
                   title="Rol Listesi"
                   variant="default"
                 >
                   <DataTable columns={roleColumns} data={rolesQuery.data ?? []} density="compact" />
-                </SurfaceCard>
+                </AdminCard>
               </div>
             ) : null}
           </div>
@@ -1567,126 +1546,6 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
         />
       ) : null}
     </AdminShell>
-  );
-}
-
-function SidebarButton(props: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={[
-        "w-full rounded-[10px] border px-4 py-3 text-left text-sm font-semibold transition",
-        props.active
-          ? "border-[#2f6b7a] bg-[#2f6b7a] text-white shadow-[0_16px_34px_rgba(47,107,122,0.22)]"
-          : "border-transparent bg-transparent text-slate-700 dark:text-slate-300 hover:border-slate-200 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700/30 hover:text-slate-950 dark:hover:text-slate-200"
-      ].join(" ")}
-      onClick={props.onClick}
-      type="button"
-    >
-      {props.label}
-    </button>
-  );
-}
-
-function SidebarSectionTitle(props: { children: ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{props.children}</p>;
-}
-
-function SidebarActionButton(props: {
-  children: ReactNode;
-  icon: ReactNode;
-  onClick: () => void;
-  primary?: boolean | undefined;
-  disabled?: boolean | undefined;
-}) {
-  return (
-    <button
-      className={[
-        "inline-flex w-full items-center justify-center gap-2 rounded-[10px] px-4 py-3 text-sm font-semibold transition",
-        props.primary
-          ? "bg-[#2f6b7a] text-white shadow-[0_14px_28px_rgba(47,107,122,0.18)] hover:bg-[#285d6a]"
-          : "border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700/30",
-        props.disabled ? "cursor-not-allowed opacity-50" : ""
-      ].join(" ")}
-      disabled={props.disabled}
-      onClick={props.onClick}
-      type="button"
-    >
-      {props.icon}
-      {props.children}
-    </button>
-  );
-}
-
-function ImportShortcutRow(props: {
-  label: string;
-  active: boolean;
-  onOpen: () => void;
-  onDownload?: (() => void) | undefined;
-}) {
-  return (
-    <div
-      className={[
-        "flex items-center justify-between gap-3 rounded-[10px] border px-4 py-3 transition",
-        props.active ? "border-sky-200 dark:border-sky-700/40 bg-sky-50/70 dark:bg-sky-900/30" : "border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800"
-      ].join(" ")}
-    >
-      <button
-        className="min-w-0 flex-1 text-left text-sm font-medium text-slate-700 dark:text-slate-200 transition hover:text-slate-950 dark:hover:text-slate-200"
-        onClick={props.onOpen}
-        type="button"
-      >
-        {props.label}
-      </button>
-      {props.onDownload ? (
-        <button
-          className="inline-flex size-9 items-center justify-center rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 transition hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
-          onClick={props.onDownload}
-          type="button"
-        >
-          <FileDown size={15} />
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function HeaderPill(props: { children: ReactNode; tone?: "neutral" | "accent" | "success" }) {
-  const tone = props.tone ?? "neutral";
-
-  return (
-    <span
-      className={[
-        "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
-        tone === "accent"
-          ? "border-sky-200 dark:border-sky-700/40 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400"
-          : tone === "success"
-            ? "border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-            : "border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400"
-      ].join(" ")}
-    >
-      {props.children}
-    </span>
-  );
-}
-
-function InputField(props: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{props.label}</span>
-      {props.children}
-    </label>
-  );
-}
-
-function EmptyBlock(props: { message: string }) {
-  return (
-    <div className="rounded-[10px] border border-dashed border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
-      {props.message}
-    </div>
   );
 }
 

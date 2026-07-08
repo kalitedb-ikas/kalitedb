@@ -732,6 +732,67 @@ html.dark .executive-grid::before {
     linear-gradient(90deg, rgba(71, 85, 105, 0.12) 1px, transparent 1px);
 }
 
+/* ── Admin v2: departman vurgu renkleri ──
+   AdminShell köküne adm-accent-* sınıfı uygulanır; primitifler
+   (admin-ui.tsx / admin-shell.tsx) bu değişkenleri okur. */
+
+.adm-accent-cs {
+  --adm-accent: #0d9488;
+  --adm-accent-strong: #0f766e;
+  --adm-accent-bright: #2dd4bf;
+  --adm-accent-soft: rgba(13, 148, 136, 0.1);
+  --adm-accent-dim: rgba(45, 212, 191, 0.16);
+  --adm-accent-border: rgba(13, 148, 136, 0.28);
+  --adm-accent-text: #0f766e;
+  --adm-accent-glow: rgba(45, 212, 191, 0.14);
+  --adm-accent-wash: rgba(13, 148, 136, 0.12);
+}
+
+.adm-accent-sales {
+  --adm-accent: #ea580c;
+  --adm-accent-strong: #c2410c;
+  --adm-accent-bright: #fb923c;
+  --adm-accent-soft: rgba(249, 115, 22, 0.1);
+  --adm-accent-dim: rgba(251, 146, 60, 0.16);
+  --adm-accent-border: rgba(249, 115, 22, 0.3);
+  --adm-accent-text: #c2410c;
+  --adm-accent-glow: rgba(251, 146, 60, 0.14);
+  --adm-accent-wash: rgba(249, 115, 22, 0.12);
+}
+
+.adm-accent-quality {
+  --adm-accent: #7c3aed;
+  --adm-accent-strong: #6d28d9;
+  --adm-accent-bright: #a78bfa;
+  --adm-accent-soft: rgba(139, 92, 246, 0.11);
+  --adm-accent-dim: rgba(167, 139, 250, 0.16);
+  --adm-accent-border: rgba(139, 92, 246, 0.3);
+  --adm-accent-text: #6d28d9;
+  --adm-accent-glow: rgba(167, 139, 250, 0.14);
+  --adm-accent-wash: rgba(139, 92, 246, 0.13);
+}
+
+html.dark .adm-accent-cs {
+  --adm-accent-soft: rgba(45, 212, 191, 0.13);
+  --adm-accent-border: rgba(45, 212, 191, 0.32);
+  --adm-accent-text: #5eead4;
+  --adm-accent-wash: rgba(45, 212, 191, 0.07);
+}
+
+html.dark .adm-accent-sales {
+  --adm-accent-soft: rgba(251, 146, 60, 0.13);
+  --adm-accent-border: rgba(251, 146, 60, 0.32);
+  --adm-accent-text: #fdba74;
+  --adm-accent-wash: rgba(251, 146, 60, 0.07);
+}
+
+html.dark .adm-accent-quality {
+  --adm-accent-soft: rgba(167, 139, 250, 0.13);
+  --adm-accent-border: rgba(167, 139, 250, 0.32);
+  --adm-accent-text: #c4b5fd;
+  --adm-accent-wash: rgba(167, 139, 250, 0.08);
+}
+
 /* Dekoratif hero videosu: hareket azaltma tercihinde tamamen kapat */
 @media (prefers-reduced-motion: reduce) {
   .hero-dashboard-video {
