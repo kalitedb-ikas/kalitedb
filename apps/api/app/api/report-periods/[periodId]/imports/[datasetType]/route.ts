@@ -131,6 +131,7 @@ export async function POST(
               badges: [],
               timeline: [],
               exclusions: [],
+              tableExclusions: [],
               createdAt: now,
               updatedAt: now
             });

@@ -323,6 +323,7 @@ export function SalesAdminPage() {
           department: "sales",
           status: "active",
           exclusions: [],
+          tableExclusions: [],
           badges: [],
           timeline: [],
           createdAt: now,

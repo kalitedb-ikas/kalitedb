@@ -1,5 +1,5 @@
 import { buildDashboardSnapshot } from "@kalitedb/shared";
-import type { DashboardSnapshot, RepresentativeExclusionSurface } from "@kalitedb/shared";
+import type { DashboardSnapshot, RepresentativeExclusionSurface, RepresentativeTableExclusion } from "@kalitedb/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
@@ -69,6 +69,28 @@ export function useRepresentativeKeysExcludedFrom(surface: RepresentativeExclusi
     const reps = query.data ?? [];
     return new Set(reps.filter((r) => (r.exclusions ?? []).includes(surface)).map((r) => r.key));
   }, [query.data, surface]);
+}
+
+/**
+ * Belirli bir HAM tablodan ("audit" | "csat") hariç tutulan temsilci
+ * key'lerini döner. İşaret temsilci yönetimindeki "Dahil Olduğu Tablolar"
+ * toggle'larından gelir; useRepresentativeKeysExcludedFrom'dan farklı — bu
+ * yalnızca ilgili tablonun satırından çıkarır, ortalama ve grafik
+ * hesaplarına dokunmaz.
+ */
+export function useRepresentativeKeysExcludedFromTable(table: RepresentativeTableExclusion): Set<string> {
+  const auth = useAuth();
+
+  const query = useQuery({
+    queryKey: ["representatives", auth.token],
+    queryFn: () => api.getRepresentatives(auth.token),
+    staleTime: 10 * 60 * 1000
+  });
+
+  return useMemo(() => {
+    const reps = query.data ?? [];
+    return new Set(reps.filter((r) => (r.tableExclusions ?? []).includes(table)).map((r) => r.key));
+  }, [query.data, table]);
 }
 
 /**

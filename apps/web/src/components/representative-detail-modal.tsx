@@ -1,4 +1,4 @@
-import type { Department, Representative, RepresentativeExclusionSurface, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
+import type { Department, Representative, RepresentativeExclusionSurface, RepresentativeTableExclusion, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
 import { BarChart3, Briefcase, Crown, Handshake, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -65,6 +65,7 @@ type SaveData = {
   badges: string[];
   timeline: TimelineEvent[];
   exclusions: RepresentativeExclusionSurface[];
+  tableExclusions: RepresentativeTableExclusion[];
 };
 
 /** Temsilcinin dahil edilebileceği CS yüzeyleri; kapalıysa o sayfada tablo,
@@ -73,6 +74,13 @@ const EXCLUSION_SURFACES: { key: RepresentativeExclusionSurface; label: string }
   { key: "audit", label: "Audit" },
   { key: "csat", label: "CSAT" },
   { key: "dashboard", label: "Genel Bakış" }
+];
+
+/** Temsilcinin belirli bir HAM tabloda gizlendiği yüzeyler; ortalama ve
+ *  grafik hesaplarına dokunmaz, yalnızca o tablonun satırından çıkarır. */
+const TABLE_EXCLUSIONS: { key: RepresentativeTableExclusion; label: string }[] = [
+  { key: "audit", label: "Audit Tablosu" },
+  { key: "csat", label: "CSAT Tablosu" }
 ];
 
 type Props = {
@@ -91,6 +99,7 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
   const [badges, setBadges] = useState<string[]>(representative?.badges ?? []);
   const [timeline, setTimeline] = useState<TimelineEvent[]>(representative?.timeline ?? []);
   const [exclusions, setExclusions] = useState<RepresentativeExclusionSurface[]>(representative?.exclusions ?? []);
+  const [tableExclusions, setTableExclusions] = useState<RepresentativeTableExclusion[]>(representative?.tableExclusions ?? []);
 
   // Timeline form state
   const [showTimelineForm, setShowTimelineForm] = useState(false);
@@ -123,6 +132,10 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
 
   const toggleExclusion = (key: RepresentativeExclusionSurface) => {
     setExclusions((prev) => prev.includes(key) ? prev.filter((e) => e !== key) : [...prev, key]);
+  };
+
+  const toggleTableExclusion = (key: RepresentativeTableExclusion) => {
+    setTableExclusions((prev) => prev.includes(key) ? prev.filter((e) => e !== key) : [...prev, key]);
   };
 
   const addTimelineEvent = () => {
@@ -158,7 +171,8 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
       department,
       badges,
       timeline,
-      exclusions
+      exclusions,
+      tableExclusions
     });
   };
 
@@ -292,6 +306,35 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
                   type="button"
                 >
                   {surface.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Dahil olduğu tablolar ── */}
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Dahil Olduğu Tablolar</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Kapalı olan tablolarda temsilci sadece satır olarak gösterilmez; ortalama ve grafik hesapları etkilenmez.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {TABLE_EXCLUSIONS.map((table) => {
+              const included = !tableExclusions.includes(table.key);
+              return (
+                <button
+                  key={table.key}
+                  className={[
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                    included
+                      ? "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
+                      : "border-slate-200 bg-white text-slate-400 line-through hover:border-slate-300 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:border-slate-500 dark:hover:text-slate-300"
+                  ].join(" ")}
+                  onClick={() => toggleTableExclusion(table.key)}
+                  title={included ? `${table.label} tablosunda gösteriliyor — gizlemek için tıkla` : `${table.label} tablosunda gizli — dahil etmek için tıkla`}
+                  type="button"
+                >
+                  {table.label}
                 </button>
               );
             })}

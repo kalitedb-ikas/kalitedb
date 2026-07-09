@@ -82,6 +82,12 @@ export const timelineEventSchema = z.object({
 export const representativeExclusionSurfaceSchema = z.enum(["audit", "csat", "dashboard"]);
 export type RepresentativeExclusionSurface = z.infer<typeof representativeExclusionSurfaceSchema>;
 
+/** Temsilcinin belirli bir HAM tabloda gizlendiği yüzeyler; yalnızca o
+ *  tablonun satırlarından çıkarır, ortalama ve grafik hesaplarına dokunmaz.
+ *  representativeExclusionSurfaceSchema'dan farklı — o tümden gizler. */
+export const representativeTableExclusionSchema = z.enum(["audit", "csat"]);
+export type RepresentativeTableExclusion = z.infer<typeof representativeTableExclusionSchema>;
+
 export const representativeSchema = z.object({
   key: z.string(),
   displayName: z.string().min(1),
@@ -91,6 +97,7 @@ export const representativeSchema = z.object({
   badges: z.array(z.string()).default([]),
   timeline: z.array(timelineEventSchema).default([]),
   exclusions: z.array(representativeExclusionSurfaceSchema).default([]),
+  tableExclusions: z.array(representativeTableExclusionSchema).default([]),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 });

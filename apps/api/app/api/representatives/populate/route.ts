@@ -63,6 +63,7 @@ export async function POST(request: Request) {
         badges: [],
         timeline: [],
         exclusions: [],
+        tableExclusions: [],
         createdAt: now,
         updatedAt: now
       });

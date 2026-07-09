@@ -388,13 +388,14 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const updateRepresentativeMutation = useMutation({
-    mutationFn: (input: { key: string; displayName?: string; department?: string; badges?: string[]; timeline?: Array<Record<string, unknown>>; exclusions?: string[] }) => {
+    mutationFn: (input: { key: string; displayName?: string; department?: string; badges?: string[]; timeline?: Array<Record<string, unknown>>; exclusions?: string[]; tableExclusions?: string[] }) => {
       const body: Record<string, unknown> = {};
       if (input.displayName != null) body.displayName = input.displayName;
       if (input.department != null) body.department = input.department;
       if (input.badges != null) body.badges = input.badges;
       if (input.timeline != null) body.timeline = input.timeline;
       if (input.exclusions != null) body.exclusions = input.exclusions;
+      if (input.tableExclusions != null) body.tableExclusions = input.tableExclusions;
       return api.updateRepresentative(auth.token, input.key, body as any);
     },
     onSuccess: async () => {
@@ -404,7 +405,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
   });
 
   const createRepresentativeMutation = useMutation({
-    mutationFn: (input: { displayName: string; department: string; badges?: string[]; timeline?: TimelineEvent[]; exclusions?: string[] }) =>
+    mutationFn: (input: { displayName: string; department: string; badges?: string[]; timeline?: TimelineEvent[]; exclusions?: string[]; tableExclusions?: string[] }) =>
       api.createRepresentative(auth.token, input as any),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["representatives"] });
@@ -486,6 +487,23 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     onError: (error: unknown) => {
       const message = error instanceof Error ? error.message : "Audit kaydı yazılamadı.";
       setAuditEditorError(message);
+    }
+  });
+
+  const deleteDatasetRecordMutation = useMutation({
+    mutationFn: (recordId: string) => {
+      if (!selectedPeriodId || !activeDatasetType) {
+        throw new Error("Önce dönem ve veri seti seçin.");
+      }
+      return api.deleteDatasetRecord(auth.token, selectedPeriodId, activeDatasetType, recordId);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, selectedPeriodId] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["cs-audit-metrics-bulk"] }),
+        queryClient.invalidateQueries({ queryKey: ["audit-history-bulk"] })
+      ]);
     }
   });
 
@@ -848,16 +866,31 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
           header: "İşlem",
           id: "action",
           cell: ({ row }) => (
-            <button
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[var(--adm-accent-border)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-              onClick={() => {
-                setAuditEditorError(null);
-                setAuditEditorState({ mode: "edit", record: row.original as AuditMetric });
-              }}
-              type="button"
-            >
-              Düzenle
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[var(--adm-accent-border)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                onClick={() => {
+                  setAuditEditorError(null);
+                  setAuditEditorState({ mode: "edit", record: row.original as AuditMetric });
+                }}
+                type="button"
+              >
+                Düzenle
+              </button>
+              <button
+                className="rounded-full p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
+                onClick={() => {
+                  const record = row.original as AuditMetric;
+                  if (confirm(`"${record.agentName}" audit kaydı silinecek. Emin misiniz?`)) {
+                    deleteDatasetRecordMutation.mutate(record.id);
+                  }
+                }}
+                type="button"
+                title="Sil"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           )
         }
       ];
@@ -910,7 +943,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
     }
 
     return [];
-  }, [activeDatasetType]);
+  }, [activeDatasetType, deleteDatasetRecordMutation]);
 
   const sidebarHeader = (
     <div className="space-y-3">
@@ -1379,7 +1412,7 @@ export function AdminPage(props: { currentUserRole?: AuthenticatedUser["role"] |
                     defaultDepartment="cs"
                     isSaving={createRepresentativeMutation.isPending}
                     onClose={() => setShowCreateRepModal(false)}
-                    onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "cs", badges: data.badges, timeline: data.timeline, exclusions: data.exclusions })}
+                    onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "cs", badges: data.badges, timeline: data.timeline, exclusions: data.exclusions, tableExclusions: data.tableExclusions })}
                   />
                 ) : null}
               </div>

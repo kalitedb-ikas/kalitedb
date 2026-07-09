@@ -24,6 +24,7 @@ async function autoRegisterSalesAgents(agents: Array<{ agentKey: string; agentNa
           badges: [],
           timeline: [],
           exclusions: [],
+          tableExclusions: [],
           createdAt: now,
           updatedAt: now
         });

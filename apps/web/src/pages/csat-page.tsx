@@ -30,7 +30,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
-import { excludeAgentsFromSnapshot, useRepresentativeKeysExcludedFrom, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
+import { excludeAgentsFromSnapshot, useRepresentativeKeysExcludedFrom, useRepresentativeKeysExcludedFromTable, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
@@ -178,6 +178,9 @@ export function CsatPage() {
     () => excludeAgentsFromSnapshot(aggregatedSnapshotUnfiltered, csatExcludedKeys),
     [aggregatedSnapshotUnfiltered, csatExcludedKeys]
   );
+  // "Dahil Olduğu Tablolar"dan kapatılanlar yalnızca ayrıntı tablosundan
+  // çıkar; ortalama, özet satırı ve grafik hesaplarına dokunmaz.
+  const csatTableExcludedKeys = useRepresentativeKeysExcludedFromTable("csat");
 
   // "Premium Onboarding" etiketlilerin CSAT skoru null'lanır → ortalama, leaderboard,
   // champion ve tablo CSAT sütunundan otomatik düşer; her ay ölçülmeyen bir temsilcinin
@@ -249,7 +252,7 @@ export function CsatPage() {
       ])
     );
 
-    return aggregatedSnapshotCsatAdjusted.datasets.agentMetrics
+    const sortedRows = aggregatedSnapshotCsatAdjusted.datasets.agentMetrics
       .map((item) => {
         const audit = auditMap.get(item.agentKey);
         return {
@@ -285,6 +288,11 @@ export function CsatPage() {
 
         return left.agentName.localeCompare(right.agentName, "tr");
       });
+
+    // Eşit puanda Temsilci aynı puanlıların en üstünde gösterilir.
+    return applyTopRankPreference(
+      sortedRows.map((row) => ({ label: row.agentName, value: row.callEvaluationAverage, row }))
+    ).map((item) => item.row);
   }, [aggregatedSnapshotCsatAdjusted]);
   const csatLeaders = useMemo(() => {
     // Champion podyumu 'start' ekibini göstermez (ayrıntı tablosunda kalsalar da).
@@ -351,6 +359,9 @@ export function CsatPage() {
 
   const filteredRows = useMemo(() => {
     let out = rows;
+    if (csatTableExcludedKeys.size > 0) {
+      out = out.filter((r) => !csatTableExcludedKeys.has(r.agentKey));
+    }
     if (!showDepartedReps) {
       out = out.filter((r) => repsMap.get(r.agentKey)?.status !== "departed");
     }
@@ -361,7 +372,7 @@ export function CsatPage() {
       out = out.filter((r) => matchesAgentSearch(r.agentName, agentSearch));
     }
     return out;
-  }, [rows, showDepartedReps, badgeFilter, agentSearch, repsMap]);
+  }, [rows, showDepartedReps, badgeFilter, agentSearch, repsMap, csatTableExcludedKeys]);
 
   const columns: ColumnDef<CsatRow, any>[] = [
     columnHelper.accessor("agentName", {

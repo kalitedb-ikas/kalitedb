@@ -461,6 +461,7 @@ async function deriveRepresentativesFromFallback(): Promise<Representative[]> {
       displayName: info.name,
       department: info.department,
       exclusions: [],
+      tableExclusions: [],
       status: "active" as const,
       badges: [],
       timeline: [],
@@ -2123,7 +2124,7 @@ export const api = {
   async updateRepresentative(
     token: string | null,
     key: string,
-    body: { displayName?: string; status?: string; department?: string; statusNote?: string; badges?: string[]; timeline?: Array<{ id: string; title: string; startDate: string; endDate?: string; department?: string }>; exclusions?: string[] }
+    body: { displayName?: string; status?: string; department?: string; statusNote?: string; badges?: string[]; timeline?: Array<{ id: string; title: string; startDate: string; endDate?: string; department?: string }>; exclusions?: string[]; tableExclusions?: string[] }
   ): Promise<Representative> {
     const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
     if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
@@ -2139,6 +2140,7 @@ export const api = {
       if (body.badges != null) updates.badges = body.badges;
       if (body.timeline != null) updates.timeline = body.timeline;
       if (body.exclusions != null) updates.exclusions = body.exclusions;
+      if (body.tableExclusions != null) updates.tableExclusions = body.tableExclusions;
       await setDoc(repDoc, { ...current, ...updates });
       return { ...current, ...updates } as unknown as Representative;
     }
@@ -2150,7 +2152,7 @@ export const api = {
   },
   async createRepresentative(
     token: string | null,
-    body: { displayName: string; department: Department; badges?: string[]; timeline?: TimelineEvent[]; exclusions?: string[] }
+    body: { displayName: string; department: Department; badges?: string[]; timeline?: TimelineEvent[]; exclusions?: string[]; tableExclusions?: string[] }
   ): Promise<Representative> {
     const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
     if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {
@@ -2164,6 +2166,7 @@ export const api = {
         badges: body.badges ?? [],
         timeline: body.timeline ?? [],
         exclusions: body.exclusions ?? [],
+        tableExclusions: body.tableExclusions ?? [],
         createdAt: now,
         updatedAt: now
       };

@@ -28,7 +28,7 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors, getQuarterPeriodIds } from "../lib/period-aggregation";
-import { excludeAgentsFromSnapshot, useRepresentativeKeysExcludedFrom, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
+import { excludeAgentsFromSnapshot, useRepresentativeKeysExcludedFrom, useRepresentativeKeysExcludedFromTable, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
@@ -140,6 +140,9 @@ export function AuditPage() {
     () => excludeAgentsFromSnapshot(aggregatedSnapshotUnfiltered, auditExcludedKeys),
     [aggregatedSnapshotUnfiltered, auditExcludedKeys]
   );
+  // "Dahil Olduğu Tablolar"dan kapatılanlar yalnızca ham tablolardan (detay +
+  // aylık pivot) çıkar; ortalama ve grafik hesaplarına dokunmaz.
+  const auditTableExcludedKeys = useRepresentativeKeysExcludedFromTable("audit");
 
   const snapshot = aggregatedSnapshot;
   // "Diğer" ve "Start" badge'li temsilciler tablo + ortalamalarda kalır,
@@ -230,13 +233,21 @@ export function AuditPage() {
         return left.agentName.localeCompare(right.agentName, "tr");
       });
 
-    return sortedAgents.map((agent, index) => ({
+    // Eşit puanda Temsilci aynı puanlıların en üstünde gösterilir.
+    const preferenceOrdered = applyTopRankPreference(
+      sortedAgents.map((agent) => ({ label: agent.agentName, value: agent.auditScoreDisplay, agent }))
+    ).map((item) => item.agent);
+
+    return preferenceOrdered.map((agent, index) => ({
       ...agent,
       listIndex: index + 1
     }));
   }, [currentAudits, snapshot]);
   const filteredAgents = useMemo(() => {
     let out = agents;
+    if (auditTableExcludedKeys.size > 0) {
+      out = out.filter((a) => !auditTableExcludedKeys.has(a.agentKey));
+    }
     if (badgeFilter) {
       out = out.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
     }
@@ -244,7 +255,7 @@ export function AuditPage() {
       out = out.filter((a) => matchesAgentSearch(a.agentName, agentSearch));
     }
     return out;
-  }, [agents, badgeFilter, agentSearch, repsMap]);
+  }, [agents, badgeFilter, agentSearch, repsMap, auditTableExcludedKeys]);
   const evaluatedAgentCount = useMemo(
     () =>
       (snapshot?.datasets.auditMetrics ?? []).filter(
@@ -473,6 +484,9 @@ export function AuditPage() {
   }, [auditHistoryMap, trendYearPeriods, selectedYear, auditExcludedKeys]);
   const filteredMonthlyData = useMemo(() => {
     let out = auditMonthlyData;
+    if (auditTableExcludedKeys.size > 0) {
+      out = out.filter((r) => !auditTableExcludedKeys.has(r.agentKey));
+    }
     if (badgeFilter) {
       out = out.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
     }
@@ -480,7 +494,7 @@ export function AuditPage() {
       out = out.filter((r) => matchesAgentSearch(r.agentName, agentSearch));
     }
     return out;
-  }, [auditMonthlyData, badgeFilter, agentSearch, repsMap]);
+  }, [auditMonthlyData, badgeFilter, agentSearch, repsMap, auditTableExcludedKeys]);
 
   /* ── Aylık role-play pivot tablosu (toplam) ── */
   const columns: ColumnDef<AuditAgentRow, any>[] = [
