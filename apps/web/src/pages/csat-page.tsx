@@ -530,7 +530,7 @@ export function CsatPage() {
                 <div className="grid gap-3">
                   <MetricInsight
                     icon={<CheckCircle2 size={16} />}
-                    title="En güçlü temsilci"
+                    title="En başarılı isim/isimler"
                     value={snapshot.highlights.bestCsat?.label ?? "Henüz yok"}
                     detail={formatNumber(snapshot.highlights.bestCsat?.value, 3)}
                   />
