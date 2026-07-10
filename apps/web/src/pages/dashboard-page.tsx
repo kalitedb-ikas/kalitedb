@@ -11,9 +11,11 @@ import {
   SurfaceCard
 } from "@kalitedb/ui";
 import {
+  AUDIT_AVERAGE_EXCLUDED_KEYS,
   average,
   buildDashboardSnapshot,
   resolveThresholdTone,
+  selectAuditMetrics,
   selectDefaultReportPeriod,
   type AgentMetric,
   type AuditMetric
@@ -103,7 +105,7 @@ export function DashboardPage() {
     staleTime: 5 * 60 * 1000
   });
   const auditMetricsBulkQuery = useQuery({
-    enabled: yearPeriodIds.length > 0 && periodRange.viewMode !== "aylik",
+    enabled: yearPeriodIds.length > 0,
     queryKey: ["cs-audit-metrics-bulk", auth.token, yearPeriodIds],
     queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
     staleTime: 5 * 60 * 1000
@@ -229,20 +231,30 @@ export function DashboardPage() {
   }, [previousAuditAccuracyAverage]);
 
   const rawYearlyTrend = yearlyTrendQuery.data ?? [];
-  // Yıllık trend grafiği CSAT serisi: Premium Onboarding'i hariç tut
+  // Yıllık trend serileri, "Audit ortalaması" / "CSAT ortalaması" kartlarıyla
+  // aynı kaynaktan hesaplanır: dönem başına audit-metrics/agent-metrics kayıtları
+  // + aynı hariç tutma kuralları (dashboard exclusion, AUDIT_AVERAGE_EXCLUDED_KEYS,
+  // CSAT'ta Premium Onboarding). Sunucunun ham dönem özeti sadece fallback.
   const yearlyTrend = useMemo(() => {
-    if (premiumOnboardingKeys.size === 0 && dashboardExcludedKeys.size === 0) return rawYearlyTrend;
     const agentMap = agentMetricsBulkQuery.data;
-    if (!agentMap) return rawYearlyTrend;
+    const auditMap = auditMetricsBulkQuery.data;
+    if (!agentMap || !auditMap) return rawYearlyTrend;
     return rawYearlyTrend.map((point) => {
       const agents = agentMap[point.periodId];
       if (!agents) return point;
+      const auditRecords = selectAuditMetrics({
+        agentMetrics: agents.filter((a) => !dashboardExcludedKeys.has(a.agentKey)),
+        auditMetrics: (auditMap[point.periodId] ?? []).filter((a) => !dashboardExcludedKeys.has(a.agentKey))
+      });
+      const auditValues = auditRecords
+        .filter((a) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey))
+        .map((a) => a.auditScore);
       const csatValues = agents
         .filter((a) => !premiumOnboardingKeys.has(a.agentKey) && !dashboardExcludedKeys.has(a.agentKey))
         .map((a) => a.callEvaluationAverage);
-      return { ...point, csat: average(csatValues) };
+      return { ...point, audit: average(auditValues), csat: average(csatValues) };
     });
-  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys, dashboardExcludedKeys]);
+  }, [rawYearlyTrend, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data, premiumOnboardingKeys, dashboardExcludedKeys]);
 
   return (
     <div className="space-y-8">
