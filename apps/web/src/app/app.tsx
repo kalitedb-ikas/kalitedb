@@ -27,6 +27,7 @@ import { SalesRoleplayPage } from "../pages/sales-roleplay-page";
 import { SalesSuccessIndexPage } from "../pages/sales-success-index-page";
 import { SalesTargetCalibrationPage } from "../pages/sales-target-calibration-page";
 import { CsComparePage } from "../pages/cs-compare-page";
+import { CsPeriodComparePage } from "../pages/cs-period-compare-page";
 import { SalesComparePage } from "../pages/sales-compare-page";
 import { SalesCompanyComparePage } from "../pages/sales-company-compare-page";
 import { AuditLogPage } from "../pages/audit-log-page";
@@ -94,6 +95,10 @@ function AppRoutes() {
         <Route
           element={restrictToDept("cs", blockForRep(<CsComparePage />))}
           path="/cs/compare"
+        />
+        <Route
+          element={restrictToDept("cs", blockForRep(<CsPeriodComparePage />))}
+          path="/cs/period-compare"
         />
 
         {/* Kalite rotaları */}

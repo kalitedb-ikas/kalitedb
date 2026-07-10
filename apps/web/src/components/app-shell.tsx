@@ -16,7 +16,7 @@ import {
   X
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
@@ -183,6 +183,21 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
     return queryString ? `?${queryString}` : "";
   }, [searchParams]);
 
+  // Departman sekmeleri arası kayan seçim göstergesi (segmented control efekti)
+  const departmentTabRefs = useRef<Partial<Record<Department, HTMLButtonElement | null>>>({});
+  const [departmentIndicator, setDepartmentIndicator] = useState<{ left: number; width: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const updateIndicator = () => {
+      const activeEl = departmentTabRefs.current[activeDepartment];
+      if (!activeEl) return;
+      setDepartmentIndicator({ left: activeEl.offsetLeft, width: activeEl.offsetWidth });
+    };
+    updateIndicator();
+    window.addEventListener("resize", updateIndicator);
+    return () => window.removeEventListener("resize", updateIndicator);
+  }, [activeDepartment, canSeeCsTab, canSeeSalesTab, canSeeQualityTab]);
+
   const handleDepartmentSwitch = (dept: Department) => {
     const target =
       dept === "sales"
@@ -236,14 +251,22 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                   <p className="truncate font-display text-base font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-100 sm:text-lg">
                     Kalite Dashboard
                   </p>
-                  {/* Departman sekmeleri — başlığın altında */}
-                  <div className="mt-1 hidden items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100/80 p-0.5 dark:border-slate-600 dark:bg-slate-800/80 2xl:inline-flex">
+                  {/* Departman sekmeleri — başlığın altında, kayan seçim göstergeli */}
+                  <div className="relative mt-1 hidden items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100/80 p-0.5 dark:border-slate-600 dark:bg-slate-800/80 2xl:inline-flex">
+                    {departmentIndicator ? (
+                      <span
+                        aria-hidden
+                        className="absolute inset-y-0.5 z-0 rounded-full bg-slate-950 shadow-[0_4px_12px_rgba(15,23,42,0.18)] transition-[left,width] duration-300 ease-out dark:bg-slate-100"
+                        style={{ left: departmentIndicator.left, width: departmentIndicator.width }}
+                      />
+                    ) : null}
                     {canSeeCsTab ? (
                       <button
+                        ref={(el) => { departmentTabRefs.current.cs = el; }}
                         className={[
-                          "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
+                          "relative z-10 flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition-colors duration-300",
                           activeDepartment === "cs"
-                            ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
+                            ? "text-white dark:text-slate-900"
                             : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                         ].join(" ")}
                         onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("cs"); }}
@@ -254,10 +277,11 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                     ) : null}
                     {canSeeSalesTab ? (
                       <button
+                        ref={(el) => { departmentTabRefs.current.sales = el; }}
                         className={[
-                          "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
+                          "relative z-10 flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition-colors duration-300",
                           activeDepartment === "sales"
-                            ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
+                            ? "text-white dark:text-slate-900"
                             : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                         ].join(" ")}
                         onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("sales"); }}
@@ -268,10 +292,11 @@ export function AppShell(props: { currentUser?: AuthenticatedUser | undefined; c
                     ) : null}
                     {canSeeQualityTab ? (
                       <button
+                        ref={(el) => { departmentTabRefs.current.quality = el; }}
                         className={[
-                          "flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition",
+                          "relative z-10 flex min-h-6 items-center rounded-full px-3 text-[11px] font-semibold transition-colors duration-300",
                           activeDepartment === "quality"
-                            ? "bg-slate-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.18)] dark:bg-slate-100 dark:text-slate-900"
+                            ? "text-white dark:text-slate-900"
                             : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                         ].join(" ")}
                         onClick={(e) => { e.preventDefault(); handleDepartmentSwitch("quality"); }}
