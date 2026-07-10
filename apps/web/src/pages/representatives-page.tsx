@@ -301,7 +301,7 @@ export function RepresentativesPage() {
     const agents = snapshot?.datasets.agentMetrics ?? [];
     if (agents.length < 2) return empty;
     const key = selectedRepresentative.agentKey;
-    type Def = { label: string; getValue: (a: typeof agents[number]) => number | null | undefined; direction?: "higher" | "lower"; excludeKeys?: Set<string> };
+    type Def = { label: string; getValue: (a: typeof agents[number]) => number | null | undefined; direction?: "higher" | "lower"; excludeKeys?: Set<string>; noTopBadge?: boolean };
     const defs: Def[] = [
       { label: "CSAT", getValue: (a) => a.callEvaluationAverage, excludeKeys: premiumOnboardingKeys },
       { label: "Lokal kapatma", getValue: (a) => a.localCloseRate },
@@ -311,7 +311,8 @@ export function RepresentativesPage() {
       { label: "Ticket", getValue: (a) => a.totalTicketClosedCount },
       { label: "Değerlendirme", getValue: (a) => a.evaluationCount },
       { label: "Konuşma süresi", getValue: (a) => a.avgTalkDurationSeconds, direction: "lower", excludeKeys: chatMailKeys },
-      { label: "Kaçan çağrı", getValue: (a) => a.missedCalls, direction: "lower" }
+      // "Kaçan çağrı birincisi" rozeti verilmez; yalnızca "en fazla" uyarısı kalır.
+      { label: "Kaçan çağrı", getValue: (a) => a.missedCalls, direction: "lower", noTopBadge: true }
     ];
     const top: string[] = [];
     const low: LowLabel[] = [];
@@ -329,7 +330,7 @@ export function RepresentativesPage() {
         const v = def.getValue(a) as number;
         return def.direction === "lower" ? v > myValue : v < myValue;
       });
-      if (!hasBetter) top.push(def.label);
+      if (!hasBetter && !def.noTopBadge) top.push(def.label);
       // "lower" yönlü metriklerde (Konuşma süresi, Kaçan çağrı) en kötü durum en YÜKSEK
       // değerdir — "en düşük" değil "en fazla" demek gerekir.
       if (!hasWorse) low.push({ label: def.label, suffix: def.direction === "lower" ? "en fazla" : "en düşük" });
