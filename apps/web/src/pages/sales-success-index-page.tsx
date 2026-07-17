@@ -1,5 +1,5 @@
 import { PageHeader, SurfaceCard } from "@kalitedb/ui";
-import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
+import { hasConfettiFired, markConfettiFired } from "../lib/confetti-once";
 import { firebaseDb } from "../lib/firebase";
 import { formatNumber, formatPeriodMonth } from "../lib/format";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -41,15 +42,15 @@ function formatHMS(totalSeconds: number | null): string {
 /* ── Score calculation (Java portunu) ── */
 
 const WEIGHTS = {
-  satisTutari: 0.425,
+  satisTutari: 0.40,
   satisAdedi: 0.10,
   audit: 0.10,
   acv: 0.05,
   hubspot: 0.10,
   outbound: 0.05,
-  dokunulan: 0.05,
+  dokunulan: 0.025,
   konusma: 0.05,
-  twoplus: 0.025,
+  twoplus: 0.05,
   premOn: 0.05,
   domain: 0.025,
 } as const;
@@ -313,7 +314,7 @@ export function SalesSuccessIndexPage() {
     const result: SuccessRow[] = agents.map((agent) => {
       const audit = auditMetrics.find((a) => a.agentKey === agent.agentKey);
       const manual = manualData[agent.agentKey];
-      const total21 = (agent.scaleCount ?? 0) + (agent.scalePlusCount ?? 0);
+      const total21 = getTwoPlusOneCount(agent);
       const totalLicenseForRatio = agent.licenseCount || 1;
       const twoplusRatio = total21 / totalLicenseForRatio;
       return {
@@ -321,7 +322,8 @@ export function SalesSuccessIndexPage() {
         agentName: agent.agentName,
         salesAmount: agent.salesAmount,
         licenseCount: agent.licenseCount,
-        auditScore: audit?.auditScore ?? null,
+        // CSV import'undan gelen perfScore öncelikli; yoksa manuel audit fallback
+        auditScore: agent.perfScore ?? audit?.auditScore ?? null,
         callAttempts: agent.callAttempts,
         talkDurationSeconds: agent.talkDurationSeconds,
         avgSalesAmount: agent.avgLicensePrice,
@@ -409,7 +411,6 @@ export function SalesSuccessIndexPage() {
   const hasData = agents.length > 0;
 
   const [podiumModalOpen, setPodiumModalOpen] = useState(true);
-  const podiumConfettiFired = useRef(false);
   const top3 = useMemo(() => {
     const scored = [...rows].sort((a, b) => b.score - a.score);
     return scored.slice(0, 3);
@@ -427,11 +428,12 @@ export function SalesSuccessIndexPage() {
   }, []);
 
   useEffect(() => {
-    if (podiumModalOpen && podiumReady && !podiumConfettiFired.current) {
-      podiumConfettiFired.current = true;
-      setTimeout(firePodiumConfetti, 500);
-    }
-  }, [podiumModalOpen, podiumReady, firePodiumConfetti]);
+    if (!podiumModalOpen || !podiumReady || activePeriodIds.length === 0) return;
+    const storageKey = `sales-podium:${activePeriodIds.join(",")}`;
+    if (hasConfettiFired(storageKey)) return;
+    markConfettiFired(storageKey);
+    setTimeout(firePodiumConfetti, 500);
+  }, [podiumModalOpen, podiumReady, activePeriodIds, firePodiumConfetti]);
 
   const tdCls = "px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap";
   const tdCenterCls = "px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 whitespace-nowrap text-center";

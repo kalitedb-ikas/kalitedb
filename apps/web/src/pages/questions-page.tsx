@@ -68,8 +68,8 @@ export function QuestionsPage() {
   const strongestQuestions = useMemo(() => snapshot?.rankings.strongestQuestions ?? [], [snapshot]);
 
   const rows = useMemo(() => {
-    if (!topic) return allQuestions;
-    return allQuestions.filter((item) => item.topic === topic);
+    const filtered = topic ? allQuestions.filter((item) => item.topic === topic) : allQuestions;
+    return [...filtered].sort((a, b) => a.accuracyRate - b.accuracyRate);
   }, [allQuestions, topic]);
 
   const topics = useMemo(() => Array.from(new Set(allQuestions.map((item) => item.topic))), [allQuestions]);
@@ -114,7 +114,7 @@ export function QuestionsPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <QuestionSpotlight
               accent="from-rose-100 to-transparent"
-              label="En kırılgan soru"
+              label="En az bilinen soru"
               score={formatPercent(weakestQuestions[0]?.accuracyRate)}
               title={weakestQuestions[0]?.questionText ?? "Veri bekleniyor"}
               topic={weakestQuestions[0]?.topic ?? "Başlık yok"}

@@ -8,12 +8,23 @@ import { handleRouteError, jsonResponse, optionsResponse } from "@/src/lib/respo
 
 export const OPTIONS = optionsResponse;
 
-const upsertRoleSchema = z.object({
-  uid: z.string().optional(),
-  email: z.string().email(),
-  role: roleSchema,
-  departments: z.array(departmentSchema).default([])
-});
+const upsertRoleSchema = z
+  .object({
+    uid: z.string().optional(),
+    email: z.string().email(),
+    role: roleSchema,
+    departments: z.array(departmentSchema).default([]),
+    representativeKey: z.string().optional()
+  })
+  .superRefine((value, ctx) => {
+    if (value.role === "representative" && !value.representativeKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["representativeKey"],
+        message: "Temsilci rolü için temsilci eşleşmesi zorunludur."
+      });
+    }
+  });
 
 export async function GET(request: Request) {
   try {
@@ -38,7 +49,11 @@ export async function POST(request: Request) {
       updatedAt: now
     });
     const result = await repository.upsertUserRole(roleAssignment);
-    void logAudit(user, "update", "userRole", body.email, { role: body.role, departments: body.departments });
+    void logAudit(user, "update", "userRole", body.email, {
+      role: body.role,
+      departments: body.departments,
+      representativeKey: body.representativeKey ?? null
+    });
     return jsonResponse(result, { status: 201 });
   } catch (error) {
     return handleRouteError(error);

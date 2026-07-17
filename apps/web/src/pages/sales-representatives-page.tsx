@@ -1,10 +1,10 @@
-import { selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, getTwoPlusOnePercent, selectAuditMetrics, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { AuditMetric, SalesKpiAgent } from "@kalitedb/shared";
 import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
 import { GitCompareArrows, Route } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   CartesianGrid,
@@ -23,6 +23,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { useDarkMode } from "../lib/use-dark-mode";
 import { api } from "../lib/api";
+import { hasConfettiFired, markConfettiFired } from "../lib/confetti-once";
 import { formatNumber, formatPercent, parseTalkDurationLabelToSeconds } from "../lib/format";
 import { brand, chart, chartDark, chartTooltipLight, chartTooltipDark } from "../theme/colors";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
@@ -35,6 +36,7 @@ import {
   getQuarterPeriodIds
 } from "../lib/period-aggregation";
 import { RepresentativeSelect } from "../components/representative-select";
+import { useRepScope } from "../lib/use-rep-scope";
 import { BadgePill } from "../components/representative-detail-modal";
 import { CareerPathModal } from "../components/career-path-modal";
 import { useActiveRepresentativeKeys } from "../lib/use-active-representatives";
@@ -123,6 +125,7 @@ function resolveSuccessState(value: number | null | undefined) {
 
 export function SalesRepresentativesPage() {
   const auth = useAuth();
+  const repScope = useRepScope();
   const [searchParams, setSearchParams] = useSearchParams();
   const datasetTypes = ["agent-metrics", "audit-metrics"] as const;
 
@@ -300,14 +303,24 @@ export function SalesRepresentativesPage() {
 
   const representatives = useMemo(() => {
     const options = new Map<string, string>();
-    // Önce kayıtlı temsilcilerden (dönemden bağımsız)
-    (repsQuery.data ?? [])
-      .filter((r) => (r.department ?? "cs") === "sales")
-      .forEach((r) => options.set(r.key, r.displayName));
-    // Sonra dönem verisinden (ek isimler olabilir)
-    auditMetrics.forEach((record) => options.set(record.agentKey, record.agentName));
+    const excludedKeys = new Set<string>();
+    // Önce kayıtlı temsilcilerden (dönemden bağımsız) — sadece satış
+    (repsQuery.data ?? []).forEach((r) => {
+      const dept = r.department ?? "cs";
+      if (dept === "sales" || dept === "partner") {
+        options.set(r.key, r.displayName);
+      } else {
+        excludedKeys.add(r.key);
+      }
+    });
+    // Sonra dönem verisinden (ek isimler olabilir); CS olarak bilinenleri atla
+    auditMetrics.forEach((record) => {
+      if (excludedKeys.has(record.agentKey)) return;
+      options.set(record.agentKey, record.agentName);
+    });
     kpiAgents.forEach((record) => {
-      if (record.agentKey) options.set(record.agentKey, record.agentName);
+      if (!record.agentKey || excludedKeys.has(record.agentKey)) return;
+      options.set(record.agentKey, record.agentName);
     });
 
     return Array.from(options.entries())
@@ -338,7 +351,9 @@ export function SalesRepresentativesPage() {
   const rawId = searchParams.get("id");
   const legacyKey = searchParams.get("agentKey");
   const decodedKey = rawId ? (() => { try { return atob(rawId); } catch { return null; } })() : null;
-  const selectedAgentKey = decodedKey ?? legacyKey ?? topPerformerKey ?? representatives[0]?.agentKey;
+  const selectedAgentKey = repScope.isRepresentative
+    ? repScope.lockedKey
+    : decodedKey ?? legacyKey ?? topPerformerKey ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
   const selectedAudit = auditMetrics.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
   const selectedKpi: SalesKpiAgent | null = kpiAgents.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
@@ -359,9 +374,7 @@ export function SalesRepresentativesPage() {
       ? null
       : representativeRanking.findIndex((item) => item.agentKey === selectedRepresentative.agentKey) + 1 || null;
 
-  /* ── Confetti: herhangi bir metrikte #1 olan temsilcide bir kereye mahsus patlar ── */
-  const confettiFiredRef = useRef<Set<string>>(new Set());
-
+  /* ── Confetti: herhangi bir metrikte #1 olan temsilcide, dönem başına bir kereye mahsus patlar ── */
   const fireConfetti = useCallback(() => {
     const end = Date.now() + 2500;
     const frame = () => {
@@ -382,11 +395,12 @@ export function SalesRepresentativesPage() {
     { key: "callAttempts", label: "Arama girişimi", getValue: (a) => a.callAttempts, format: (v) => formatNumber(v) },
     { key: "talkDurationSeconds", label: "Konuşma süresi", getValue: (a) => a.talkDurationSeconds, format: formatHms },
     { key: "avgLicensePrice", label: "Ort. lisans fiyatı", getValue: (a) => a.avgLicensePrice, format: formatTryCurrency },
-    { key: "scaleCount", label: "Scale 2+1", getValue: (a) => a.scaleCount, format: (v) => formatNumber(v) },
-    { key: "scalePlusCount", label: "Scale+ 2+1", getValue: (a) => a.scalePlusCount, format: (v) => formatNumber(v) },
-    { key: "scaleConversion", label: "Scale %", getValue: (a) => a.scaleConversion, format: (v) => formatPercent(v), tiebreaker: (a) => a.scaleCount ?? 0 },
-    { key: "scalePlusConversion", label: "Scale+ %", getValue: (a) => a.scalePlusConversion, format: (v) => formatPercent(v), tiebreaker: (a) => a.scalePlusCount ?? 0 },
-    { key: "totalConversion", label: "Toplam dönüşüm %", getValue: (a) => a.totalConversion, format: (v) => formatPercent(v), tiebreaker: (a) => (a.scaleCount ?? 0) + (a.scalePlusCount ?? 0) },
+    { key: "twoPlusOneCount", label: "2+1", getValue: (a) => getTwoPlusOneCount(a), format: (v) => formatNumber(v) },
+    { key: "twoPlusOnePercent", label: "%2+1", getValue: (a) => getTwoPlusOnePercent(a), format: (v) => formatPercent(v), tiebreaker: (a) => getTwoPlusOneCount(a) },
+    { key: "preOnbCount", label: "Pre Onb", getValue: (a) => a.preOnbCount, format: (v) => formatNumber(v) },
+    { key: "hubspotScore", label: "Hubspot", getValue: (a) => a.hubspotScore, format: (v) => formatNumber(v, 3) },
+    { key: "domainCount", label: "Domain", getValue: (a) => a.domainCount, format: (v) => formatNumber(v) },
+    { key: "outboundLeadCount", label: "Outbound / Eski Lead", getValue: (a) => a.outboundLeadCount, format: (v) => formatNumber(v) },
   ], []);
 
   const metricRankMap = useMemo(() => {
@@ -430,15 +444,12 @@ export function SalesRepresentativesPage() {
   }, [selectedRepresentative, metricRankMap]);
 
   useEffect(() => {
-    if (
-      isTopInAnyMetric &&
-      selectedRepresentative &&
-      !confettiFiredRef.current.has(selectedRepresentative.agentKey)
-    ) {
-      confettiFiredRef.current.add(selectedRepresentative.agentKey);
-      fireConfetti();
-    }
-  }, [isTopInAnyMetric, selectedRepresentative, fireConfetti]);
+    if (!isTopInAnyMetric || !selectedRepresentative || !activePeriodIdsKey) return;
+    const storageKey = `sales-rep:${selectedRepresentative.agentKey}:${activePeriodIdsKey}`;
+    if (hasConfettiFired(storageKey)) return;
+    markConfettiFired(storageKey);
+    fireConfetti();
+  }, [isTopInAnyMetric, selectedRepresentative, activePeriodIdsKey, fireConfetti]);
 
   const topMetricLabels = useMemo(() => {
     const labels: string[] = [];
@@ -446,6 +457,17 @@ export function SalesRepresentativesPage() {
       if (metricRankMap[def.key]?.rank === 1) labels.push(def.label);
     }
     if (metricRankMap["auditScore"]?.rank === 1) labels.push("Audit skoru");
+    return labels;
+  }, [metricDefs, metricRankMap]);
+
+  const lowMetricLabels = useMemo(() => {
+    const labels: string[] = [];
+    for (const def of metricDefs) {
+      const r = metricRankMap[def.key];
+      if (r && r.total >= 2 && r.rank === r.total) labels.push(def.label);
+    }
+    const auditRank = metricRankMap["auditScore"];
+    if (auditRank && auditRank.total >= 2 && auditRank.rank === auditRank.total) labels.push("Audit skoru");
     return labels;
   }, [metricDefs, metricRankMap]);
 
@@ -492,11 +514,12 @@ export function SalesRepresentativesPage() {
       callAttempts: avg(kpiAgents.map((a) => a.callAttempts)),
       talkDurationSeconds: avg(kpiAgents.map((a) => a.talkDurationSeconds)),
       avgLicensePrice: avg(kpiAgents.map((a) => a.avgLicensePrice)),
-      scaleCount: avg(kpiAgents.map((a) => a.scaleCount)),
-      scalePlusCount: avg(kpiAgents.map((a) => a.scalePlusCount)),
-      scaleConversion: avg(kpiAgents.map((a) => a.scaleConversion)),
-      scalePlusConversion: avg(kpiAgents.map((a) => a.scalePlusConversion)),
-      totalConversion: avg(kpiAgents.map((a) => a.totalConversion)),
+      twoPlusOneCount: avg(kpiAgents.map((a) => getTwoPlusOneCount(a))),
+      twoPlusOnePercent: avg(kpiAgents.map((a) => getTwoPlusOnePercent(a))),
+      preOnbCount: avg(kpiAgents.map((a) => a.preOnbCount)),
+      hubspotScore: avg(kpiAgents.map((a) => a.hubspotScore)),
+      domainCount: avg(kpiAgents.map((a) => a.domainCount)),
+      outboundLeadCount: avg(kpiAgents.map((a) => a.outboundLeadCount)),
       auditScore: avg(auditMetrics.map((a) => a.auditScore)),
     } as Record<string, number | null>;
   }, [kpiAgents, auditMetrics]);
@@ -528,11 +551,12 @@ export function SalesRepresentativesPage() {
             callAttempts: agent?.callAttempts ?? null,
             perfScore: agent?.perfScore ?? null,
             avgLicensePrice: agent?.avgLicensePrice ?? null,
-            scaleCount: agent?.scaleCount ?? null,
-            scalePlusCount: agent?.scalePlusCount ?? null,
-            scaleConversion: agent?.scaleConversion ?? null,
-            scalePlusConversion: agent?.scalePlusConversion ?? null,
-            totalConversion: agent?.totalConversion ?? null,
+            twoPlusOneCount: agent ? getTwoPlusOneCount(agent) : null,
+            twoPlusOnePercent: agent ? getTwoPlusOnePercent(agent) : null,
+            preOnbCount: agent?.preOnbCount ?? null,
+            hubspotScore: agent?.hubspotScore ?? null,
+            domainCount: agent?.domainCount ?? null,
+            outboundLeadCount: agent?.outboundLeadCount ?? null,
             isCurrent: period.id === periodId
           };
         })
@@ -546,14 +570,19 @@ export function SalesRepresentativesPage() {
     enabled: last6Periods.length > 0 && Boolean(selectedAgentKey),
     queryKey: ["sales-rep-audit-trend", auth.token, selectedAgentKey, last6Periods.map((p) => p.id).join(","), periodId],
     queryFn: async () => {
-      const map = await api.getAuditMetricsForPeriods(auth.token, last6Periods.map((p) => p.id));
-      return last6Periods.map((period) => {
-        const audits = map[period.id] ?? [];
+      const [auditMap, kpiResults] = await Promise.all([
+        api.getAuditMetricsForPeriods(auth.token, last6Periods.map((p) => p.id)),
+        Promise.all(last6Periods.map((period) => api.getSalesKpiData(auth.token, period.id)))
+      ]);
+      return last6Periods.map((period, idx) => {
+        const audits = auditMap[period.id] ?? [];
         const agentAudit = audits.find((a) => a.agentKey === selectedAgentKey);
+        const kpi = kpiResults[idx];
+        const kpiAgent = kpi && "agents" in kpi ? kpi.agents.find((a) => a.agentKey === selectedAgentKey) : undefined;
         return {
           label: formatShortMonth(period.month),
           fullLabel: period.title ?? period.month,
-          auditScore: agentAudit?.auditScore ?? null,
+          auditScore: agentAudit?.auditScore ?? kpiAgent?.perfScore ?? null,
           isCurrent: period.id === periodId
         };
       });
@@ -580,11 +609,12 @@ export function SalesRepresentativesPage() {
         conversionRate: prev?.conversionRate ?? null,
         callAttempts: prev?.callAttempts ?? null,
         talkDurationSeconds: prev?.talkDurationSeconds ?? null,
-        scaleCount: prev?.scaleCount ?? null,
-        scalePlusCount: prev?.scalePlusCount ?? null,
-        scaleConversion: prev?.scaleConversion ?? null,
-        scalePlusConversion: prev?.scalePlusConversion ?? null,
-        totalConversion: prev?.totalConversion ?? null,
+        twoPlusOneCount: prev?.twoPlusOneCount ?? null,
+        twoPlusOnePercent: prev?.twoPlusOnePercent ?? null,
+        preOnbCount: prev?.preOnbCount ?? null,
+        hubspotScore: prev?.hubspotScore ?? null,
+        domainCount: prev?.domainCount ?? null,
+        outboundLeadCount: prev?.outboundLeadCount ?? null,
         avgLicensePrice: prev?.avgLicensePrice ?? null,
         auditScore: prevAudit?.auditScore ?? null,
       } as Record<string, number | null>;
@@ -603,11 +633,12 @@ export function SalesRepresentativesPage() {
       conversionRate: prevAgent?.conversionRate ?? null,
       callAttempts: prevAgent?.callAttempts ?? null,
       talkDurationSeconds: prevAgent?.talkDurationSeconds ?? null,
-      scaleCount: prevAgent?.scaleCount ?? null,
-      scalePlusCount: prevAgent?.scalePlusCount ?? null,
-      scaleConversion: prevAgent?.scaleConversion ?? null,
-      scalePlusConversion: prevAgent?.scalePlusConversion ?? null,
-      totalConversion: prevAgent?.totalConversion ?? null,
+      twoPlusOneCount: prevAgent ? getTwoPlusOneCount(prevAgent) : null,
+      twoPlusOnePercent: prevAgent ? getTwoPlusOnePercent(prevAgent) : null,
+      preOnbCount: prevAgent?.preOnbCount ?? null,
+      hubspotScore: prevAgent?.hubspotScore ?? null,
+      domainCount: prevAgent?.domainCount ?? null,
+      outboundLeadCount: prevAgent?.outboundLeadCount ?? null,
       avgLicensePrice: prevAgent?.avgLicensePrice ?? null,
       auditScore: prevAudit?.auditScore ?? null,
     } as Record<string, number | null>;
@@ -691,22 +722,26 @@ export function SalesRepresentativesPage() {
               options={representatives.map((item) => ({ key: item.agentKey, label: item.agentName }))}
               value={selectedRepresentative?.agentKey ?? ""}
               onChange={handleRepresentativeChange}
+              lockedTo={repScope.isRepresentative ? repScope.lockedKey : undefined}
+              lockedLabel={repScope.displayName}
             />
-            <Link
-              to={`/sales/compare${selectedRepresentative ? `?a=${selectedRepresentative.agentKey}` : ""}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
-            >
-              <GitCompareArrows size={14} />
-              <span className="hidden sm:inline">Karşılaştır</span>
-            </Link>
+            {!repScope.isRepresentative ? (
+              <Link
+                to={`/sales/compare${selectedRepresentative ? `?a=${selectedRepresentative.agentKey}` : ""}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
+              >
+                <GitCompareArrows size={14} />
+                <span className="hidden sm:inline">Karşılaştır</span>
+              </Link>
+            ) : null}
           </div>
         }
       >
         {selectedRepresentative ? (
           <div className="space-y-6">
             <section className="surface-default rounded-[10px] border border-white/75 p-4 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:shadow-none">
-              <div className="flex gap-5">
-                <div className="w-44 shrink-0 self-stretch overflow-hidden rounded-[10px] border border-slate-200 dark:border-slate-600/40">
+              <div className="flex items-start gap-5">
+                <div className="aspect-[3/4] w-44 shrink-0 overflow-hidden rounded-[10px] border border-slate-200 dark:border-slate-600/40">
                   <img
                     alt={selectedName}
                     className="h-full w-full object-cover"
@@ -728,11 +763,16 @@ export function SalesRepresentativesPage() {
                           Kariyer yolu
                         </button>
                       </div>
-                      {topMetricLabels.length > 0 ? (
+                      {topMetricLabels.length > 0 || lowMetricLabels.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {topMetricLabels.map((label) => (
-                            <span key={label} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            <span key={`top-${label}`} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
                               <span className="text-amber-500">&#9733;</span> {label} birincisi
+                            </span>
+                          ))}
+                          {lowMetricLabels.map((label) => (
+                            <span key={`low-${label}`} className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-700/40 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                              <span className="text-rose-500">&#9660;</span> {label} en düşük
                             </span>
                           ))}
                         </div>
@@ -751,9 +791,12 @@ export function SalesRepresentativesPage() {
                         { metricKey: "licenseCount", label: "Lisans", value: formatOrNa(selectedKpi?.licenseCount, (v) => formatNumber(v)), raw: selectedKpi?.licenseCount, fmt: (v: number) => formatNumber(v) },
                         { metricKey: "talkDurationSeconds", label: "Konuşma", value: formatOrNa(selectedKpi?.talkDurationSeconds, formatHms), raw: selectedKpi?.talkDurationSeconds, fmt: formatHms },
                         { metricKey: "conversionRate", label: "Dönüşüm", value: formatOrNa(selectedKpi?.conversionRate, (v) => formatPercent(v)), raw: selectedKpi?.conversionRate, fmt: (v: number) => formatPercent(v) },
-                        { metricKey: "scaleCount", label: "Scale 2+1", value: formatOrNa(selectedKpi?.scaleCount, (v) => formatNumber(v)), raw: selectedKpi?.scaleCount, fmt: (v: number) => formatNumber(v) },
-                        { metricKey: "scalePlusCount", label: "Scale+ 2+1", value: formatOrNa(selectedKpi?.scalePlusCount, (v) => formatNumber(v)), raw: selectedKpi?.scalePlusCount, fmt: (v: number) => formatNumber(v) },
-                        { metricKey: "totalConversion", label: "Toplam %", value: formatOrNa(selectedKpi?.totalConversion, (v) => formatPercent(v)), raw: selectedKpi?.totalConversion, fmt: (v: number) => formatPercent(v) },
+                        { metricKey: "twoPlusOneCount", label: "2+1", value: formatOrNa(selectedKpi ? getTwoPlusOneCount(selectedKpi) : null, (v) => formatNumber(v)), raw: selectedKpi ? getTwoPlusOneCount(selectedKpi) : null, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "twoPlusOnePercent", label: "%2+1", value: formatOrNa(selectedKpi ? getTwoPlusOnePercent(selectedKpi) : null, (v) => formatPercent(v)), raw: selectedKpi ? getTwoPlusOnePercent(selectedKpi) : null, fmt: (v: number) => formatPercent(v) },
+                        { metricKey: "preOnbCount", label: "Pre Onb", value: formatOrNa(selectedKpi?.preOnbCount, (v) => formatNumber(v)), raw: selectedKpi?.preOnbCount, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "hubspotScore", label: "Hubspot", value: formatOrNa(selectedKpi?.hubspotScore, (v) => formatNumber(v, 3)), raw: selectedKpi?.hubspotScore, fmt: (v: number) => formatNumber(v, 3) },
+                        { metricKey: "domainCount", label: "Domain", value: formatOrNa(selectedKpi?.domainCount, (v) => formatNumber(v)), raw: selectedKpi?.domainCount, fmt: (v: number) => formatNumber(v) },
+                        { metricKey: "outboundLeadCount", label: "Outbound", value: formatOrNa(selectedKpi?.outboundLeadCount, (v) => formatNumber(v)), raw: selectedKpi?.outboundLeadCount, fmt: (v: number) => formatNumber(v) },
                       ] as const).map((card) => (
                         <RankedMetricCard
                           key={card.metricKey}
@@ -826,30 +869,42 @@ export function SalesRepresentativesPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="2+1 Dönüşüm">
+              <SectionCard title="2+1 ve Aktivite">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Scale 2+1</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">2+1</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                      {formatOrNa(selectedKpi?.scaleCount, (v) => formatNumber(v))}
+                      {formatOrNa(selectedKpi ? getTwoPlusOneCount(selectedKpi) : null, (v) => formatNumber(v))}
                     </p>
                   </div>
                   <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Scale %</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">%2+1</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                      {formatOrNa(selectedKpi?.scaleConversion, (v) => formatPercent(v))}
+                      {formatOrNa(selectedKpi ? getTwoPlusOnePercent(selectedKpi) : null, (v) => formatPercent(v))}
                     </p>
                   </div>
                   <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Scale Plus 2+1</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Pre Onb</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                      {formatOrNa(selectedKpi?.scalePlusCount, (v) => formatNumber(v))}
+                      {formatOrNa(selectedKpi?.preOnbCount, (v) => formatNumber(v))}
                     </p>
                   </div>
                   <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Scale Plus %</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Hubspot</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                      {formatOrNa(selectedKpi?.scalePlusConversion, (v) => formatPercent(v))}
+                      {formatOrNa(selectedKpi?.hubspotScore, (v) => formatNumber(v, 3))}
+                    </p>
+                  </div>
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Domain</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                      {formatOrNa(selectedKpi?.domainCount, (v) => formatNumber(v))}
+                    </p>
+                  </div>
+                  <div className="rounded-[10px] border border-white/45 bg-white/62 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-slate-600/40 dark:bg-slate-800/60">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Outbound / Eski Lead</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                      {formatOrNa(selectedKpi?.outboundLeadCount, (v) => formatNumber(v))}
                     </p>
                   </div>
                 </div>
@@ -1044,7 +1099,7 @@ export function SalesRepresentativesPage() {
         />
       )}
 
-      {rankingModalData && (
+      {rankingModalData && !repScope.isRepresentative && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setRankingModalMetric(null)}>
           <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-600 dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">

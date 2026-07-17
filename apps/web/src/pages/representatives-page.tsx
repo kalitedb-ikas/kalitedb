@@ -1,8 +1,9 @@
-import { buildDashboardSnapshot, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, type AgentMetric, type AuditMetric } from "@kalitedb/shared";
+import { AUDIT_AVERAGE_EXCLUDED_KEYS, buildDashboardSnapshot, resolveThresholdTone, selectAuditMetrics, selectDefaultReportPeriod, type AgentMetric, type AuditMetric } from "@kalitedb/shared";
 import { ExecutiveChartCard, SectionCard, StatCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
+import confetti from "canvas-confetti";
 import { GitCompareArrows, Route } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   CartesianGrid,
@@ -21,15 +22,17 @@ import {
 import { useAuth } from "../lib/auth";
 import { useDarkMode } from "../lib/use-dark-mode";
 import { api } from "../lib/api";
+import { hasConfettiFired, markConfettiFired } from "../lib/confetti-once";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { brand, chart, chartDark, chartTooltipLight, chartTooltipDark } from "../theme/colors";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { RepresentativeSelect } from "../components/representative-select";
+import { useRepScope } from "../lib/use-rep-scope";
 import { BadgePill } from "../components/representative-detail-modal";
 import { CareerPathModal } from "../components/career-path-modal";
-import { useActiveRepresentativeKeys } from "../lib/use-active-representatives";
+import { useActiveRepresentativeKeys, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 
 function formatOrNa(value: number | null | undefined, formatter: (value: number) => string) {
   return value === null || value === undefined ? "N/A" : formatter(value);
@@ -68,6 +71,7 @@ function resolveCsatTone(value: number | null | undefined) {
 
 export function RepresentativesPage() {
   const auth = useAuth();
+  const repScope = useRepScope();
   const [searchParams, setSearchParams] = useSearchParams();
   const now = new Date();
   const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
@@ -181,7 +185,31 @@ export function RepresentativesPage() {
   const rawId = searchParams.get("id");
   const legacyKey = searchParams.get("agentKey");
   const decodedKey = rawId ? (() => { try { return atob(rawId); } catch { return null; } })() : null;
-  const selectedAgentKey = decodedKey ?? legacyKey ?? representatives[0]?.agentKey;
+
+  const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
+
+  /* En yüksek CSAT, eşitlikte en yüksek görüşme — başlangıç seçimi.
+     Çeyreklik view'da premium_onboarding etiketli temsilciler ilk sırada olamaz. */
+  const defaultBestKey = useMemo(() => {
+    const agents = snapshot?.datasets.agentMetrics ?? [];
+    const excludePremium = periodRange.viewMode === "ceyreklik";
+    const valid = agents.filter((a) => {
+      if (a.callEvaluationAverage == null) return false;
+      if (excludePremium && premiumOnboardingKeys.has(a.agentKey)) return false;
+      return true;
+    });
+    if (valid.length === 0) return undefined;
+    const sorted = [...valid].sort((a, b) => {
+      const csatDiff = (b.callEvaluationAverage ?? 0) - (a.callEvaluationAverage ?? 0);
+      if (csatDiff !== 0) return csatDiff;
+      return (b.totalConversationCount ?? 0) - (a.totalConversationCount ?? 0);
+    });
+    return sorted[0]?.agentKey;
+  }, [snapshot, periodRange.viewMode, premiumOnboardingKeys]);
+
+  const selectedAgentKey = repScope.isRepresentative
+    ? repScope.lockedKey
+    : decodedKey ?? legacyKey ?? defaultBestKey ?? representatives[0]?.agentKey;
   const selectedRepresentative = representatives.find((item) => item.agentKey === selectedAgentKey) ?? representatives[0] ?? null;
   const selectedAgent =
     snapshot?.datasets.agentMetrics.find((record) => record.agentKey === selectedRepresentative?.agentKey) ?? null;
@@ -262,27 +290,34 @@ export function RepresentativesPage() {
     ];
   }, [selectedAgent, selectedAudit, snapshot?.thresholds]);
 
-  /* ── "En'ler" — temsilci bu metrikte 1. sıradaysa ── */
-  const topMetricLabels = useMemo(() => {
-    if (!selectedRepresentative) return [] as string[];
+  const chatMailKeys = useRepresentativeKeysWithBadge("chat_mail");
+
+  /* ── "En'ler" — temsilci bu metrikte 1. veya sonuncu sıradaysa.
+       CSAT'te premium_onboarding, Konuşma süresi'nde chat_mail etiketliler sıralamadan hariç. ── */
+  const rankedMetricLabels = useMemo(() => {
+    type LowLabel = { label: string; suffix: string };
+    const empty = { top: [] as string[], low: [] as LowLabel[] };
+    if (!selectedRepresentative) return empty;
     const agents = snapshot?.datasets.agentMetrics ?? [];
-    if (agents.length < 2) return [];
+    if (agents.length < 2) return empty;
     const key = selectedRepresentative.agentKey;
-    type Def = { label: string; getValue: (a: typeof agents[number]) => number | null | undefined; direction?: "higher" | "lower" };
+    type Def = { label: string; getValue: (a: typeof agents[number]) => number | null | undefined; direction?: "higher" | "lower"; excludeKeys?: Set<string>; noTopBadge?: boolean };
     const defs: Def[] = [
-      { label: "CSAT", getValue: (a) => a.callEvaluationAverage },
+      { label: "CSAT", getValue: (a) => a.callEvaluationAverage, excludeKeys: premiumOnboardingKeys },
       { label: "Lokal kapatma", getValue: (a) => a.localCloseRate },
       { label: "Toplam görüşme", getValue: (a) => a.totalConversationCount },
       { label: "Çağrı", getValue: (a) => a.totalCallCount },
       { label: "Chat / e-posta", getValue: (a) => a.totalChatMailCount },
       { label: "Ticket", getValue: (a) => a.totalTicketClosedCount },
       { label: "Değerlendirme", getValue: (a) => a.evaluationCount },
-      { label: "Konuşma süresi", getValue: (a) => a.avgTalkDurationSeconds, direction: "lower" },
-      { label: "Kaçan çağrı", getValue: (a) => a.missedCalls, direction: "lower" }
+      { label: "Konuşma süresi", getValue: (a) => a.avgTalkDurationSeconds, direction: "lower", excludeKeys: chatMailKeys },
+      // "Kaçan çağrı birincisi" rozeti verilmez; yalnızca "en fazla" uyarısı kalır.
+      { label: "Kaçan çağrı", getValue: (a) => a.missedCalls, direction: "lower", noTopBadge: true }
     ];
-    const labels: string[] = [];
+    const top: string[] = [];
+    const low: LowLabel[] = [];
     for (const def of defs) {
-      const valid = agents.filter((a) => def.getValue(a) != null);
+      const valid = agents.filter((a) => def.getValue(a) != null && !def.excludeKeys?.has(a.agentKey));
       if (valid.length < 2) continue;
       const me = valid.find((a) => a.agentKey === key);
       if (!me) continue;
@@ -291,7 +326,14 @@ export function RepresentativesPage() {
         const v = def.getValue(a) as number;
         return def.direction === "lower" ? v < myValue : v > myValue;
       });
-      if (!hasBetter) labels.push(def.label);
+      const hasWorse = valid.some((a) => {
+        const v = def.getValue(a) as number;
+        return def.direction === "lower" ? v > myValue : v < myValue;
+      });
+      if (!hasBetter && !def.noTopBadge) top.push(def.label);
+      // "lower" yönlü metriklerde (Konuşma süresi, Kaçan çağrı) en kötü durum en YÜKSEK
+      // değerdir — "en düşük" değil "en fazla" demek gerekir.
+      if (!hasWorse) low.push({ label: def.label, suffix: def.direction === "lower" ? "en fazla" : "en düşük" });
     }
     // Audit — tie-aware
     const validAudit = auditMetrics.filter((a) => a.auditScore != null);
@@ -300,11 +342,15 @@ export function RepresentativesPage() {
       if (me) {
         const myScore = me.auditScore ?? 0;
         const hasBetter = validAudit.some((a) => (a.auditScore ?? 0) > myScore);
-        if (!hasBetter) labels.push("Audit");
+        const hasWorse = validAudit.some((a) => (a.auditScore ?? 0) < myScore);
+        if (!hasBetter) top.push("Audit");
+        if (!hasWorse) low.push({ label: "Audit", suffix: "en düşük" });
       }
     }
-    return labels;
-  }, [selectedRepresentative, snapshot?.datasets.agentMetrics, auditMetrics]);
+    return { top, low };
+  }, [selectedRepresentative, snapshot?.datasets.agentMetrics, auditMetrics, premiumOnboardingKeys, chatMailKeys]);
+  const topMetricLabels = rankedMetricLabels.top;
+  const lowMetricLabels = rankedMetricLabels.low;
 
   const [showCareerModal, setShowCareerModal] = useState(false);
 
@@ -360,12 +406,17 @@ export function RepresentativesPage() {
 
   const rankingModalData = useMemo(() => {
     if (!rankingModalMetric) return null;
+    const nameTiebreaker = (a: { agentName?: string | null }, b: { agentName?: string | null }) =>
+      (a.agentName ?? "").localeCompare(b.agentName ?? "", "tr");
     if (rankingModalMetric === "auditScore") {
       const valid = auditMetrics.filter((a) => a.auditScore != null);
       return {
         label: "Audit skoru",
         rows: [...valid]
-          .sort((a, b) => (b.auditScore ?? 0) - (a.auditScore ?? 0))
+          .sort((a, b) => {
+            const diff = (b.auditScore ?? 0) - (a.auditScore ?? 0);
+            return diff !== 0 ? diff : nameTiebreaker(a, b);
+          })
           .map((a, i) => ({ rank: i + 1, agentKey: a.agentKey, name: a.agentName, value: formatAuditScore(a.auditScore!) }))
       };
     }
@@ -378,7 +429,8 @@ export function RepresentativesPage() {
         .sort((a, b) => {
           const av = def.getValue(a) as number;
           const bv = def.getValue(b) as number;
-          return def.direction === "lower" ? av - bv : bv - av;
+          const diff = def.direction === "lower" ? av - bv : bv - av;
+          return diff !== 0 ? diff : nameTiebreaker(a, b);
         })
         .map((a, i) => ({ rank: i + 1, agentKey: a.agentKey, name: a.agentName, value: def.format(def.getValue(a) as number) }))
     };
@@ -389,15 +441,21 @@ export function RepresentativesPage() {
       const valid = values.filter((v): v is number => v != null);
       return valid.length > 0 ? valid.reduce((s, v) => s + v, 0) / valid.length : null;
     };
+    // CSAT ortalaması, CSAT sayfasıyla tutarlı olacak şekilde 'premium_onboarding' etiketli
+    // temsilciler hariç hesaplanır; diğer metrikler tüm temsilcilerden ortalanır.
+    const csatAgents = csAgents.filter((a) => !premiumOnboardingKeys.has(a.agentKey));
     return {
-      callEvaluationAverage: avg(csAgents.map((a) => a.callEvaluationAverage)),
+      callEvaluationAverage: avg(csatAgents.map((a) => a.callEvaluationAverage)),
       totalConversationCount: avg(csAgents.map((a) => a.totalConversationCount)),
       localCloseRate: avg(csAgents.map((a) => a.localCloseRate)),
       avgTalkDurationSeconds: avg(csAgents.map((a) => a.avgTalkDurationSeconds)),
       evaluationCount: avg(csAgents.map((a) => a.evaluationCount)),
-      auditScore: avg(auditMetrics.map((a) => a.auditScore)),
+      // Audit ortalaması doğrudan audit import'undan; AUDIT_AVERAGE_EXCLUDED_KEYS hariç.
+      auditScore: avg(
+        auditMetrics.filter((a) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey)).map((a) => a.auditScore)
+      ),
     } as Record<string, number | null>;
-  }, [csAgents, auditMetrics]);
+  }, [csAgents, auditMetrics, premiumOnboardingKeys]);
 
   const prevPeriodValues = useMemo(() => {
     const currentIdx = trendData.findIndex((p) => p.isCurrent);
@@ -434,6 +492,27 @@ export function RepresentativesPage() {
   };
   const labelFill = (lineColor: string) => (isDark ? lineColor : (LIGHT_LABEL_FILL[lineColor] ?? "#1F2839"));
 
+  /* ── Konfeti: URL'de seçim yokken otomatik seçilen "en iyi" temsilci için, dönem başına bir kez patlar ── */
+  const fireConfetti = useCallback(() => {
+    const end = Date.now() + 2500;
+    const frame = () => {
+      confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0, y: 0.6 } });
+      confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1, y: 0.6 } });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  }, []);
+
+  useEffect(() => {
+    if (rawId || legacyKey) return; // kullanıcı URL ile geldi — otomatik seçim değil
+    if (!defaultBestKey || selectedAgentKey !== defaultBestKey) return;
+    if (activePeriodIds.length === 0) return;
+    const storageKey = `cs-rep:${defaultBestKey}:${activePeriodIds.join(",")}`;
+    if (hasConfettiFired(storageKey)) return;
+    markConfettiFired(storageKey);
+    fireConfetti();
+  }, [rawId, legacyKey, defaultBestKey, selectedAgentKey, activePeriodIds, fireConfetti]);
+
   const handleRepresentativeChange = (agentKey: string) => {
     const next = new URLSearchParams(searchParams);
     next.set("id", btoa(agentKey));
@@ -452,14 +531,18 @@ export function RepresentativesPage() {
               options={representatives.map((item) => ({ key: item.agentKey, label: item.agentName }))}
               value={selectedRepresentative?.agentKey ?? ""}
               onChange={handleRepresentativeChange}
+              lockedTo={repScope.isRepresentative ? repScope.lockedKey : undefined}
+              lockedLabel={repScope.displayName}
             />
-            <Link
-              to={`/cs/compare${selectedRepresentative ? `?a=${selectedRepresentative.agentKey}` : ""}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
-            >
-              <GitCompareArrows size={14} />
-              <span className="hidden sm:inline">Karşılaştır</span>
-            </Link>
+            {!repScope.isRepresentative ? (
+              <Link
+                to={`/cs/compare${selectedRepresentative ? `?a=${selectedRepresentative.agentKey}` : ""}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
+              >
+                <GitCompareArrows size={14} />
+                <span className="hidden sm:inline">Karşılaştır</span>
+              </Link>
+            ) : null}
           </div>
         }
       >
@@ -489,11 +572,16 @@ export function RepresentativesPage() {
                           Kariyer yolu
                         </button>
                       </div>
-                      {topMetricLabels.length > 0 ? (
+                      {topMetricLabels.length > 0 || lowMetricLabels.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {topMetricLabels.map((label) => (
-                            <span key={label} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            <span key={`top-${label}`} className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-700/40 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
                               <span className="text-amber-500">&#9733;</span> {label} birincisi
+                            </span>
+                          ))}
+                          {lowMetricLabels.map((item) => (
+                            <span key={`low-${item.label}`} className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-700/40 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                              <span className="text-rose-500">&#9660;</span> {item.label} {item.suffix}
                             </span>
                           ))}
                         </div>
@@ -807,7 +895,7 @@ export function RepresentativesPage() {
         />
       )}
 
-      {rankingModalData && (
+      {rankingModalData && !repScope.isRepresentative && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setRankingModalMetric(null)}>
           <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-600 dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">

@@ -94,8 +94,13 @@ export function getFirebaseAdminAuth() {
   return getAuth(getFirebaseAdminApp());
 }
 
+let firestoreInstance: ReturnType<typeof getFirestore> | undefined;
+
 export function getFirebaseAdminDb() {
-  return getFirestore(getFirebaseAdminApp());
+  if (firestoreInstance) return firestoreInstance;
+  firestoreInstance = getFirestore(getFirebaseAdminApp());
+  firestoreInstance.settings({ ignoreUndefinedProperties: true });
+  return firestoreInstance;
 }
 
 export function getFirebaseAdminStorage() {

@@ -1,3 +1,5 @@
+import { buildDashboardSnapshot } from "@kalitedb/shared";
+import type { DashboardSnapshot, RepresentativeExclusionSurface, RepresentativeTableExclusion } from "@kalitedb/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
@@ -45,4 +47,68 @@ export function useRepresentativeKeysWithBadge(badgeKey: string): Set<string> {
     const reps = query.data ?? [];
     return new Set(reps.filter((r) => (r.badges ?? []).includes(badgeKey)).map((r) => r.key));
   }, [query.data, badgeKey]);
+}
+
+/**
+ * Belirli bir CS yüzeyinden ("audit" | "csat" | "dashboard") hariç tutulan
+ * temsilci key'lerini döner. İşaret temsilci yönetimindeki "Dahil Olduğu
+ * Alanlar" toggle'larından gelir; hariç tutulan temsilci o sayfada tablo,
+ * ortalama ve grafiklerden TAMAMEN çıkar (satici_operasyon gizlemesinden
+ * farklı — o özet hesaplarında kalır).
+ */
+export function useRepresentativeKeysExcludedFrom(surface: RepresentativeExclusionSurface): Set<string> {
+  const auth = useAuth();
+
+  const query = useQuery({
+    queryKey: ["representatives", auth.token],
+    queryFn: () => api.getRepresentatives(auth.token),
+    staleTime: 10 * 60 * 1000
+  });
+
+  return useMemo(() => {
+    const reps = query.data ?? [];
+    return new Set(reps.filter((r) => (r.exclusions ?? []).includes(surface)).map((r) => r.key));
+  }, [query.data, surface]);
+}
+
+/**
+ * Belirli bir HAM tablodan ("audit" | "csat") hariç tutulan temsilci
+ * key'lerini döner. İşaret temsilci yönetimindeki "Dahil Olduğu Tablolar"
+ * toggle'larından gelir; useRepresentativeKeysExcludedFrom'dan farklı — bu
+ * yalnızca ilgili tablonun satırından çıkarır, ortalama ve grafik
+ * hesaplarına dokunmaz.
+ */
+export function useRepresentativeKeysExcludedFromTable(table: RepresentativeTableExclusion): Set<string> {
+  const auth = useAuth();
+
+  const query = useQuery({
+    queryKey: ["representatives", auth.token],
+    queryFn: () => api.getRepresentatives(auth.token),
+    staleTime: 10 * 60 * 1000
+  });
+
+  return useMemo(() => {
+    const reps = query.data ?? [];
+    return new Set(reps.filter((r) => (r.tableExclusions ?? []).includes(table)).map((r) => r.key));
+  }, [query.data, table]);
+}
+
+/**
+ * Snapshot'tan hariç tutulan temsilcileri düşürüp özeti yeniden hesaplar.
+ * Küme boşsa snapshot'a dokunmaz (aylık görünümde sunucu özeti korunur).
+ */
+export function excludeAgentsFromSnapshot(
+  snapshot: DashboardSnapshot | undefined,
+  excludedKeys: Set<string>
+): DashboardSnapshot | undefined {
+  if (!snapshot || excludedKeys.size === 0) return snapshot;
+  return buildDashboardSnapshot({
+    period: snapshot.period,
+    datasets: {
+      ...snapshot.datasets,
+      agentMetrics: snapshot.datasets.agentMetrics.filter((a) => !excludedKeys.has(a.agentKey)),
+      auditMetrics: snapshot.datasets.auditMetrics.filter((a) => !excludedKeys.has(a.agentKey))
+    },
+    thresholds: snapshot.thresholds
+  });
 }

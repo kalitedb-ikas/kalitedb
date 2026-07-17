@@ -57,11 +57,16 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
         scaleCount: 0,
         scale2Plus1Count: 0,
         scalePlusCount: 0,
-        scalePlus2Plus1Count: 0
+        scalePlus2Plus1Count: 0,
+        scale3Plus2Count: 0
       },
       targets: null
     };
   }
+
+  // İki taraf da null ise null kalır (kolon hiç gelmemiş), aksi halde toplar
+  const sumNullable = (a: number | null | undefined, b: number | null | undefined): number | null =>
+    a == null && b == null ? null : (a ?? 0) + (b ?? 0);
 
   // Temsilcileri agentKey bazında birleştir
   const agentMap = new Map<string, { sums: SalesKpiAgent; count: number }>();
@@ -77,6 +82,10 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
           talkDurationSeconds: existing.sums.talkDurationSeconds + agent.talkDurationSeconds,
           scaleCount: (existing.sums.scaleCount ?? 0) + (agent.scaleCount ?? 0),
           scalePlusCount: (existing.sums.scalePlusCount ?? 0) + (agent.scalePlusCount ?? 0),
+          twoPlusOneCount: sumNullable(existing.sums.twoPlusOneCount, agent.twoPlusOneCount),
+          preOnbCount: sumNullable(existing.sums.preOnbCount, agent.preOnbCount),
+          domainCount: sumNullable(existing.sums.domainCount, agent.domainCount),
+          outboundLeadCount: sumNullable(existing.sums.outboundLeadCount, agent.outboundLeadCount),
           // Oranları topluyoruz, sonra ortalama alacağız
           conversionRate: existing.sums.conversionRate + agent.conversionRate,
           avgLicensePrice: existing.sums.avgLicensePrice + agent.avgLicensePrice,
@@ -84,7 +93,9 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
           scaleConversion: (existing.sums.scaleConversion ?? 0) + (agent.scaleConversion ?? 0),
           scalePlusConversion:
             (existing.sums.scalePlusConversion ?? 0) + (agent.scalePlusConversion ?? 0),
-          totalConversion: (existing.sums.totalConversion ?? 0) + (agent.totalConversion ?? 0)
+          totalConversion: (existing.sums.totalConversion ?? 0) + (agent.totalConversion ?? 0),
+          twoPlusOnePercent: sumNullable(existing.sums.twoPlusOnePercent, agent.twoPlusOnePercent),
+          hubspotScore: sumNullable(existing.sums.hubspotScore, agent.hubspotScore)
         };
         existing.count++;
       } else {
@@ -100,7 +111,9 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
     perfScore: sums.perfScore !== null ? (sums.perfScore as number) / count : null,
     scaleConversion: (sums.scaleConversion ?? 0) / count,
     scalePlusConversion: (sums.scalePlusConversion ?? 0) / count,
-    totalConversion: (sums.totalConversion ?? 0) / count
+    totalConversion: (sums.totalConversion ?? 0) / count,
+    twoPlusOnePercent: sums.twoPlusOnePercent != null ? sums.twoPlusOnePercent / count : null,
+    hubspotScore: sums.hubspotScore != null ? sums.hubspotScore / count : null
   }));
 
   // Lisans özeti: toplama
@@ -109,7 +122,8 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
     scaleCount: 0,
     scale2Plus1Count: 0,
     scalePlusCount: 0,
-    scalePlus2Plus1Count: 0
+    scalePlus2Plus1Count: 0,
+    scale3Plus2Count: 0
   };
   for (const dataset of valid) {
     if (dataset.licenseSummary) {
@@ -118,6 +132,7 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
       licenseSummary.scale2Plus1Count += dataset.licenseSummary.scale2Plus1Count;
       licenseSummary.scalePlusCount += dataset.licenseSummary.scalePlusCount;
       licenseSummary.scalePlus2Plus1Count += dataset.licenseSummary.scalePlus2Plus1Count;
+      licenseSummary.scale3Plus2Count += dataset.licenseSummary.scale3Plus2Count ?? 0;
     }
   }
 
@@ -191,6 +206,15 @@ export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
       auditScoreCount: number;
       prevAuditSum: number;
       prevAuditCount: number;
+      email: string | null;
+      evaluatedChatSum: number;
+      evaluatedChatHasValue: boolean;
+      evaluatedMailSum: number;
+      evaluatedMailHasValue: boolean;
+      classicTicketSum: number;
+      classicTicketHasValue: boolean;
+      newTicketSum: number;
+      newTicketHasValue: boolean;
     }
   >();
 
@@ -237,6 +261,23 @@ export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
         existing.prevAuditSum += m.previousAuditAccuracy;
         existing.prevAuditCount += 1;
       }
+      if (m.email != null) existing.email = m.email;
+      if (m.evaluatedChatCount != null) {
+        existing.evaluatedChatSum += m.evaluatedChatCount;
+        existing.evaluatedChatHasValue = true;
+      }
+      if (m.evaluatedMailCount != null) {
+        existing.evaluatedMailSum += m.evaluatedMailCount;
+        existing.evaluatedMailHasValue = true;
+      }
+      if (m.classicTicketCount != null) {
+        existing.classicTicketSum += m.classicTicketCount;
+        existing.classicTicketHasValue = true;
+      }
+      if (m.newTicketCount != null) {
+        existing.newTicketSum += m.newTicketCount;
+        existing.newTicketHasValue = true;
+      }
     } else {
       grouped.set(m.agentKey, {
         id: m.id,
@@ -273,7 +314,16 @@ export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
         auditScoreSum: m.auditScore ?? 0,
         auditScoreCount: m.auditScore !== null ? 1 : 0,
         prevAuditSum: m.previousAuditAccuracy ?? 0,
-        prevAuditCount: m.previousAuditAccuracy !== null ? 1 : 0
+        prevAuditCount: m.previousAuditAccuracy !== null ? 1 : 0,
+        email: m.email ?? null,
+        evaluatedChatSum: m.evaluatedChatCount ?? 0,
+        evaluatedChatHasValue: m.evaluatedChatCount != null,
+        evaluatedMailSum: m.evaluatedMailCount ?? 0,
+        evaluatedMailHasValue: m.evaluatedMailCount != null,
+        classicTicketSum: m.classicTicketCount ?? 0,
+        classicTicketHasValue: m.classicTicketCount != null,
+        newTicketSum: m.newTicketCount ?? 0,
+        newTicketHasValue: m.newTicketCount != null
       });
     }
   }
@@ -302,7 +352,12 @@ export function aggregateAgentMetrics(metrics: AgentMetric[][]): AgentMetric[] {
       localCloseRate: g.localCloseRateCount > 0 ? g.localCloseRateSum / g.localCloseRateCount : null,
       missedCalls: g.missedCallsHasValue ? g.missedCallsSum : null,
       callEvaluationAverage: csat,
-      evaluationCount: g.evaluationCountHasValue ? g.evaluationCountSum : null
+      evaluationCount: g.evaluationCountHasValue ? g.evaluationCountSum : null,
+      email: g.email,
+      evaluatedChatCount: g.evaluatedChatHasValue ? g.evaluatedChatSum : null,
+      evaluatedMailCount: g.evaluatedMailHasValue ? g.evaluatedMailSum : null,
+      classicTicketCount: g.classicTicketHasValue ? g.classicTicketSum : null,
+      newTicketCount: g.newTicketHasValue ? g.newTicketSum : null
     });
   }
 

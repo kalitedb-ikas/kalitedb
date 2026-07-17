@@ -2,6 +2,8 @@ import { ChampionSpotlightCard, Leaderboard, PageHeader, SurfaceCard } from "@ka
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
+  applyTopRankPreference,
+  AUDIT_AVERAGE_EXCLUDED_KEYS,
   average,
   buildDashboardSnapshot,
   selectAuditMetrics,
@@ -9,8 +11,9 @@ import {
   type AgentMetric,
   type AuditMetric
 } from "@kalitedb/shared";
-import { TrendingDown, TrendingUp } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowLeftRight, TrendingDown, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
@@ -25,11 +28,15 @@ import {
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
-import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
-import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
+import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors, getQuarterPeriodIds } from "../lib/period-aggregation";
+import { excludeAgentsFromSnapshot, useRepresentativeKeysExcludedFrom, useRepresentativeKeysExcludedFromTable, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
+import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
 import { BadgeFilter } from "../components/badge-filter";
+import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
+import { CsvDownloadButton } from "../components/csv-download-button";
+import { exportToCsv } from "../lib/csv-export";
 import { CompactStatCard } from "../components/compact-stat-card";
 import { chart } from "../theme/colors";
 
@@ -47,12 +54,14 @@ const columnHelper = createColumnHelper<AuditAgentRow>();
 export function AuditPage() {
   const auth = useAuth();
   const now = new Date();
-  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+  const periodRangeDefaults = useMemo<PeriodRangeValue>(() => {
     const prevMonth = now.getMonth();
     const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
     const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
     return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [periodRange, setPeriodRange] = useUrlPeriodRange(periodRangeDefaults);
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -98,7 +107,7 @@ export function AuditPage() {
     queryFn: () => api.getAuditMetricsForPeriods(auth.token, yearPeriodIds),
     staleTime: 5 * 60 * 1000
   });
-  const aggregatedSnapshot = useMemo(() => {
+  const aggregatedSnapshotUnfiltered = useMemo(() => {
     if (!baseSnapshot) return undefined;
     if (periodRange.viewMode === "aylik") return baseSnapshot;
     if (activePeriodIds.length === 0) return baseSnapshot;
@@ -125,18 +134,37 @@ export function AuditPage() {
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
-  // Audit sayfasında tüm temsilciler gösterilir (Satıcı Operasyon, Premium Onboarding dahil).
+  // Temsilci yönetiminde "audit" alanından hariç tutulanlar bu sayfadan
+  // tamamen çıkar (tablo + ortalama + grafikler).
+  const auditExcludedKeys = useRepresentativeKeysExcludedFrom("audit");
+  const aggregatedSnapshot = useMemo(
+    () => excludeAgentsFromSnapshot(aggregatedSnapshotUnfiltered, auditExcludedKeys),
+    [aggregatedSnapshotUnfiltered, auditExcludedKeys]
+  );
+  // "Dahil Olduğu Tablolar"dan kapatılanlar yalnızca ham tablolardan (detay +
+  // aylık pivot) çıkar; ortalama ve grafik hesaplarına dokunmaz.
+  const auditTableExcludedKeys = useRepresentativeKeysExcludedFromTable("audit");
+
   const snapshot = aggregatedSnapshot;
-  // "Diğer" badge'li temsilciler tablo + ortalamalarda kalır, öne çıkanlardan (champion,
-  // lider tablosu, insight tile) hariç tutulur.
-  const highlightExcludedKeys = useRepresentativeKeysWithBadge("diger");
+  // "Diğer" ve "Start" badge'li temsilciler tablo + ortalamalarda kalır,
+  // öne çıkanlardan (champion, lider tablosu, insight tile) hariç tutulur.
+  const otherBadgeExcludedKeys = useRepresentativeKeysWithBadge("diger");
+  const startTeamKeys = useRepresentativeKeysWithBadge("start");
+  const highlightExcludedKeys = useMemo(
+    () => new Set<string>([...otherBadgeExcludedKeys, ...startTeamKeys]),
+    [otherBadgeExcludedKeys, startTeamKeys]
+  );
   const repsMap = useRepresentativesMap();
-  const [badgeFilter, setBadgeFilter] = useState<string>("");
+  const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
+  const [agentSearch, setAgentSearch] = useUrlParam("search", "");
   const previousAuditAccuracyLabel = useMemo(() => {
     const previousPeriod = getPreviousPeriod(snapshot?.period.month);
     return previousPeriod ? `${formatPeriodMonth(previousPeriod, { includeYear: true })} audit doğruluk oranı` : "Önceki audit doğruluk oranı";
   }, [snapshot?.period.month]);
-  const currentAudits = useMemo(() => (snapshot ? selectAuditMetrics(snapshot.datasets) : []), [snapshot]);
+  const currentAudits = useMemo(() => {
+    if (!snapshot) return [];
+    return selectAuditMetrics(snapshot.datasets);
+  }, [snapshot]);
   const highlightAudits = useMemo(
     () => currentAudits.filter((a) => !highlightExcludedKeys.has(a.agentKey)),
     [currentAudits, highlightExcludedKeys]
@@ -206,15 +234,28 @@ export function AuditPage() {
         return left.agentName.localeCompare(right.agentName, "tr");
       });
 
-    return sortedAgents.map((agent, index) => ({
+    const preferenceOrdered = applyTopRankPreference(
+      sortedAgents.map((agent) => ({ label: agent.agentName, value: agent.auditScoreDisplay, agent }))
+    ).map((item) => item.agent);
+
+    return preferenceOrdered.map((agent, index) => ({
       ...agent,
       listIndex: index + 1
     }));
   }, [currentAudits, snapshot]);
   const filteredAgents = useMemo(() => {
-    if (!badgeFilter) return agents;
-    return agents.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
-  }, [agents, badgeFilter, repsMap]);
+    let out = agents;
+    if (auditTableExcludedKeys.size > 0) {
+      out = out.filter((a) => !auditTableExcludedKeys.has(a.agentKey));
+    }
+    if (badgeFilter) {
+      out = out.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
+    }
+    if (agentSearch) {
+      out = out.filter((a) => matchesAgentSearch(a.agentName, agentSearch));
+    }
+    return out;
+  }, [agents, badgeFilter, agentSearch, repsMap, auditTableExcludedKeys]);
   const evaluatedAgentCount = useMemo(
     () =>
       (snapshot?.datasets.auditMetrics ?? []).filter(
@@ -292,7 +333,11 @@ export function AuditPage() {
 
     const points = trendYearPeriods.map((period) => {
       const audits = auditHistoryMap[period.id] ?? [];
-      const auditAverage = average(audits.filter((a) => !isAuditSummaryRow(a.agentName)).map((a) => a.auditScore));
+      const auditAverage = average(
+        audits
+          .filter((a) => !isAuditSummaryRow(a.agentName) && !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey) && !auditExcludedKeys.has(a.agentKey))
+          .map((a) => a.auditScore)
+      );
       return {
         periodId: period.id,
         period: period.month,
@@ -307,16 +352,35 @@ export function AuditPage() {
       currentPeriodId: periodId,
       points
     });
-  }, [auditHistoryMap, trendYearPeriods, periodId, selectedYear]);
+  }, [auditHistoryMap, trendYearPeriods, periodId, selectedYear, auditExcludedKeys]);
   const auditHistoryLoading = auditHistoryBulkQuery.isPending;
   const auditHistoryError = auditHistoryBulkQuery.isError;
 
-  /* ── Önceki dönem karşılaştırma ── */
-  const previousPeriod = useMemo(() => {
-    const idx = trendYearPeriods.findIndex((p) => p.id === periodId);
-    return idx > 0 ? trendYearPeriods[idx - 1] : undefined;
-  }, [trendYearPeriods, periodId]);
-  const previousAuditMetrics = previousPeriod && auditHistoryMap ? auditHistoryMap[previousPeriod.id] : undefined;
+  /* ── Önceki dönem karşılaştırma ──
+     Aylık view: önceki ay
+     Çeyreklik view: önceki çeyreğin (3 ayın) ortalaması
+     Yıllık view: karşılaştırma yapılmıyor (geçmiş yıl verisi sayfaya yüklenmiyor) */
+  const previousActivePeriodIds = useMemo<string[]>(() => {
+    if (periodRange.viewMode === "aylik") {
+      const idx = trendYearPeriods.findIndex((p) => p.id === periodId);
+      return idx > 0 ? [trendYearPeriods[idx - 1]!.id] : [];
+    }
+    if (periodRange.viewMode === "ceyreklik" && periodRange.quarter && periodRange.quarter > 1) {
+      return getQuarterPeriodIds(trendYearPeriods, periodRange.quarter - 1);
+    }
+    return [];
+  }, [periodRange.viewMode, periodRange.quarter, trendYearPeriods, periodId]);
+
+  const previousAuditMetrics = useMemo(() => {
+    if (!auditHistoryMap || previousActivePeriodIds.length === 0) return undefined;
+    if (previousActivePeriodIds.length === 1) {
+      return auditHistoryMap[previousActivePeriodIds[0]!] ?? [];
+    }
+    const perPeriod = previousActivePeriodIds.map((pid) => auditHistoryMap[pid] ?? []);
+    return aggregateAuditMetrics(perPeriod);
+  }, [auditHistoryMap, previousActivePeriodIds]);
+
+  const performanceShiftBaseTitle = periodRange.viewMode === "ceyreklik" ? "Çeyreklik değişim" : "Aylık değişim";
 
   const performanceShift = useMemo(() => {
     if (!previousAuditMetrics) {
@@ -339,10 +403,11 @@ export function AuditPage() {
 
         return {
           label: agent.agentName,
+          score: agent.auditScore,
           delta: Number((agent.auditScore - previousScore).toFixed(2))
         };
       })
-      .filter((item): item is { label: string; delta: number } => item !== null);
+      .filter((item): item is { label: string; score: number; delta: number } => item !== null);
 
     if (changes.length === 0) {
       return null;
@@ -357,7 +422,8 @@ export function AuditPage() {
       return {
         title: "Yükselen performans",
         names: leaders.map((item) => item.label).join(", "),
-        delta: highestIncrease
+        delta: highestIncrease,
+        score: leaders.length === 1 ? leaders[0]!.score : null
       };
     }
 
@@ -370,19 +436,21 @@ export function AuditPage() {
       return {
         title: "Düşen performans",
         names: leaders.map((item) => item.label).join(", "),
-        delta: biggestDecrease
+        delta: biggestDecrease,
+        score: leaders.length === 1 ? leaders[0]!.score : null
       };
     }
 
     return {
-      title: "Aylık değişim",
+      title: performanceShiftBaseTitle,
       names: changes
         .map((item) => item.label)
         .sort((left, right) => left.localeCompare(right, "tr"))
         .join(", "),
-      delta: 0
+      delta: 0,
+      score: null
     };
-  }, [highlightAudits, previousAuditMetrics]);
+  }, [highlightAudits, previousAuditMetrics, performanceShiftBaseTitle]);
 
   /* ── Aylık audit pivot tablosu (ortalama) ── */
   const auditMonthlyData = useMemo<MonthlyAgentRow[]>(() => {
@@ -397,6 +465,7 @@ export function AuditPage() {
 
       for (const audit of audits) {
         if (isAuditSummaryRow(audit.agentName)) continue;
+        if (auditExcludedKeys.has(audit.agentKey)) continue;
         agentMap.set(audit.agentKey, audit.agentName);
         if (!agentMonths.has(audit.agentKey)) {
           agentMonths.set(audit.agentKey, Array(12).fill(null));
@@ -412,11 +481,20 @@ export function AuditPage() {
         months: agentMonths.get(key) ?? Array(12).fill(null)
       }))
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
-  }, [auditHistoryMap, trendYearPeriods, selectedYear]);
+  }, [auditHistoryMap, trendYearPeriods, selectedYear, auditExcludedKeys]);
   const filteredMonthlyData = useMemo(() => {
-    if (!badgeFilter) return auditMonthlyData;
-    return auditMonthlyData.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
-  }, [auditMonthlyData, badgeFilter, repsMap]);
+    let out = auditMonthlyData;
+    if (auditTableExcludedKeys.size > 0) {
+      out = out.filter((r) => !auditTableExcludedKeys.has(r.agentKey));
+    }
+    if (badgeFilter) {
+      out = out.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
+    }
+    if (agentSearch) {
+      out = out.filter((r) => matchesAgentSearch(r.agentName, agentSearch));
+    }
+    return out;
+  }, [auditMonthlyData, badgeFilter, agentSearch, repsMap, auditTableExcludedKeys]);
 
   /* ── Aylık role-play pivot tablosu (toplam) ── */
   const columns: ColumnDef<AuditAgentRow, any>[] = [
@@ -438,45 +516,23 @@ export function AuditPage() {
     })
   ];
 
-  const tableSummaryRows = useMemo(() => {
-    // Ortalama satırı 'satıcı operasyon' etiketlileri de içerir.
-    // Etiket filtresi aktifse ortalama yalnızca filtrelenmiş temsilciler üzerinden hesaplanır.
-    let fullAudits = aggregatedSnapshot ? selectAuditMetrics(aggregatedSnapshot.datasets) : [];
-    let fullAgents = aggregatedSnapshot?.datasets.agentMetrics ?? [];
-    if (badgeFilter) {
-      fullAudits = fullAudits.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
-      fullAgents = fullAgents.filter((a) => (repsMap.get(a.agentKey)?.badges ?? []).includes(badgeFilter));
-    }
-    const auditByKey = new Map(fullAudits.map((r) => [r.agentKey, r]));
-    const allKeys = new Set<string>([
-      ...fullAgents.map((a) => a.agentKey),
-      ...fullAudits.map((a) => a.agentKey)
-    ]);
-    const auditScores: Array<number | null> = [];
-    const prevAuditScores: Array<number | null> = [];
-    allKeys.forEach((key) => {
-      const audit = auditByKey.get(key);
-      const agent = fullAgents.find((a) => a.agentKey === key);
-      auditScores.push(audit?.auditScore ?? agent?.auditScore ?? null);
-      prevAuditScores.push(audit?.previousAuditAccuracy ?? agent?.previousAuditAccuracy ?? null);
-    });
-    if (auditScores.every((v) => v === null)) {
-      return [] as Array<Record<string, ReactNode> & { _tone?: "emerald" }>;
-    }
-    return [
-      {
-        _tone: "emerald" as const,
-        listIndex: "",
-        agentName: "ORTALAMA",
-        auditScoreDisplay: formatAuditScore(average(auditScores)),
-        previousAuditAccuracyDisplay: formatPercent(average(prevAuditScores))
-      }
-    ];
-  }, [aggregatedSnapshot, badgeFilter, repsMap]);
-
   return (
     <div className="space-y-6">
-      <PageHeader title="Audit" actions={<PeriodRangeFilter onChange={setPeriodRange} periods={sortedPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />} />
+      <PageHeader
+        title="Audit"
+        actions={
+          <div className="flex items-center gap-2">
+            <PeriodRangeFilter onChange={setPeriodRange} periods={sortedPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />
+            <Link
+              to="/cs/period-compare"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
+            >
+              <ArrowLeftRight size={14} />
+              <span className="hidden sm:inline">Karşılaştır</span>
+            </Link>
+          </div>
+        }
+      />
 
       {snapshot ? (
         <>
@@ -502,7 +558,13 @@ export function AuditPage() {
                   <span className="min-w-0 break-words">{performanceShift?.names ?? "Henüz yok"}</span>
                 </span>
               }
-              hint={performanceShift ? `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan` : undefined}
+              hint={
+                performanceShift
+                  ? performanceShift.score !== null
+                    ? `${formatAuditScore(performanceShift.score)} puan · ${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)}`
+                    : `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan`
+                  : undefined
+              }
             />
             <CompactStatCard
               label="En düşük audit"
@@ -548,15 +610,18 @@ export function AuditPage() {
             />
 
             <Leaderboard
-              items={[...highlightAudits]
-                .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
-                .sort((left, right) => right.auditScore - left.auditScore)
-                .slice(0, 5)
-                .map((a) => ({
-                  id: a.id,
-                  label: a.agentName,
-                  value: formatAuditScore(a.auditScore)
-                }))}
+              items={applyTopRankPreference(
+                [...highlightAudits]
+                  .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
+                  .sort((left, right) => right.auditScore - left.auditScore)
+                  .map((a) => ({
+                    id: a.id,
+                    label: a.agentName,
+                    value: a.auditScore,
+                    formatted: formatAuditScore(a.auditScore)
+                  })),
+                5
+              ).map(({ id, label, formatted }) => ({ id, label, value: formatted }))}
               title="Audit lider tablosu"
             />
           </div>
@@ -564,7 +629,28 @@ export function AuditPage() {
           <SurfaceCard
             title="Detay tablo görünümü"
             variant="default"
-            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentSearch onChange={setAgentSearch} value={agentSearch} />
+                <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+                <CsvDownloadButton
+                  disabled={filteredAgents.length === 0}
+                  onClick={() => {
+                    const periodTag = selectedPeriod?.month ?? selectedYear ?? "tum";
+                    exportToCsv(
+                      `audit-detay-${periodTag}`,
+                      ["#", "Temsilci", "Audit skoru", "Önceki audit doğruluk (%)"],
+                      filteredAgents.map((a, idx) => [
+                        idx + 1,
+                        a.agentName,
+                        a.auditScoreDisplay,
+                        a.previousAuditAccuracyDisplay
+                      ])
+                    );
+                  }}
+                />
+              </div>
+            }
           >
             <DataTable
               columns={columns}
@@ -572,7 +658,6 @@ export function AuditPage() {
               density="comfortable"
               variant="emerald"
               striped
-              summaryRows={tableSummaryRows}
               emptyState="Seçilen dönemde gösterilecek audit kaydı bulunamadı."
             />
           </SurfaceCard>
@@ -582,7 +667,23 @@ export function AuditPage() {
             summaryMode="average"
             title="Aylık Audit Skorları"
             valueFormatter={(v) => formatAuditScore(v)}
-            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentSearch onChange={setAgentSearch} value={agentSearch} />
+                <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+                <CsvDownloadButton
+                  disabled={filteredMonthlyData.length === 0}
+                  onClick={() => {
+                    const monthLabels = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+                    exportToCsv(
+                      `audit-aylik-${selectedYear ?? "tum"}`,
+                      ["Temsilci", ...monthLabels],
+                      filteredMonthlyData.map((r) => [r.agentName, ...r.months])
+                    );
+                  }}
+                />
+              </div>
+            }
             repsMap={repsMap}
           />
 

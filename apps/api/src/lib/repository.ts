@@ -108,6 +108,11 @@ export type Repository = {
     datasetType: T,
     record: DatasetRecordMap[T]
   ): Promise<DatasetRecordMap[T]>;
+  upsertDatasetRecord<T extends DatasetType>(
+    periodId: string,
+    datasetType: T,
+    record: DatasetRecordMap[T]
+  ): Promise<DatasetRecordMap[T]>;
   createImportJob(job: ImportJob): Promise<void>;
   publishPeriod(periodId: string): Promise<ReportPeriod>;
   reopenPeriod(periodId: string): Promise<ReportPeriod>;
@@ -376,6 +381,33 @@ async function createFileRepository(): Promise<Repository> {
 
       const parsed = parseDatasetRecord(datasetType, record);
       rows[index] = parsed;
+
+      if (datasetType === "agent-metrics") {
+        db.datasets[periodId].agentMetrics = rows as AgentMetric[];
+      } else if (datasetType === "audit-metrics") {
+        db.datasets[periodId].auditMetrics = rows as AuditMetric[];
+      } else if (datasetType === "question-performance") {
+        db.datasets[periodId].questionPerformance = rows as QuestionPerformance[];
+      } else {
+        db.datasets[periodId].qtMetrics = rows as QtMetric[];
+      }
+
+      await persistLocalDb(db);
+      return parsed;
+    },
+    async upsertDatasetRecord(periodId, datasetType, record) {
+      const db = await ensureLocalDb();
+      db.datasets[periodId] ??= emptyDatasets();
+      const property = datasetKeyToProperty(datasetType);
+      const rows = db.datasets[periodId][property] as DatasetRecordMap[typeof datasetType][];
+      const parsed = parseDatasetRecord(datasetType, record);
+      const index = rows.findIndex((entry) => entry.id === parsed.id);
+
+      if (index < 0) {
+        rows.push(parsed);
+      } else {
+        rows[index] = parsed;
+      }
 
       if (datasetType === "agent-metrics") {
         db.datasets[periodId].agentMetrics = rows as AgentMetric[];
@@ -799,6 +831,12 @@ async function createFirebaseRepository(): Promise<Repository> {
       await db.collection("reportPeriods").doc(periodId).collection(property).doc(record.id).set(parsed);
       return parsed;
     },
+    async upsertDatasetRecord(periodId, datasetType, record) {
+      const property = datasetKeyToProperty(datasetType);
+      const parsed = parseDatasetRecord(datasetType, record);
+      await db.collection("reportPeriods").doc(periodId).collection(property).doc(parsed.id).set(parsed);
+      return parsed;
+    },
     async deleteDatasetRecord(periodId, datasetType, recordId) {
       const property = datasetKeyToProperty(datasetType);
       await db.collection("reportPeriods").doc(periodId).collection(property).doc(recordId).delete();
@@ -861,8 +899,12 @@ async function createFirebaseRepository(): Promise<Repository> {
     },
     async upsertUserRole(input) {
       await db.collection("userRoles").doc(normalizeRoleEmail(input.email)).set(input);
-      if (input.uid) {
-        await auth.setCustomUserClaims(input.uid, { role: input.role });
+      const uid = input.uid ?? (await auth.getUserByEmail(input.email).then((u) => u.uid).catch(() => undefined));
+      if (uid) {
+        await auth.setCustomUserClaims(uid, {
+          role: input.role,
+          representativeKey: input.representativeKey ?? null
+        });
       }
       return input;
     },
@@ -912,8 +954,12 @@ async function createFirebaseRepository(): Promise<Repository> {
       const parsed = userSchema.parse(user);
       const key = normalizeRoleEmail(parsed.email);
       await db.collection("users").doc(key).set(parsed);
-      if (parsed.uid) {
-        await auth.setCustomUserClaims(parsed.uid, { role: parsed.role });
+      const uid = parsed.uid ?? (await auth.getUserByEmail(parsed.email).then((u) => u.uid).catch(() => undefined));
+      if (uid) {
+        await auth.setCustomUserClaims(uid, {
+          role: parsed.role,
+          representativeKey: parsed.representativeKey ?? null
+        });
       }
       return parsed;
     },

@@ -101,6 +101,9 @@ jobs:
             APP_WEB_ORIGIN=${{ env.APP_WEB_ORIGIN }}
             FIREBASE_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
             FIREBASE_STORAGE_BUCKET=${{ env.FIREBASE_STORAGE_BUCKET }}
+            ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
+            ELEVENLABS_AGENT_ID=${{ vars.ELEVENLABS_AGENT_ID }}
+            ELEVENLABS_ALLOWED_EMAILS=${{ vars.ELEVENLABS_ALLOWED_EMAILS }}
           flags: >-
             --allow-unauthenticated
             --port=8080

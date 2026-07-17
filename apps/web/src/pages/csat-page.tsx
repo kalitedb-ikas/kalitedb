@@ -1,4 +1,6 @@
 import {
+  applyTopRankPreference,
+  AUDIT_AVERAGE_EXCLUDED_KEYS,
   average,
   buildDashboardSnapshot,
   resolveThresholdTone,
@@ -18,8 +20,9 @@ import {
 } from "@kalitedb/ui";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, PhoneCall, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CheckCircle2, ClipboardList, Eye, EyeOff, Gauge, PhoneCall, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import { TrendLineCard, buildYearTrendPoints } from "../components/year-trend-card";
@@ -28,10 +31,14 @@ import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatAuditScore, formatNumber, formatPercent, formatSeconds } from "../lib/format";
 import { aggregateAgentMetrics, aggregateAuditMetrics, computeActivePeriodIds, derivePeriodRangeSelectors } from "../lib/period-aggregation";
-import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
+import { excludeAgentsFromSnapshot, useRepresentativeKeysExcludedFrom, useRepresentativeKeysExcludedFromTable, useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
+import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
 import { RepNameCell } from "../components/rep-name-cell";
 import { BadgeFilter } from "../components/badge-filter";
+import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
+import { CsvDownloadButton } from "../components/csv-download-button";
+import { exportToCsv } from "../lib/csv-export";
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { brand } from "../theme/colors";
 
@@ -58,12 +65,14 @@ function formatNameList(names: string[]) {
 export function CsatPage() {
   const auth = useAuth();
   const now = new Date();
-  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+  const periodRangeDefaults = useMemo<PeriodRangeValue>(() => {
     const prevMonth = now.getMonth();
     const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
     const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
     return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [periodRange, setPeriodRange] = useUrlPeriodRange(periodRangeDefaults);
   const datasetTypes = ["agent-metrics", "audit-metrics"] as const;
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -136,7 +145,7 @@ export function CsatPage() {
   });
 
   const baseSnapshot = dashboardQuery.data;
-  const aggregatedSnapshot = useMemo(() => {
+  const aggregatedSnapshotUnfiltered = useMemo(() => {
     if (!baseSnapshot) return undefined;
     if (periodRange.viewMode === "aylik") return baseSnapshot;
     if (activePeriodIds.length === 0) return baseSnapshot;
@@ -163,12 +172,25 @@ export function CsatPage() {
     });
   }, [baseSnapshot, periodRange.viewMode, activePeriodIds, agentMetricsBulkQuery.data, auditMetricsBulkQuery.data]);
 
+  // Temsilci yönetiminde "csat" alanından hariç tutulanlar bu sayfadan
+  // tamamen çıkar (tablo + ortalama + grafikler).
+  const csatExcludedKeys = useRepresentativeKeysExcludedFrom("csat");
+  const aggregatedSnapshot = useMemo(
+    () => excludeAgentsFromSnapshot(aggregatedSnapshotUnfiltered, csatExcludedKeys),
+    [aggregatedSnapshotUnfiltered, csatExcludedKeys]
+  );
+  // "Dahil Olduğu Tablolar"dan kapatılanlar yalnızca ayrıntı tablosundan
+  // çıkar; ortalama, özet satırı ve grafik hesaplarına dokunmaz.
+  const csatTableExcludedKeys = useRepresentativeKeysExcludedFromTable("csat");
+
   // "Premium Onboarding" etiketlilerin CSAT skoru null'lanır → ortalama, leaderboard,
   // champion ve tablo CSAT sütunundan otomatik düşer; her ay ölçülmeyen bir temsilcinin
   // tek ayın yüksek skoruyla çeyrek/yıl liderine geçmesini engeller.
   const premiumOnboardingKeys = useRepresentativeKeysWithBadge("premium_onboarding");
   const repsMap = useRepresentativesMap();
-  const [badgeFilter, setBadgeFilter] = useState<string>("");
+  const [badgeFilter, setBadgeFilter] = useUrlParam("badge", "");
+  const [agentSearch, setAgentSearch] = useUrlParam("search", "");
+  const [showDepartedReps, setShowDepartedReps] = useState(false);
   const aggregatedSnapshotCsatAdjusted = useMemo(() => {
     if (!aggregatedSnapshot) return undefined;
     if (premiumOnboardingKeys.size === 0) return aggregatedSnapshot;
@@ -182,52 +204,47 @@ export function CsatPage() {
     });
   }, [aggregatedSnapshot, premiumOnboardingKeys]);
 
-  // "Satıcı Operasyon" etiketli temsilciler tablolardan/lider tablosundan gizlenir,
-  // ama özet (summary / ortalama / toplam) hesaplarında korunur.
-  const hiddenAgentKeys = useRepresentativeKeysWithBadge("satici_operasyon");
+  // "Start" ekibi: CSAT kart ve grafiklerinde (champion, lider tablosu, en güçlü/izlenmesi
+  // gereken, takım CSAT ortalaması, yıllık trend) gösterilmez; ayrıntı tablosunda KALIR.
+  const startTeamKeys = useRepresentativeKeysWithBadge("start");
+
+  // Kart/grafik snapshot'ı: rankings & highlights'tan 'start' ekibi çıkarılır. Takım CSAT
+  // ortalaması/agentCount 'start' ekibini hariç tutar; 'premium_onboarding' null'lama
+  // davranışı da korunur.
   const snapshot = useMemo(() => {
     if (!aggregatedSnapshotCsatAdjusted) return undefined;
-    if (hiddenAgentKeys.size === 0) return aggregatedSnapshotCsatAdjusted;
-
-    const filteredAgents = aggregatedSnapshotCsatAdjusted.datasets.agentMetrics.filter(
-      (a) => !hiddenAgentKeys.has(a.agentKey)
-    );
-    const filteredAudits = aggregatedSnapshotCsatAdjusted.datasets.auditMetrics.filter(
-      (a) => !hiddenAgentKeys.has(a.agentKey)
-    );
-    const rebuilt = buildDashboardSnapshot({
-      period: aggregatedSnapshotCsatAdjusted.period,
-      datasets: {
-        ...aggregatedSnapshotCsatAdjusted.datasets,
-        agentMetrics: filteredAgents,
-        auditMetrics: filteredAudits
-      },
-      thresholds: aggregatedSnapshotCsatAdjusted.thresholds
+    const base = aggregatedSnapshotCsatAdjusted;
+    if (startTeamKeys.size === 0) return base;
+    const rankingAgents = base.datasets.agentMetrics.filter((a) => !startTeamKeys.has(a.agentKey));
+    const rankingAudits = base.datasets.auditMetrics.filter((a) => !startTeamKeys.has(a.agentKey));
+    return buildDashboardSnapshot({
+      period: base.period,
+      datasets: { ...base.datasets, agentMetrics: rankingAgents, auditMetrics: rankingAudits },
+      thresholds: base.thresholds
     });
-    return { ...rebuilt, summary: aggregatedSnapshotCsatAdjusted.summary };
-  }, [aggregatedSnapshotCsatAdjusted, hiddenAgentKeys]);
+  }, [aggregatedSnapshotCsatAdjusted, startTeamKeys]);
 
   const rawYearlyTrend = yearlyTrendQuery.data ?? [];
   // Yıllık trend grafiği CSAT serisi: Premium Onboarding'i hariç tut (aylık nokta bazında
   // yeniden hesapla ki Mart gibi onların yüksek skor aldığı aylar ortalamayı şişirmesin).
   const yearlyTrend = useMemo(() => {
-    if (premiumOnboardingKeys.size === 0) return rawYearlyTrend;
+    if (premiumOnboardingKeys.size === 0 && startTeamKeys.size === 0 && csatExcludedKeys.size === 0) return rawYearlyTrend;
     const agentMap = agentMetricsBulkQuery.data;
     if (!agentMap) return rawYearlyTrend;
     return rawYearlyTrend.map((point) => {
       const agents = agentMap[point.periodId];
       if (!agents) return point;
       const csatValues = agents
-        .filter((a) => !premiumOnboardingKeys.has(a.agentKey))
+        .filter((a) => !premiumOnboardingKeys.has(a.agentKey) && !startTeamKeys.has(a.agentKey) && !csatExcludedKeys.has(a.agentKey))
         .map((a) => a.callEvaluationAverage);
       return { ...point, csat: average(csatValues) };
     });
-  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys]);
+  }, [rawYearlyTrend, agentMetricsBulkQuery.data, premiumOnboardingKeys, startTeamKeys, csatExcludedKeys]);
   const rows = useMemo(() => {
-    if (!snapshot) return [];
+    if (!aggregatedSnapshotCsatAdjusted) return [];
 
     const auditMap = new Map(
-      selectAuditMetrics(snapshot.datasets).map((record) => [
+      selectAuditMetrics(aggregatedSnapshotCsatAdjusted.datasets).map((record) => [
         record.agentKey,
         {
           auditScore: record.auditScore,
@@ -236,7 +253,7 @@ export function CsatPage() {
       ])
     );
 
-    return snapshot.datasets.agentMetrics
+    const sortedRows = aggregatedSnapshotCsatAdjusted.datasets.agentMetrics
       .map((item) => {
         const audit = auditMap.get(item.agentKey);
         return {
@@ -265,12 +282,23 @@ export function CsatPage() {
           return rightCsat - leftCsat;
         }
 
+        const conversationDiff = (right.totalConversationCount ?? 0) - (left.totalConversationCount ?? 0);
+        if (conversationDiff !== 0) {
+          return conversationDiff;
+        }
+
         return left.agentName.localeCompare(right.agentName, "tr");
       });
-  }, [snapshot]);
+
+    return applyTopRankPreference(
+      sortedRows.map((row) => ({ label: row.agentName, value: row.callEvaluationAverage, row }))
+    ).map((item) => item.row);
+  }, [aggregatedSnapshotCsatAdjusted]);
   const csatLeaders = useMemo(() => {
+    // Champion podyumu 'start' ekibini göstermez (ayrıntı tablosunda kalsalar da).
     const scoredAgents = rows.filter(
-      (row): row is CsatRow & { callEvaluationAverage: number } => row.callEvaluationAverage !== null
+      (row): row is CsatRow & { callEvaluationAverage: number } =>
+        row.callEvaluationAverage !== null && !startTeamKeys.has(row.agentKey)
     );
 
     if (scoredAgents.length === 0) {
@@ -279,15 +307,18 @@ export function CsatPage() {
 
     const topScore = Math.max(...scoredAgents.map((row) => row.callEvaluationAverage));
 
-    return scoredAgents
+    const leaders = scoredAgents
       .filter((row) => row.callEvaluationAverage === topScore)
       .sort((left, right) => left.agentName.localeCompare(right.agentName, "tr"))
       .map((row) => ({
         name: row.agentName,
+        label: row.agentName,
+        value: topScore,
         imageAlt: row.agentName,
         imageSrc: getRepresentativePhotoSrc(row.agentName) ?? undefined
       }));
-  }, [rows]);
+    return applyTopRankPreference(leaders).map(({ label: _label, value: _value, ...rest }) => rest);
+  }, [rows, startTeamKeys]);
   const csatLeaderNames = formatNameList(csatLeaders.map((leader) => leader.name));
 
   const csatSummary = useMemo(() => {
@@ -327,9 +358,21 @@ export function CsatPage() {
   }, [rows]);
 
   const filteredRows = useMemo(() => {
-    if (!badgeFilter) return rows;
-    return rows.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
-  }, [rows, badgeFilter, repsMap]);
+    let out = rows;
+    if (csatTableExcludedKeys.size > 0) {
+      out = out.filter((r) => !csatTableExcludedKeys.has(r.agentKey));
+    }
+    if (!showDepartedReps) {
+      out = out.filter((r) => repsMap.get(r.agentKey)?.status !== "departed");
+    }
+    if (badgeFilter) {
+      out = out.filter((r) => (repsMap.get(r.agentKey)?.badges ?? []).includes(badgeFilter));
+    }
+    if (agentSearch) {
+      out = out.filter((r) => matchesAgentSearch(r.agentName, agentSearch));
+    }
+    return out;
+  }, [rows, showDepartedReps, badgeFilter, agentSearch, repsMap, csatTableExcludedKeys]);
 
   const columns: ColumnDef<CsatRow, any>[] = [
     columnHelper.accessor("agentName", {
@@ -380,7 +423,11 @@ export function CsatPage() {
         />
       )
     }),
-    columnHelper.accessor("evaluationCount", { header: "Değerlendirme" })
+    columnHelper.accessor("evaluationCount", { header: "Değerlendirme" }),
+    columnHelper.accessor("evaluatedChatCount", { header: "Chat" }),
+    columnHelper.accessor("evaluatedMailCount", { header: "Mail" }),
+    columnHelper.accessor("classicTicketCount", { header: "Klasik Ticket" }),
+    columnHelper.accessor("newTicketCount", { header: "Yeni Ticket" })
   ];
 
   const tableSummaryRows = useMemo(() => {
@@ -401,12 +448,18 @@ export function CsatPage() {
       previousAuditAccuracyDisplay:
         auditByKey.get(a.agentKey)?.previousAuditAccuracy ?? a.previousAuditAccuracy
     }));
+    // Audit ortalaması ve önceki audit doğruluğu doğrudan audit import'undan (auditMetrics)
+    // hesaplanır; agent-metrics (CSAT) ile birleştirilmez. AUDIT_AVERAGE_EXCLUDED_KEYS'teki
+    // temsilciler ortalamaya dahil edilmez (puanları tabloda görünmeye devam eder).
+    const includedAudits = fullAudits.filter((a) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(a.agentKey));
+    const auditScoresImport = includedAudits.map((a) => a.auditScore);
+    const previousAuditAccuracyImport = includedAudits.map((a) => a.previousAuditAccuracy);
     const avgRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
       _label: "ORTALAMA",
       _tone: "emerald",
       agentName: "ORTALAMA",
-      auditScoreDisplay: formatAuditScore(average(enriched.map((r) => r.auditScoreDisplay))),
-      previousAuditAccuracyDisplay: formatPercent(average(enriched.map((r) => r.previousAuditAccuracyDisplay))),
+      auditScoreDisplay: formatAuditScore(average(auditScoresImport)),
+      previousAuditAccuracyDisplay: formatPercent(average(previousAuditAccuracyImport)),
       totalCallCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalCallCount)) / enriched.length)),
       totalChatMailCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalChatMailCount)) / enriched.length)),
       totalTicketClosedCount: formatNumber(Math.round(sum(enriched.map((r) => r.totalTicketClosedCount)) / enriched.length)),
@@ -415,7 +468,11 @@ export function CsatPage() {
       localCloseRate: formatPercent(average(enriched.map((r) => r.localCloseRate))),
       missedCalls: formatNumber(Math.round(sum(enriched.map((r) => r.missedCalls)) / enriched.length)),
       callEvaluationAverage: formatNumber(average(enriched.map((r) => r.callEvaluationAverage)), 3),
-      evaluationCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluationCount)) / enriched.length))
+      evaluationCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluationCount)) / enriched.length)),
+      evaluatedChatCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluatedChatCount)) / enriched.length)),
+      evaluatedMailCount: formatNumber(Math.round(sum(enriched.map((r) => r.evaluatedMailCount)) / enriched.length)),
+      classicTicketCount: formatNumber(Math.round(sum(enriched.map((r) => r.classicTicketCount)) / enriched.length)),
+      newTicketCount: formatNumber(Math.round(sum(enriched.map((r) => r.newTicketCount)) / enriched.length))
     };
     const totalRow: Record<string, ReactNode> & { _label?: string; _tone?: "emerald" } = {
       _label: "TOPLAM",
@@ -431,14 +488,32 @@ export function CsatPage() {
       localCloseRate: "",
       missedCalls: formatNumber(sum(enriched.map((r) => r.missedCalls))),
       callEvaluationAverage: "",
-      evaluationCount: formatNumber(sum(enriched.map((r) => r.evaluationCount)))
+      evaluationCount: formatNumber(sum(enriched.map((r) => r.evaluationCount))),
+      evaluatedChatCount: formatNumber(sum(enriched.map((r) => r.evaluatedChatCount))),
+      evaluatedMailCount: formatNumber(sum(enriched.map((r) => r.evaluatedMailCount))),
+      classicTicketCount: formatNumber(sum(enriched.map((r) => r.classicTicketCount))),
+      newTicketCount: formatNumber(sum(enriched.map((r) => r.newTicketCount)))
     };
     return [avgRow, totalRow];
   }, [aggregatedSnapshotCsatAdjusted, badgeFilter, repsMap]);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="CSAT" actions={<PeriodRangeFilter onChange={setPeriodRange} periods={csPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />} />
+      <PageHeader
+        title="CSAT"
+        actions={
+          <div className="flex items-center gap-2">
+            <PeriodRangeFilter onChange={setPeriodRange} periods={csPeriods} value={{ ...periodRange, monthPeriodId: monthlyPeriodId }} />
+            <Link
+              to="/cs/period-compare"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/72 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-white/90 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-700/80"
+            >
+              <ArrowLeftRight size={14} />
+              <span className="hidden sm:inline">Karşılaştır</span>
+            </Link>
+          </div>
+        }
+      />
       {snapshot ? (
         <>
           <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
@@ -469,7 +544,7 @@ export function CsatPage() {
                 <div className="grid gap-3">
                   <MetricInsight
                     icon={<CheckCircle2 size={16} />}
-                    title="En güçlü temsilci"
+                    title="En başarılı isim/isimler"
                     value={snapshot.highlights.bestCsat?.label ?? "Henüz yok"}
                     detail={formatNumber(snapshot.highlights.bestCsat?.value, 3)}
                   />
@@ -522,39 +597,82 @@ export function CsatPage() {
             yTicks={[4.5, 4.6, 4.7, 4.8, 4.9, 5]}
           />
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <ExecutiveChartCard title="Kanal dağılımı">
-              <div className="space-y-4">
-                {csatSummary.channelMix.map((item) => (
-                  <div key={item.label}>
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <span className="font-medium text-slate-600 dark:text-slate-400">{item.label}</span>
-                      <span className="font-semibold text-slate-900 dark:text-slate-100">{formatNumber(item.value)}</span>
-                    </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700">
-                      <div
-                        className={`h-full rounded-full ${item.className}`}
-                        style={{ width: `${Math.max(item.ratio * 100, 8)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ExecutiveChartCard>
-
-            <Leaderboard
-              items={snapshot.rankings.csatTop.slice(0, 5).map((item) => ({
-                id: item.id,
-                label: item.label,
-                value: formatNumber(item.value, 3)
-              }))}
-              title="En güçlü CSAT"
-            />
-          </div>
+          <Leaderboard
+            items={snapshot.rankings.csatTop.slice(0, 5).map((item) => ({
+              id: item.id,
+              label: item.label,
+              value: formatNumber(item.value, 3)
+            }))}
+            title="En başarılı CSAT"
+          />
 
           <ExecutiveChartCard
             title="CSAT ayrıntı tablosu"
-            actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <AgentSearch onChange={setAgentSearch} value={agentSearch} />
+                <BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />
+                <button
+                  className={[
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-medium transition",
+                    showDepartedReps
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300"
+                  ].join(" ")}
+                  onClick={() => setShowDepartedReps((v) => !v)}
+                  title={showDepartedReps ? "Ayrılanları gizle" : "Ayrılanları da göster"}
+                  type="button"
+                >
+                  {showDepartedReps ? <Eye size={14} /> : <EyeOff size={14} />}
+                  Ayrılanlar {showDepartedReps ? "gösteriliyor" : "gizli"}
+                </button>
+                <CsvDownloadButton
+                  disabled={filteredRows.length === 0}
+                  onClick={() => {
+                    const periodTag = selectedPeriod?.month ?? selectedYear ?? "tum";
+                    exportToCsv(
+                      `csat-${periodTag}`,
+                      [
+                        "Temsilci",
+                        "Audit skoru",
+                        "Önceki audit doğruluk (%)",
+                        "Toplam çağrı",
+                        "Chat / e-posta",
+                        "Ticket",
+                        "Toplam görüşme",
+                        "Ortalama konuşma süresi (sn)",
+                        "Lokal kapatma (%)",
+                        "Kaçan çağrılar",
+                        "CSAT ortalaması",
+                        "Değerlendirme",
+                        "Chat",
+                        "Mail",
+                        "Klasik Ticket",
+                        "Yeni Ticket"
+                      ],
+                      filteredRows.map((r) => [
+                        r.agentName,
+                        r.auditScoreDisplay,
+                        r.previousAuditAccuracyDisplay,
+                        r.totalCallCount,
+                        r.totalChatMailCount,
+                        r.totalTicketClosedCount,
+                        r.totalConversationCount,
+                        r.avgTalkDurationSeconds,
+                        r.localCloseRate,
+                        r.missedCalls,
+                        r.callEvaluationAverage,
+                        r.evaluationCount,
+                        r.evaluatedChatCount,
+                        r.evaluatedMailCount,
+                        r.classicTicketCount,
+                        r.newTicketCount
+                      ])
+                    );
+                  }}
+                />
+              </div>
+            }
           >
             <DataTable columns={columns} data={filteredRows} variant="emerald" striped summaryRows={tableSummaryRows} />
           </ExecutiveChartCard>

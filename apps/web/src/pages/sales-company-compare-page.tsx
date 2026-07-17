@@ -1,4 +1,4 @@
-import { selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, getTwoPlusOnePercent, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { SalesKpiAgent } from "@kalitedb/shared";
 import { SectionCard } from "@kalitedb/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -58,11 +58,11 @@ function computeTotals(agents: SalesKpiAgent[]) {
     totalCallAttempts: agents.reduce((s, a) => s + a.callAttempts, 0),
     avgTalkDurationSeconds: count > 0 ? agents.reduce((s, a) => s + a.talkDurationSeconds, 0) / count : 0,
     totalTalkDurationSeconds: agents.reduce((s, a) => s + a.talkDurationSeconds, 0),
-    totalScaleCount: agents.reduce((s, a) => s + (a.scaleCount ?? 0), 0),
-    totalScalePlusCount: agents.reduce((s, a) => s + (a.scalePlusCount ?? 0), 0),
-    avgScaleConversion: count > 0 ? agents.reduce((s, a) => s + (a.scaleConversion ?? 0), 0) / count : 0,
-    avgScalePlusConversion: count > 0 ? agents.reduce((s, a) => s + (a.scalePlusConversion ?? 0), 0) / count : 0,
-    avgTotalConversion: count > 0 ? agents.reduce((s, a) => s + (a.totalConversion ?? 0), 0) / count : 0,
+    totalTwoPlusOneCount: agents.reduce((s, a) => s + getTwoPlusOneCount(a), 0),
+    avgTwoPlusOnePercent: count > 0 ? agents.reduce((s, a) => s + getTwoPlusOnePercent(a), 0) / count : 0,
+    totalPreOnbCount: agents.reduce((s, a) => s + (a.preOnbCount ?? 0), 0),
+    totalDomainCount: agents.reduce((s, a) => s + (a.domainCount ?? 0), 0),
+    totalOutboundLeadCount: agents.reduce((s, a) => s + (a.outboundLeadCount ?? 0), 0),
     agentCount: count
   };
 }
@@ -309,11 +309,11 @@ export function SalesCompanyComparePage() {
                 <CompareMetricRow label="Toplam Arama" leftValue={totalsA?.totalCallAttempts} rightValue={totalsB?.totalCallAttempts} format={(v) => formatNumber(v)} />
                 <CompareMetricRow label="Ort. Konuşma" leftValue={totalsA?.avgTalkDurationSeconds} rightValue={totalsB?.avgTalkDurationSeconds} format={formatHms} />
                 <CompareMetricRow label="Top. Konuşma" leftValue={totalsA?.totalTalkDurationSeconds} rightValue={totalsB?.totalTalkDurationSeconds} format={formatHms} />
-                <CompareMetricRow label="Scale 2+1" leftValue={totalsA?.totalScaleCount} rightValue={totalsB?.totalScaleCount} format={(v) => formatNumber(v)} />
-                <CompareMetricRow label="Scale+ 2+1" leftValue={totalsA?.totalScalePlusCount} rightValue={totalsB?.totalScalePlusCount} format={(v) => formatNumber(v)} />
-                <CompareMetricRow label="Ort. Scale %" leftValue={totalsA?.avgScaleConversion} rightValue={totalsB?.avgScaleConversion} format={formatPercent} />
-                <CompareMetricRow label="Ort. Scale+ %" leftValue={totalsA?.avgScalePlusConversion} rightValue={totalsB?.avgScalePlusConversion} format={formatPercent} />
-                <CompareMetricRow label="Ort. Toplam %" leftValue={totalsA?.avgTotalConversion} rightValue={totalsB?.avgTotalConversion} format={formatPercent} />
+                <CompareMetricRow label="2+1" leftValue={totalsA?.totalTwoPlusOneCount} rightValue={totalsB?.totalTwoPlusOneCount} format={(v) => formatNumber(v)} />
+                <CompareMetricRow label="Ort. %2+1" leftValue={totalsA?.avgTwoPlusOnePercent} rightValue={totalsB?.avgTwoPlusOnePercent} format={formatPercent} />
+                <CompareMetricRow label="Pre Onb" leftValue={totalsA?.totalPreOnbCount} rightValue={totalsB?.totalPreOnbCount} format={(v) => formatNumber(v)} />
+                <CompareMetricRow label="Domain" leftValue={totalsA?.totalDomainCount} rightValue={totalsB?.totalDomainCount} format={(v) => formatNumber(v)} />
+                <CompareMetricRow label="Outbound / Eski Lead" leftValue={totalsA?.totalOutboundLeadCount} rightValue={totalsB?.totalOutboundLeadCount} format={(v) => formatNumber(v)} />
                 <CompareMetricRow label="Temsilci Sayısı" leftValue={totalsA?.agentCount} rightValue={totalsB?.agentCount} format={(v) => formatNumber(v)} />
               </div>
             </div>

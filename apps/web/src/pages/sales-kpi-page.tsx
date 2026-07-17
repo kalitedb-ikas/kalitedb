@@ -1,15 +1,19 @@
 import { PageHeader, SurfaceCard } from "@kalitedb/ui";
-import { selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, getTwoPlusOnePercent, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { SalesKpiAgent } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, Target } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatNumber, formatPeriodMonth } from "../lib/format";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
+import { useUrlPeriodRange, useUrlParam } from "../lib/use-url-filters";
+import { AgentSearch, matchesAgentSearch } from "../components/agent-search";
+import { CsvDownloadButton } from "../components/csv-download-button";
+import { exportToCsv } from "../lib/csv-export";
 import {
   QUARTER_SHORT,
   aggregateMultiPeriodKpi,
@@ -38,6 +42,12 @@ function computeSummary(agents: SalesKpiAgent[]) {
   const scored = agents.filter((a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null);
   const count = agents.length;
 
+  // Nullable metrikler (Pre Onb, Hubspot vb.): değeri olan temsilciler üzerinden ortalama
+  const avgOf = (values: number[]): number | null =>
+    values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : null;
+  const nonNull = (values: (number | null | undefined)[]): number[] =>
+    values.filter((v): v is number => typeof v === "number");
+
   const avgPerfScore = scored.length > 0 ? scored.reduce((s, a) => s + a.perfScore, 0) / scored.length : null;
   const avgSalesAmount = count > 0 ? agents.reduce((s, a) => s + a.salesAmount, 0) / count : 0;
   const avgLicenseCount = count > 0 ? agents.reduce((s, a) => s + a.licenseCount, 0) / count : 0;
@@ -45,32 +55,48 @@ function computeSummary(agents: SalesKpiAgent[]) {
   const avgTalkDuration = count > 0 ? agents.reduce((s, a) => s + a.talkDurationSeconds, 0) / count : 0;
   const avgCallAttempts = count > 0 ? agents.reduce((s, a) => s + a.callAttempts, 0) / count : 0;
   const avgConversion = count > 0 ? agents.reduce((s, a) => s + a.conversionRate, 0) / count : 0;
-  const avgScaleCount = count > 0 ? agents.reduce((s, a) => s + (a.scaleCount ?? 0), 0) / count : 0;
-  const avgScalePlusCount = count > 0 ? agents.reduce((s, a) => s + (a.scalePlusCount ?? 0), 0) / count : 0;
-  const avgScaleConversion = count > 0 ? agents.reduce((s, a) => s + (a.scaleConversion ?? 0), 0) / count : 0;
-  const avgScalePlusConversion = count > 0 ? agents.reduce((s, a) => s + (a.scalePlusConversion ?? 0), 0) / count : 0;
-  const avgTotalConversion = count > 0 ? agents.reduce((s, a) => s + (a.totalConversion ?? 0), 0) / count : 0;
+  const avgTwoPlusOneCount = count > 0 ? agents.reduce((s, a) => s + getTwoPlusOneCount(a), 0) / count : 0;
+  const avgTwoPlusOnePercent = count > 0 ? agents.reduce((s, a) => s + getTwoPlusOnePercent(a), 0) / count : 0;
+  const avgPreOnbCount = avgOf(nonNull(agents.map((a) => a.preOnbCount)));
+  const avgHubspotScore = avgOf(nonNull(agents.map((a) => a.hubspotScore)));
+  const avgDomainCount = avgOf(nonNull(agents.map((a) => a.domainCount)));
+  const avgOutboundLeadCount = avgOf(nonNull(agents.map((a) => a.outboundLeadCount)));
 
   const totalSalesAmount = agents.reduce((s, a) => s + a.salesAmount, 0);
   const totalLicenseCount = agents.reduce((s, a) => s + a.licenseCount, 0);
   const totalCallAttempts = agents.reduce((s, a) => s + a.callAttempts, 0);
-  const totalScaleCount = agents.reduce((s, a) => s + (a.scaleCount ?? 0), 0);
-  const totalScalePlusCount = agents.reduce((s, a) => s + (a.scalePlusCount ?? 0), 0);
+  const totalTwoPlusOneCount = agents.reduce((s, a) => s + getTwoPlusOneCount(a), 0);
+  const totalPreOnbCount = agents.reduce((s, a) => s + (a.preOnbCount ?? 0), 0);
+  const totalDomainCount = agents.reduce((s, a) => s + (a.domainCount ?? 0), 0);
+  const totalOutboundLeadCount = agents.reduce((s, a) => s + (a.outboundLeadCount ?? 0), 0);
 
   return {
-    avg: { perfScore: avgPerfScore, salesAmount: avgSalesAmount, licenseCount: avgLicenseCount, avgLicensePrice: avgLicensePrice, talkDuration: avgTalkDuration, callAttempts: avgCallAttempts, conversionRate: avgConversion, scaleCount: avgScaleCount, scalePlusCount: avgScalePlusCount, scaleConversion: avgScaleConversion, scalePlusConversion: avgScalePlusConversion, totalConversion: avgTotalConversion },
-    total: { salesAmount: totalSalesAmount, licenseCount: totalLicenseCount, callAttempts: totalCallAttempts, scaleCount: totalScaleCount, scalePlusCount: totalScalePlusCount }
+    avg: {
+      perfScore: avgPerfScore, salesAmount: avgSalesAmount, licenseCount: avgLicenseCount,
+      avgLicensePrice: avgLicensePrice, talkDuration: avgTalkDuration, callAttempts: avgCallAttempts,
+      conversionRate: avgConversion, twoPlusOneCount: avgTwoPlusOneCount, twoPlusOnePercent: avgTwoPlusOnePercent,
+      preOnbCount: avgPreOnbCount, hubspotScore: avgHubspotScore, domainCount: avgDomainCount,
+      outboundLeadCount: avgOutboundLeadCount
+    },
+    total: {
+      salesAmount: totalSalesAmount, licenseCount: totalLicenseCount, callAttempts: totalCallAttempts,
+      twoPlusOneCount: totalTwoPlusOneCount, preOnbCount: totalPreOnbCount,
+      domainCount: totalDomainCount, outboundLeadCount: totalOutboundLeadCount
+    }
   };
 }
 
 /* ── Sorting ── */
 
-type SortKey = "agentName" | "perfScore" | "salesAmount" | "licenseCount" | "avgLicensePrice" | "talkDurationSeconds" | "callAttempts" | "conversionRate" | "scaleCount" | "scaleConversion" | "scalePlusCount" | "scalePlusConversion" | "totalConversion";
+type SortKey = "agentName" | "perfScore" | "salesAmount" | "licenseCount" | "avgLicensePrice" | "talkDurationSeconds" | "callAttempts" | "conversionRate" | "twoPlusOneCount" | "twoPlusOnePercent" | "preOnbCount" | "hubspotScore" | "domainCount" | "outboundLeadCount";
 type SortDir = "asc" | "desc";
 
 function getSortValue(agent: SalesKpiAgent, key: SortKey): number | string {
+  // 2+1 alanları eski dönem kayıtlarında Scale alanlarından türetilir
+  if (key === "twoPlusOneCount") return getTwoPlusOneCount(agent);
+  if (key === "twoPlusOnePercent") return getTwoPlusOnePercent(agent);
   const v = agent[key];
-  if (v === null) return -Infinity;
+  if (v === null || v === undefined) return -Infinity;
   return v;
 }
 
@@ -79,14 +105,20 @@ function getSortValue(agent: SalesKpiAgent, key: SortKey): number | string {
 export function SalesKpiPage() {
   const auth = useAuth();
   const now = new Date();
-  const [periodRange, setPeriodRange] = useState<PeriodRangeValue>(() => {
+  const periodRangeDefaults = useMemo<PeriodRangeValue>(() => {
     const prevMonth = now.getMonth();
     const year = prevMonth === 0 ? String(now.getFullYear() - 1) : String(now.getFullYear());
     const quarter = prevMonth === 0 ? 4 : Math.ceil(prevMonth / 3);
     return { year, viewMode: "aylik", monthPeriodId: undefined, quarter };
-  });
-  const [sortKey, setSortKey] = useState<SortKey | null>("salesAmount");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [periodRange, setPeriodRange] = useUrlPeriodRange(periodRangeDefaults);
+  const [, setSearchParams] = useSearchParams();
+  const [sortKeyParam] = useUrlParam("sort", "salesAmount");
+  const [sortDirParam] = useUrlParam("dir", "desc");
+  const [agentSearch, setAgentSearch] = useUrlParam("search", "");
+  const sortKey = (sortKeyParam || null) as SortKey | null;
+  const sortDir = (sortDirParam === "asc" ? "asc" : "desc") as SortDir;
 
   const selectedYear = periodRange.year;
   const viewMode = periodRange.viewMode;
@@ -164,23 +196,30 @@ export function SalesKpiPage() {
   const summary = useMemo(() => computeSummary(agents), [agents]);
 
   const sortedAgents = useMemo(() => {
-    if (!sortKey) return agents;
-    return [...agents].sort((a, b) => {
+    const filtered = agentSearch
+      ? agents.filter((a) => matchesAgentSearch(a.agentName, agentSearch))
+      : agents;
+    if (!sortKey) return filtered;
+    return [...filtered].sort((a, b) => {
       const va = getSortValue(a, sortKey);
       const vb = getSortValue(b, sortKey);
       if (va < vb) return sortDir === "asc" ? -1 : 1;
       if (va > vb) return sortDir === "asc" ? 1 : -1;
       return 0;
     });
-  }, [agents, sortKey, sortDir]);
+  }, [agents, sortKey, sortDir, agentSearch]);
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
+    const nextDir: SortDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "desc";
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set("sort", key);
+        p.set("dir", nextDir);
+        return p;
+      },
+      { replace: true }
+    );
   };
 
   const monthLabel = useMemo(() => {
@@ -227,10 +266,54 @@ export function SalesKpiPage() {
         title="KPI"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <AgentSearch onChange={setAgentSearch} value={agentSearch} />
             <PeriodRangeFilter
               onChange={setPeriodRange}
               periods={salesPeriods}
               value={{ ...periodRange, monthPeriodId: monthlyPeriodId }}
+            />
+            <CsvDownloadButton
+              disabled={sortedAgents.length === 0}
+              onClick={() => {
+                const periodTag = selectedPeriod?.month ?? selectedYear;
+                exportToCsv(
+                  `sales-kpi-${periodTag}`,
+                  [
+                    "#",
+                    "Temsilci",
+                    "Perf. Değ.",
+                    "Satış (TRY)",
+                    "Lisans Adeti",
+                    "Ort. Lisans Fiyatı (TRY)",
+                    "2+1",
+                    "%2+1",
+                    "Top. Konuşma Süresi (sn)",
+                    "Arama Denemesi",
+                    "Pre Onb",
+                    "Hubspot",
+                    "Domain",
+                    "Outbound / Eski Lead",
+                    "Dönüşüm Oranı (%)"
+                  ],
+                  sortedAgents.map((a, idx) => [
+                    idx + 1,
+                    a.agentName,
+                    a.perfScore,
+                    a.salesAmount,
+                    a.licenseCount,
+                    a.avgLicensePrice,
+                    getTwoPlusOneCount(a),
+                    getTwoPlusOnePercent(a),
+                    a.talkDurationSeconds,
+                    a.callAttempts,
+                    a.preOnbCount,
+                    a.hubspotScore,
+                    a.domainCount,
+                    a.outboundLeadCount,
+                    a.conversionRate
+                  ])
+                );
+              }}
             />
             <Link
               to="/sales/kpi/target-calibration"
@@ -337,25 +420,28 @@ export function SalesKpiPage() {
                 {/* Başlık satırı */}
                 <thead>
                   <tr className="bg-emerald-800 dark:bg-emerald-900">
+                    <th className={`${thBase} text-center cursor-default hover:bg-emerald-800 dark:hover:bg-emerald-900`}>#</th>
                     {sortTh("KPI's", "agentName", "left")}
                     {sortTh("Perf. Değ.", "perfScore")}
                     {sortTh(monthLabel, "salesAmount")}
                     {sortTh("Lisans Adeti", "licenseCount")}
                     {sortTh("Ort. Lisans Fiyatı", "avgLicensePrice")}
+                    {sortTh("2+1", "twoPlusOneCount")}
+                    {sortTh("%2+1", "twoPlusOnePercent")}
                     {sortTh("Top. Konuşma Süresi", "talkDurationSeconds")}
                     {sortTh("Arama Denemesi", "callAttempts")}
+                    {sortTh("Pre Onb", "preOnbCount")}
+                    {sortTh("Hubspot", "hubspotScore")}
+                    {sortTh("Domain", "domainCount")}
+                    {sortTh("Outbound / Eski Lead", "outboundLeadCount")}
                     {sortTh("Dönüşüm Oranı", "conversionRate")}
-                    {sortTh("Scale 2+1", "scaleCount")}
-                    {sortTh("Scale %", "scaleConversion")}
-                    {sortTh("Scale+ 2+1", "scalePlusCount")}
-                    {sortTh("Scale+ %", "scalePlusConversion")}
-                    {sortTh("Toplam %", "totalConversion")}
                   </tr>
                 </thead>
 
                 <tbody>
                   {/* Hedef satırı */}
                   <tr className="bg-emerald-800 dark:bg-emerald-900">
+                    <td className="px-4 py-2.5 text-sm font-bold text-white/70 whitespace-nowrap" />
                     <td className="px-4 py-2.5 text-sm font-bold text-white/70 whitespace-nowrap" />
                     <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">
                       {formatNumber(targets.perfScore)}
@@ -369,20 +455,21 @@ export function SalesKpiPage() {
                     <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">
                       {formatCurrency(targets.avgLicensePrice)}
                     </td>
+                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
+                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
                     <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">
                       {targets.talkDurationLabel}
                     </td>
                     <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">
                       {formatNumber(targets.callAttempts)}
                     </td>
+                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
+                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
+                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
+                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
                     <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">
                       %{formatNumber(targets.conversionRate, 2)}
                     </td>
-                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
-                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
-                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
-                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
-                    <td className="px-4 py-2.5 text-center text-sm font-bold text-emerald-200 whitespace-nowrap">—</td>
                   </tr>
 
                   {/* Temsilci satırları */}
@@ -396,6 +483,7 @@ export function SalesKpiPage() {
                           : "bg-slate-50/50 dark:bg-slate-800/50"
                       ].join(" ")}
                     >
+                      <td className={`${tdCenterCls} font-medium text-slate-500 dark:text-slate-400`}>{idx + 1}</td>
                       <td className={`${tdCls} font-semibold`}>{agent.agentName}</td>
                       <td className={tdCenterCls}>
                         {agent.perfScore !== null ? (
@@ -421,8 +509,14 @@ export function SalesKpiPage() {
                         </span>
                       </td>
                       <td className={tdCenterCls}>{formatCurrency(agent.avgLicensePrice)}</td>
+                      <td className={tdCenterCls}>{formatNumber(getTwoPlusOneCount(agent))}</td>
+                      <td className={tdCenterCls}>{formatNumber(getTwoPlusOnePercent(agent), 2)}%</td>
                       <td className={tdCenterCls}>{formatHMS(agent.talkDurationSeconds)}</td>
                       <td className={tdCenterCls}>{formatNumber(agent.callAttempts)}</td>
+                      <td className={tdCenterCls}>{agent.preOnbCount !== null && agent.preOnbCount !== undefined ? formatNumber(agent.preOnbCount) : "—"}</td>
+                      <td className={tdCenterCls}>{agent.hubspotScore !== null && agent.hubspotScore !== undefined ? formatNumber(agent.hubspotScore, 3) : "—"}</td>
+                      <td className={tdCenterCls}>{agent.domainCount !== null && agent.domainCount !== undefined ? formatNumber(agent.domainCount) : "—"}</td>
+                      <td className={tdCenterCls}>{agent.outboundLeadCount !== null && agent.outboundLeadCount !== undefined ? formatNumber(agent.outboundLeadCount) : "—"}</td>
                       <td className={tdCenterCls}>
                         <span className={
                           agent.conversionRate >= targets.conversionRate
@@ -432,16 +526,12 @@ export function SalesKpiPage() {
                           {formatNumber(agent.conversionRate, 2)}%
                         </span>
                       </td>
-                      <td className={tdCenterCls}>{formatNumber(agent.scaleCount ?? 0)}</td>
-                      <td className={tdCenterCls}>{formatNumber(agent.scaleConversion ?? 0, 2)}%</td>
-                      <td className={tdCenterCls}>{formatNumber(agent.scalePlusCount ?? 0)}</td>
-                      <td className={tdCenterCls}>{formatNumber(agent.scalePlusConversion ?? 0, 2)}%</td>
-                      <td className={tdCenterCls}>{formatNumber(agent.totalConversion ?? 0, 2)}%</td>
                     </tr>
                   ))}
 
                   {/* Ortalama satırı */}
                   <tr className="border-t-2 border-emerald-600 bg-emerald-800 dark:border-emerald-700 dark:bg-emerald-900">
+                    <td className="px-4 py-3 text-sm font-bold text-white whitespace-nowrap" />
                     <td className="px-4 py-3 text-sm font-bold text-white whitespace-nowrap">ORTALAMA</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">
                       {summary.avg.perfScore !== null ? formatNumber(summary.avg.perfScore, 2) : "-"}
@@ -449,30 +539,33 @@ export function SalesKpiPage() {
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatCurrency(summary.avg.salesAmount)}</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(Math.round(summary.avg.licenseCount))}</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatCurrency(Math.round(summary.avg.avgLicensePrice))}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(Math.round(summary.avg.twoPlusOneCount))}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.avg.twoPlusOnePercent, 2)}%</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatHMS(Math.round(summary.avg.talkDuration))}</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(Math.round(summary.avg.callAttempts))}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{summary.avg.preOnbCount !== null ? formatNumber(summary.avg.preOnbCount, 1) : "—"}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{summary.avg.hubspotScore !== null ? formatNumber(summary.avg.hubspotScore, 3) : "—"}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{summary.avg.domainCount !== null ? formatNumber(summary.avg.domainCount, 1) : "—"}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{summary.avg.outboundLeadCount !== null ? formatNumber(summary.avg.outboundLeadCount, 1) : "—"}</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.avg.conversionRate, 2)}%</td>
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(Math.round(summary.avg.scaleCount))}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.avg.scaleConversion, 2)}%</td>
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(Math.round(summary.avg.scalePlusCount))}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.avg.scalePlusConversion, 2)}%</td>
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.avg.totalConversion, 2)}%</td>
                   </tr>
 
                   {/* Toplam satırı */}
                   <tr className="border-t border-emerald-600 bg-emerald-800 dark:border-emerald-700 dark:bg-emerald-900">
+                    <td className="px-4 py-3 text-sm font-bold text-white whitespace-nowrap" />
                     <td className="px-4 py-3 text-sm font-bold text-white whitespace-nowrap">TOPLAM</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatCurrency(summary.total.salesAmount)}</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.total.licenseCount)}</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.total.twoPlusOneCount)}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.total.callAttempts)}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.total.preOnbCount)}</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.total.scaleCount)}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.total.scalePlusCount)}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.total.domainCount)}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center">{formatNumber(summary.total.outboundLeadCount)}</td>
                     <td className="px-4 py-3 text-sm font-bold text-emerald-200 whitespace-nowrap text-center" />
                   </tr>
                 </tbody>

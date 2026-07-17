@@ -16,6 +16,13 @@ import { average, computeFeedbackCoverage, selectQuestionRankings, sortMetricIte
 
 type ThresholdMap = Record<KpiMetricKey, ThresholdConfig>;
 
+/**
+ * CS audit ortalamalarına dahil edilmeyen temsilci key'leri (normalizeKey formatı).
+ * Bu temsilcilerin audit puanları tablolarda/sıralamalarda görünmeye devam eder;
+ * yalnızca takım audit ortalaması ve önceki audit doğruluğu ortalaması hesabına girmez.
+ */
+export const AUDIT_AVERAGE_EXCLUDED_KEYS: ReadonlySet<string> = new Set(["bahadir-icoz", "burak-yegin"]);
+
 function buildMetricItem(
   id: string,
   label: string,
@@ -60,6 +67,13 @@ function buildMetricDeltaMap<TRecord extends { id: string; agentKey: string; age
 
 function pickFirst(items: DashboardMetricItem[]): DashboardMetricItem | undefined {
   return items[0];
+}
+
+export function applyTopRankPreference<T extends { label: string; value: unknown }>(
+  items: T[],
+  limit?: number
+): T[] {
+  return limit !== undefined ? items.slice(0, limit) : items;
 }
 
 function formatJoinedLabels(labels: string[]): string {
@@ -168,9 +182,15 @@ function buildSummary(
     ...auditMetrics.map((record) => record.agentKey)
   ]);
 
+  // Audit ortalamaları doğrudan audit import'undan (auditMetrics) hesaplanır;
+  // AUDIT_AVERAGE_EXCLUDED_KEYS'teki temsilciler ortalamaya dahil edilmez.
+  const includedAuditMetrics = auditMetrics.filter(
+    (record) => !AUDIT_AVERAGE_EXCLUDED_KEYS.has(record.agentKey)
+  );
+
   return {
-    auditAverage: average(auditMetrics.map((record) => record.auditScore)),
-    previousAuditAccuracyAverage: average(auditMetrics.map((record) => record.previousAuditAccuracy)),
+    auditAverage: average(includedAuditMetrics.map((record) => record.auditScore)),
+    previousAuditAccuracyAverage: average(includedAuditMetrics.map((record) => record.previousAuditAccuracy)),
     csatAverage: average(agentMetrics.map((record) => record.callEvaluationAverage)),
     qtCoverageAverage: average(qtMetrics.map((record) => record.feedbackCoverage)),
     totalConversationCount: sum(agentMetrics.map((record) => record.totalConversationCount)),
@@ -271,9 +291,9 @@ export function buildDashboardSnapshot(params: {
     ),
     highlights,
     rankings: {
-      auditTop: auditDesc.slice(0, 5),
+      auditTop: applyTopRankPreference(auditDesc, 5),
       auditBottom: auditAsc.slice(0, 5),
-      csatTop: csatDesc.slice(0, 5),
+      csatTop: applyTopRankPreference(csatDesc, 5),
       csatBottom: csatAsc.slice(0, 5),
       risers: deltaSorted.filter((item) => item.delta !== null && item.delta !== undefined && item.delta > 0).slice(0, 5),
       fallers: deltaAsc.filter((item) => item.delta !== null && item.delta !== undefined && item.delta < 0).slice(0, 5),

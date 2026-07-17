@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import type { QtManualEntry } from "@kalitedb/shared";
-import { SurfaceCard } from "@kalitedb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Headphones, RefreshCw, Save } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Headphones, LogOut, RefreshCw, Save, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
+import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
+import { AdminButton, AdminCard, ADMIN_INPUT, Banner, ErrorBanner, HeaderPill, InputField } from "../components/admin-ui";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
 import { useAuth } from "../lib/auth";
@@ -73,11 +74,16 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
   const queryClient = useQueryClient();
   const now = new Date();
 
-  const isAdminUser = true;
-  const canEditQtManualEntry = true;
+  const isAdminUser = props.currentUserRole === "admin";
+  const canEditQtManualEntry =
+    props.currentUserRole === "qt" ||
+    props.currentUserRole === "quality" ||
+    isAdminUser;
 
   const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
   const [selectedMonthValue, setSelectedMonthValue] = useState(String(now.getMonth() + 1).padStart(2, "0"));
+  const [activeView, setActiveView] = useState<"entry" | "list">("entry");
+  const [sidebarQuery, setSidebarQuery] = useState("");
   const [selectedQtTargetEmail, setSelectedQtTargetEmail] = useState("");
   const [qtManualInputs, setQtManualInputs] = useState(EMPTY_QT_MANUAL_INPUTS);
   const [isQtManualDirty, setIsQtManualDirty] = useState(false);
@@ -126,7 +132,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
     const options = new Map<string, { email: string; name: string; label: string }>();
 
     for (const assignment of rolesQuery.data ?? []) {
-      if (assignment.role !== "qt" && assignment.role !== "quality") {
+      if (assignment.role !== "qt" && assignment.role !== "quality" && assignment.role !== "admin") {
         continue;
       }
 
@@ -312,7 +318,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
         id: "action",
         cell: ({ row }) => (
           <button
-            className="rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition hover:border-primary/30 hover:text-primary"
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-[var(--adm-accent-border)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
             onClick={() => setSelectedQtTargetEmail(normalizeEmailValue(row.original.userEmail))}
             type="button"
           >
@@ -334,79 +340,113 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
     ]);
   };
 
+  const viewMeta = {
+    entry: { label: "QT Manuel Giriş", description: "Seçili dönem için QT kullanıcısı adına dinleme, değerlendirme ve geri bildirim değerlerini girin." },
+    list: { label: "QT Kullanıcı Girişleri", description: "Seçili döneme ait tüm QT kullanıcılarının manuel giriş verileri." }
+  } as const;
+  const activeViewMeta = viewMeta[activeView];
+
+  const navGroups: AdminNavGroup[] = [
+    {
+      id: "qt",
+      label: "QT Metrikleri",
+      items: [
+        {
+          id: "entry",
+          label: viewMeta.entry.label,
+          description: viewMeta.entry.description,
+          icon: <Headphones size={14} />,
+          active: activeView === "entry",
+          onClick: () => setActiveView("entry")
+        },
+        {
+          id: "list",
+          label: viewMeta.list.label,
+          description: viewMeta.list.description,
+          icon: <Users size={14} />,
+          active: activeView === "list",
+          onClick: () => setActiveView("list")
+        }
+      ]
+    }
+  ];
+
   return (
-    <div className="rounded-[10px] border border-sky-100/90 dark:border-slate-700/50 bg-[#edf6fb] dark:bg-slate-900/80 p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)]">
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="overflow-hidden rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white dark:bg-slate-800 shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <p className="text-sm text-slate-500 dark:text-slate-400">{auth.user?.email ?? "Yerel yönetim erişimi"}</p>
-          </div>
-
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <SidebarSectionTitle>Dönem</SidebarSectionTitle>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-              <InputField label="Yıl">
-                <FancySelect
-                  size="lg"
-                  className="w-full"
-                  panelWidthClass="w-40"
-                  options={availableYears.map((year) => ({ value: year, label: year }))}
-                  value={selectedYear}
-                  onChange={setSelectedYear}
-                  placeholder="Yıl"
-                />
-              </InputField>
-              <InputField label="Ay">
-                <FancySelect
-                  size="lg"
-                  className="w-full"
-                  panelWidthClass="w-44"
-                  options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
-                  value={selectedMonthValue}
-                  onChange={setSelectedMonthValue}
-                  placeholder="Ay"
-                />
-              </InputField>
+    <AdminShell
+      accent="quality"
+      sidebar={
+        <AdminShellSidebar
+          title="Yönetim Paneli"
+          subtitle="Kalite · QT Metrikleri"
+          header={
+            <div className="space-y-3">
+              <p className="truncate text-xs font-medium text-slate-400">
+                {auth.user?.email ?? "Yerel yönetim erişimi"}
+              </p>
+              <div>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Dönem</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <FancySelect
+                    size="md"
+                    className="w-full"
+                    panelWidthClass="w-36"
+                    options={availableYears.map((year) => ({ value: year, label: year }))}
+                    value={selectedYear}
+                    onChange={setSelectedYear}
+                    placeholder="Yıl"
+                  />
+                  <FancySelect
+                    size="md"
+                    className="w-full"
+                    panelWidthClass="w-40"
+                    options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
+                    value={selectedMonthValue}
+                    onChange={setSelectedMonthValue}
+                    placeholder="Ay"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
+          }
+          search={{ value: sidebarQuery, onChange: setSidebarQuery, placeholder: "Bölüm ara..." }}
+          groups={navGroups}
+          footer={
+            <button
+              className="inline-flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white"
+              onClick={() => void auth.logout()}
+              type="button"
+            >
+              <LogOut size={15} />
+              Çıkış Yap
+            </button>
+          }
+        />
+      }
+    >
+      <AdminShellHeader
+        breadcrumb={<span>Yönetim · Kalite</span>}
+        title={activeViewMeta.label}
+        description={activeViewMeta.description}
+        pills={
+          <>
+            <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
+            <HeaderPill tone="success">
+              <span className="inline-flex items-center gap-1.5">
+                <Headphones size={12} /> Kalite Ekibi
+              </span>
+            </HeaderPill>
+          </>
+        }
+        actions={
+          <AdminButton icon={<RefreshCw size={14} />} onClick={() => void refreshCurrentView()}>
+            Yenile
+          </AdminButton>
+        }
+      />
 
-          <div className="border-b border-slate-200/80 dark:border-slate-600/40 px-6 py-6">
-            <SidebarSectionTitle>Aksiyonlar</SidebarSectionTitle>
-            <div className="mt-5 space-y-2">
-              <SidebarActionButton icon={<RefreshCw size={15} />} onClick={() => void refreshCurrentView()}>
-                Veriyi yenile
-              </SidebarActionButton>
-            </div>
-          </div>
-
-          <div className="px-6 py-6">
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Bu panel Kalite ekibinin aylık dinleme, değerlendirme ve geri bildirim verilerini manuel olarak girmesi için tasarlanmıştır.
-            </p>
-          </div>
-        </aside>
-
-        <main className="min-w-0 space-y-4">
-          <section className="rounded-[10px] border border-slate-200/90 dark:border-slate-600/40 bg-white dark:bg-slate-800 px-8 py-6 shadow-[0_12px_34px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-wrap items-center gap-2">
-              <HeaderPill>QT Manuel Giriş</HeaderPill>
-              <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
-              <HeaderPill tone="success">
-                <span className="inline-flex items-center gap-1.5">
-                  <Headphones size={12} /> Kalite Ekibi
-                </span>
-              </HeaderPill>
-            </div>
-            <h1 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100 sm:text-4xl">
-              Kalite Yönetim Paneli
-            </h1>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              QT kullanıcıları için dinleme saatleri, değerlendirme adetleri ve geri bildirim verilerini bu panelden yönetin.
-            </p>
-          </section>
-
-          <div className="grid gap-6 xl:grid-cols-[0.84fr_1.16fr]">
-            <SurfaceCard
+      <div className="space-y-6">
+        {activeView === "entry" ? (
+            <AdminCard
               description="Seçili dönem için QT kullanıcısı adına dinleme, değerlendirme ve geri bildirim değerlerini manuel olarak girin."
               title={canEditQtManualEntry ? "QT manuel girişi" : "QT veri akışı"}
               variant="default"
@@ -417,7 +457,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                     <div className="mb-4 space-y-3">
                       <InputField label="QT kullanıcısı">
                         <select
-                          className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                          className={ADMIN_INPUT}
                           disabled={qtTargetOptions.length === 0 || qtManualEntryQuery.isPending}
                           onChange={(event) => setSelectedQtTargetEmail(event.target.value)}
                           value={selectedQtTargetEmail}
@@ -442,7 +482,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                   <div className="grid gap-4 md:grid-cols-2">
                     <InputField label="Toplam dinleme süresi (saat)">
                       <input
-                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                        className={ADMIN_INPUT}
                         disabled={qtManualFormDisabled}
                         onChange={(event) =>
                           setQtManualInputs((current) => {
@@ -457,7 +497,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                     </InputField>
                     <InputField label="Değerlendirilen çağrı adedi">
                       <input
-                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                        className={ADMIN_INPUT}
                         disabled={qtManualFormDisabled}
                         inputMode="numeric"
                         onChange={(event) =>
@@ -473,7 +513,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                     </InputField>
                     <InputField label="Değerlendirilen chat / e-posta adedi">
                       <input
-                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                        className={ADMIN_INPUT}
                         disabled={qtManualFormDisabled}
                         inputMode="numeric"
                         onChange={(event) =>
@@ -489,7 +529,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                     </InputField>
                     <InputField label="Geri bildirim sayısı">
                       <input
-                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                        className={ADMIN_INPUT}
                         disabled={qtManualFormDisabled}
                         inputMode="numeric"
                         onChange={(event) =>
@@ -505,7 +545,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                     </InputField>
                     <InputField label="Saat başına geri bildirim oranı">
                       <input
-                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                        className={ADMIN_INPUT}
                         disabled={qtManualFormDisabled}
                         onChange={(event) =>
                           setQtManualInputs((current) => {
@@ -520,7 +560,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                     </InputField>
                     <InputField label="Verilen eğitim sayısı">
                       <input
-                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                        className={ADMIN_INPUT}
                         disabled={qtManualFormDisabled}
                         inputMode="numeric"
                         onChange={(event) =>
@@ -536,7 +576,7 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                     </InputField>
                     <InputField label="Katılınan toplantı sayısı">
                       <input
-                        className="h-11 w-full rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3.5 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
+                        className={ADMIN_INPUT}
                         disabled={qtManualFormDisabled}
                         inputMode="numeric"
                         onChange={(event) =>
@@ -562,27 +602,33 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                         ? `${selectedQtTarget.targetUserName} için alanları boş bırakıp kaydetmek mevcut değeri kaldırır.`
                         : "Alanları boş bırakıp kaydetmek mevcut değeri kaldırır."}
                     </p>
-                    <button
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-slate-950 dark:bg-slate-700 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700/50"
+                    <AdminButton
+                      icon={<Save size={15} />}
+                      variant="primary"
+                      size="lg"
                       disabled={!selectedPeriodId || qtManualFormDisabled || (isAdminUser && !selectedQtTarget)}
                       onClick={() => qtManualEntryMutation.mutate(qtManualInputs)}
-                      type="button"
                     >
-                      <Save size={15} />
                       {qtManualEntryMutation.isPending ? "Kaydediliyor..." : "QT değerlerini kaydet"}
-                    </button>
+                    </AdminButton>
                   </div>
 
                   {qtManualEntryMutation.isError ? (
-                    <div className="mt-4 rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                      {qtManualEntryMutation.error instanceof Error
-                        ? qtManualEntryMutation.error.message
-                        : "QT değerleri kaydedilirken bir hata oluştu."}
+                    <div className="mt-4">
+                      <ErrorBanner
+                        message={
+                          qtManualEntryMutation.error instanceof Error
+                            ? qtManualEntryMutation.error.message
+                            : "QT değerleri kaydedilirken bir hata oluştu."
+                        }
+                      />
                     </div>
                   ) : null}
                   {isAdminUser && qtTargetOptions.length === 0 ? (
-                    <div className="mt-4 rounded-[10px] border border-amber-200 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-400">
-                      Düzenlemek için önce Yönetim › Roller alanında en az bir kullanıcıyı `QT` veya `Kalite` rolüyle tanımlayın.
+                    <div className="mt-4">
+                      <Banner tone="warning">
+                        Düzenlemek için önce Yönetim › Roller alanında en az bir kullanıcıyı `QT` veya `Kalite` rolüyle tanımlayın.
+                      </Banner>
                     </div>
                   ) : null}
                 </>
@@ -591,19 +637,21 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                   QT kullanıcıları seçili döneme ait dinleme, değerlendirme ve geri bildirim sayılarını bu alandan manuel girer.
                 </p>
               )}
-            </SurfaceCard>
-
-            <SurfaceCard
+            </AdminCard>
+        ) : (
+            <AdminCard
               description="Seçili döneme ait manuel QT girişleri burada listelenir."
               title="QT kullanıcı girişleri"
               variant="default"
             >
               {qtManualEntriesQuery.isError ? (
-                <div className="rounded-[10px] border border-rose-200 dark:border-rose-700/40 bg-rose-50 dark:bg-rose-900/30 px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                  {qtManualEntriesQuery.error instanceof Error
-                    ? qtManualEntriesQuery.error.message
-                    : "QT girişleri alınırken bir hata oluştu."}
-                </div>
+                <ErrorBanner
+                  message={
+                    qtManualEntriesQuery.error instanceof Error
+                      ? qtManualEntriesQuery.error.message
+                      : "QT girişleri alınırken bir hata oluştu."
+                  }
+                />
               ) : (
                 <DataTable
                   columns={qtManualColumns}
@@ -616,59 +664,10 @@ export function QualityAdminPage(props: { currentUserRole?: AuthenticatedUser["r
                   }
                 />
               )}
-            </SurfaceCard>
-          </div>
-        </main>
+            </AdminCard>
+        )}
       </div>
-    </div>
+    </AdminShell>
   );
 }
 
-function SidebarSectionTitle(props: { children: ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{props.children}</p>;
-}
-
-function SidebarActionButton(props: {
-  children: ReactNode;
-  icon: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className="inline-flex w-full items-center justify-center gap-2 rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:border-slate-300 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700/30"
-      onClick={props.onClick}
-      type="button"
-    >
-      {props.icon}
-      {props.children}
-    </button>
-  );
-}
-
-function HeaderPill(props: { children: ReactNode; tone?: "neutral" | "accent" | "success" }) {
-  const tone = props.tone ?? "neutral";
-
-  return (
-    <span
-      className={[
-        "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
-        tone === "accent"
-          ? "border-sky-200 dark:border-sky-700/40 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400"
-          : tone === "success"
-            ? "border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-            : "border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400"
-      ].join(" ")}
-    >
-      {props.children}
-    </span>
-  );
-}
-
-function InputField(props: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{props.label}</span>
-      {props.children}
-    </label>
-  );
-}

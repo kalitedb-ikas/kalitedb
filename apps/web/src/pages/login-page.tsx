@@ -55,6 +55,9 @@ export function LoginPage() {
             <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
               Devam etmek için kurum hesabınızla oturum açın.
             </p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              Yalnızca <span className="font-semibold text-slate-700">@ikas.com</span> Google hesapları erişebilir.
+            </p>
 
             {auth.authMode === "dev" && !hasFirebaseUser ? (
               <div className="mt-6 rounded-[10px] border border-sky-200 bg-sky-50/90 p-4 text-sm text-sky-900">
@@ -176,6 +179,13 @@ export function LoginPage() {
                     type="button"
                   >
                     QT
+                  </button>
+                  <button
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                    onClick={() => auth.loginAsDev("representative")}
+                    type="button"
+                  >
+                    Temsilci
                   </button>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { timelineEventSchema } from "@kalitedb/shared";
+import { representativeExclusionSurfaceSchema, representativeTableExclusionSchema, timelineEventSchema } from "@kalitedb/shared";
 import { z } from "zod";
 
 import { requireAuth } from "@/src/lib/auth";
@@ -9,11 +9,13 @@ export const OPTIONS = optionsResponse;
 
 const patchRepresentativeSchema = z.object({
   status: z.enum(["active", "departed", "department_changed"]).optional(),
-  department: z.enum(["cs", "sales"]).optional(),
+  department: z.enum(["cs", "sales", "quality", "partner"]).optional(),
   displayName: z.string().min(1).optional(),
   statusNote: z.string().optional(),
   badges: z.array(z.string()).optional(),
-  timeline: z.array(timelineEventSchema).optional()
+  timeline: z.array(timelineEventSchema).optional(),
+  exclusions: z.array(representativeExclusionSurfaceSchema).optional(),
+  tableExclusions: z.array(representativeTableExclusionSchema).optional()
 });
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ key: string }> }) {
@@ -52,6 +54,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ke
       ...(body.statusNote != null ? { statusNote: body.statusNote } : {}),
       ...(body.badges != null ? { badges: body.badges } : {}),
       ...(body.timeline != null ? { timeline: body.timeline } : {}),
+      ...(body.exclusions != null ? { exclusions: body.exclusions } : {}),
+      ...(body.tableExclusions != null ? { tableExclusions: body.tableExclusions } : {}),
       updatedAt: new Date().toISOString()
     });
 

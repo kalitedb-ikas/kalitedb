@@ -18,11 +18,13 @@ import { MonthlyTable, buildAgentAvatar, type MonthlyAgentRow } from "../compone
 import { BadgeFilter } from "../components/badge-filter";
 import { CompactStatCard } from "../components/compact-stat-card";
 import { RepNameCell } from "../components/rep-name-cell";
+import { useRepresentativeKeysWithBadge } from "../lib/use-active-representatives";
 import { useRepresentativesMap } from "../lib/use-representatives-map";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { formatNumber, formatPercent } from "../lib/format";
 import { chart } from "../theme/colors";
+import { ROLEPLAY_VISIBLE } from "../lib/feature-flags";
 
 type PerformanceAgentRow = {
   id: string;
@@ -206,9 +208,17 @@ export function SalesPerformancePage() {
     [aggregatedAgents]
   );
 
+  /* ── "Start" etiketli temsilciler öne çıkanlardan (champion, lider tablosu,
+   * en düşük performans) hariç tutulur; takım ortalaması etkilenmez. ── */
+  const startTeamKeys = useRepresentativeKeysWithBadge("start");
+  const highlightAgents = useMemo(
+    () => (startTeamKeys.size === 0 ? aggregatedAgents : aggregatedAgents.filter((a) => !startTeamKeys.has(a.agentKey))),
+    [aggregatedAgents, startTeamKeys]
+  );
+
   /* ── Şampiyon & en düşük ── */
   const perfLeaders = useMemo(() => {
-    const scored = aggregatedAgents.filter(
+    const scored = highlightAgents.filter(
       (a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null
     );
     if (scored.length === 0) return [];
@@ -217,18 +227,18 @@ export function SalesPerformancePage() {
       .filter((a) => a.perfScore === topScore)
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"))
       .map((a, i) => ({ name: a.agentName, imageAlt: a.agentName, imageSrc: buildAgentAvatar(a.agentName, i) }));
-  }, [aggregatedAgents]);
+  }, [highlightAgents]);
   const perfLeaderNames = perfLeaders.map((l) => l.name).join(", ");
 
   const topPerfScore = useMemo(() => {
-    const scored = aggregatedAgents
+    const scored = highlightAgents
       .map((a) => a.perfScore)
       .filter((v): v is number => v !== null);
     return scored.length > 0 ? Math.max(...scored) : null;
-  }, [aggregatedAgents]);
+  }, [highlightAgents]);
 
   const lowestPerfGroup = useMemo(() => {
-    const scored = aggregatedAgents.filter(
+    const scored = highlightAgents.filter(
       (a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null
     );
     if (scored.length === 0) return null;
@@ -237,16 +247,16 @@ export function SalesPerformancePage() {
       .filter((a) => a.perfScore === lowestScore)
       .sort((a, b) => a.agentName.localeCompare(b.agentName, "tr"));
     return { names: leaders.map((a) => a.agentName).join(", "), score: lowestScore };
-  }, [aggregatedAgents]);
+  }, [highlightAgents]);
 
   /* ── Lider tablosu (top 5) ── */
   const perfLeaderboardItems = useMemo(() => {
-    return aggregatedAgents
+    return highlightAgents
       .filter((a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null)
       .sort((a, b) => b.perfScore - a.perfScore || a.agentName.localeCompare(b.agentName, "tr"))
       .slice(0, 5)
       .map((a) => ({ id: a.agentKey, label: a.agentName, value: formatPerfScore(a.perfScore) }));
-  }, [aggregatedAgents]);
+  }, [highlightAgents]);
 
   /* ── Yıl trend grafiği (aylık takım ortalaması) ── */
   const perfHistory = useMemo(() => {
@@ -307,28 +317,41 @@ export function SalesPerformancePage() {
       .filter((a): a is SalesKpiAgent & { perfScore: number } => a.perfScore !== null)
       .map((a) => {
         const prev = prevMap.get(a.agentKey);
-        return prev !== undefined ? { label: a.agentName, delta: Number((a.perfScore - prev).toFixed(2)) } : null;
+        return prev !== undefined
+          ? { label: a.agentName, score: a.perfScore, delta: Number((a.perfScore - prev).toFixed(2)) }
+          : null;
       })
-      .filter((item): item is { label: string; delta: number } => item !== null);
+      .filter((item): item is { label: string; score: number; delta: number } => item !== null);
 
     if (changes.length === 0) return null;
 
     const maxDelta = Math.max(...changes.map((c) => c.delta));
     if (maxDelta > 0) {
       const leaders = changes.filter((c) => c.delta === maxDelta).sort((a, b) => a.label.localeCompare(b.label, "tr"));
-      return { title: "Yükselen performans", names: leaders.map((l) => l.label).join(", "), delta: maxDelta };
+      return {
+        title: "Yükselen performans",
+        names: leaders.map((l) => l.label).join(", "),
+        delta: maxDelta,
+        score: leaders.length === 1 ? leaders[0]!.score : null
+      };
     }
 
     const minDelta = Math.min(...changes.map((c) => c.delta));
     if (minDelta < 0) {
       const leaders = changes.filter((c) => c.delta === minDelta).sort((a, b) => a.label.localeCompare(b.label, "tr"));
-      return { title: "Düşen performans", names: leaders.map((l) => l.label).join(", "), delta: minDelta };
+      return {
+        title: "Düşen performans",
+        names: leaders.map((l) => l.label).join(", "),
+        delta: minDelta,
+        score: leaders.length === 1 ? leaders[0]!.score : null
+      };
     }
 
     return {
       title: `${performanceShiftTitlePrefix} değişim`,
       names: changes.map((c) => c.label).sort((a, b) => a.localeCompare(b, "tr")).join(", "),
-      delta: 0
+      delta: 0,
+      score: null
     };
   }, [aggregatedAgents, previousAggregatedAgents, performanceShiftTitlePrefix]);
 
@@ -521,7 +544,13 @@ export function SalesPerformancePage() {
                   <span className="min-w-0 break-words">{performanceShift?.names ?? "Henüz yok"}</span>
                 </span>
               }
-              hint={performanceShift ? `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan` : undefined}
+              hint={
+                performanceShift
+                  ? performanceShift.score !== null
+                    ? `${formatPerfScore(performanceShift.score)} puan · ${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)}`
+                    : `${performanceShift.delta > 0 ? "+" : ""}${formatNumber(performanceShift.delta, 2)} puan`
+                  : undefined
+              }
             />
             <CompactStatCard
               label="En düşük performans"
@@ -594,20 +623,22 @@ export function SalesPerformancePage() {
             repsMap={repsMap}
           />
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <MonthlyTable
-              data={filterMonthly(rolePlayData)}
-              noteMap={roleplayNoteMap}
-              onNoteClick={(agentKey, agentName, currentNote) =>
-                setNoteModal({ agentKey, agentName, note: currentNote })
-              }
-              summaryMode="total"
-              title="IS Role-Play Adet"
-              emptyNote="Role-play verileri henüz girilmemiş. Yönetim panelinden giriş yapabilirsiniz."
-              colorScale="count"
-              actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
-              repsMap={repsMap}
-            />
+          <div className={ROLEPLAY_VISIBLE ? "grid gap-6 xl:grid-cols-2" : ""}>
+            {ROLEPLAY_VISIBLE ? (
+              <MonthlyTable
+                data={filterMonthly(rolePlayData)}
+                noteMap={roleplayNoteMap}
+                onNoteClick={(agentKey, agentName, currentNote) =>
+                  setNoteModal({ agentKey, agentName, note: currentNote })
+                }
+                summaryMode="total"
+                title="IS Role-Play Adet"
+                emptyNote="Role-play verileri henüz girilmemiş. Yönetim panelinden giriş yapabilirsiniz."
+                colorScale="count"
+                actions={<BadgeFilter onChange={setBadgeFilter} value={badgeFilter} />}
+                repsMap={repsMap}
+              />
+            ) : null}
 
             <MonthlyTable
               data={filterMonthly(revOpsData)}

@@ -1,6 +1,7 @@
-import type { Department, Representative, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
-import { BarChart3, Briefcase, Crown, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import type { Department, Representative, RepresentativeExclusionSurface, RepresentativeTableExclusion, TimelineEvent, TimelineEventType } from "@kalitedb/shared";
+import { BarChart3, Briefcase, Crown, Handshake, Headphones, Medal, MessageSquare, Phone, Rocket, ShoppingBag, Star, Ticket, Plus, Trash2, X, Zap } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { getRepresentativePhotoSrc } from "../lib/representative-photos";
 
@@ -18,6 +19,7 @@ export const BADGE_DEFINITIONS: { key: string; label: string; color: string; ico
   { key: "revops", label: "RevOPS", color: "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-700/40", icon: <BarChart3 size={12} /> },
   { key: "cs", label: "CS", color: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-700/40", icon: <Headphones size={12} /> },
   { key: "satici_operasyon", label: "Satıcı Operasyon", color: "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-700/40", icon: <Briefcase size={12} /> },
+  { key: "partner", label: "Partner", color: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 dark:border-fuchsia-700/40", icon: <Handshake size={12} /> },
   { key: "diger", label: "Diğer", color: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/40 dark:text-slate-300 dark:border-slate-600", icon: <Medal size={12} /> },
 ];
 
@@ -62,7 +64,24 @@ type SaveData = {
   department?: Department;
   badges: string[];
   timeline: TimelineEvent[];
+  exclusions: RepresentativeExclusionSurface[];
+  tableExclusions: RepresentativeTableExclusion[];
 };
+
+/** Temsilcinin dahil edilebileceği CS yüzeyleri; kapalıysa o sayfada tablo,
+ *  ortalama ve grafiklerden tamamen çıkar. */
+const EXCLUSION_SURFACES: { key: RepresentativeExclusionSurface; label: string }[] = [
+  { key: "audit", label: "Audit" },
+  { key: "csat", label: "CSAT" },
+  { key: "dashboard", label: "Genel Bakış" }
+];
+
+/** Temsilcinin belirli bir HAM tabloda gizlendiği yüzeyler; ortalama ve
+ *  grafik hesaplarına dokunmaz, yalnızca o tablonun satırından çıkarır. */
+const TABLE_EXCLUSIONS: { key: RepresentativeTableExclusion; label: string }[] = [
+  { key: "audit", label: "Audit Tablosu" },
+  { key: "csat", label: "CSAT Tablosu" }
+];
 
 type Props = {
   representative?: Representative;
@@ -79,6 +98,8 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
   const [department, setDepartment] = useState<Department>((representative?.department as Department) ?? defaultDepartment);
   const [badges, setBadges] = useState<string[]>(representative?.badges ?? []);
   const [timeline, setTimeline] = useState<TimelineEvent[]>(representative?.timeline ?? []);
+  const [exclusions, setExclusions] = useState<RepresentativeExclusionSurface[]>(representative?.exclusions ?? []);
+  const [tableExclusions, setTableExclusions] = useState<RepresentativeTableExclusion[]>(representative?.tableExclusions ?? []);
 
   // Timeline form state
   const [showTimelineForm, setShowTimelineForm] = useState(false);
@@ -92,8 +113,29 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
 
   const photoSrc = representative ? getRepresentativePhotoSrc(representative.displayName) : undefined;
 
+  // Modal açıkken arka plan kaydırmasını kilitle + ESC ile kapat
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const toggleBadge = (key: string) => {
     setBadges((prev) => prev.includes(key) ? prev.filter((b) => b !== key) : [...prev, key]);
+  };
+
+  const toggleExclusion = (key: RepresentativeExclusionSurface) => {
+    setExclusions((prev) => prev.includes(key) ? prev.filter((e) => e !== key) : [...prev, key]);
+  };
+
+  const toggleTableExclusion = (key: RepresentativeTableExclusion) => {
+    setTableExclusions((prev) => prev.includes(key) ? prev.filter((e) => e !== key) : [...prev, key]);
   };
 
   const addTimelineEvent = () => {
@@ -128,7 +170,9 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
       ...(isCreate || displayName !== representative?.displayName ? { displayName } : {}),
       department,
       badges,
-      timeline
+      timeline,
+      exclusions,
+      tableExclusions
     });
   };
 
@@ -139,22 +183,25 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
       ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
       : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+  // Admin-shell'in backdrop-blur'ü position:fixed için containing-block
+  // oluşturur ve modal viewport yerine karta göre konumlanır (altta kesik
+  // görünür); bu yüzden overlay'i body'ye portal ediyoruz.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[10px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.18)] dark:border-slate-600 dark:bg-slate-800"
+        className="relative flex w-full max-w-3xl max-h-[min(680px,92vh)] flex-col overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_32px_80px_rgba(15,23,42,0.25)] dark:border-slate-600 dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          className="absolute right-4 top-4 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           onClick={onClose}
           type="button"
         >
           <X size={18} />
         </button>
 
-        {/* ── Üst: Foto + İsim ── */}
-        <div className="flex items-center gap-4">
+        {/* ── Üst: Foto + İsim (sticky header) ── */}
+        <div className="flex items-center gap-4 border-b border-slate-200 dark:border-slate-600/60 px-6 py-5">
           {photoSrc ? (
             <div className="size-16 shrink-0 overflow-hidden rounded-[10px] border border-slate-200 dark:border-slate-600">
               <img alt={representative?.displayName ?? ""} className="size-full object-cover" src={photoSrc} />
@@ -179,8 +226,13 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
           </div>
         </div>
 
+        {/* ── Scrollable body: 2 kolon md+ ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-6">
+
         {/* ── İsim + Departman (create veya edit) ── */}
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="text-xs font-medium text-slate-500 dark:text-slate-400">İsim {isCreate && "*"}</label>
             <input
@@ -231,8 +283,68 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
           </div>
         </div>
 
-        {/* ── Kariyer Zaman Çizelgesi ── */}
+        {/* ── Dahil olduğu alanlar ── */}
         <div className="mt-6">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Dahil Olduğu Alanlar</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Kapalı olan alanlarda temsilci tablo, ortalama ve grafiklerde gösterilmez.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {EXCLUSION_SURFACES.map((surface) => {
+              const included = !exclusions.includes(surface.key);
+              return (
+                <button
+                  key={surface.key}
+                  className={[
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                    included
+                      ? "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
+                      : "border-slate-200 bg-white text-slate-400 line-through hover:border-slate-300 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:border-slate-500 dark:hover:text-slate-300"
+                  ].join(" ")}
+                  onClick={() => toggleExclusion(surface.key)}
+                  title={included ? `${surface.label} sayfasında gösteriliyor — gizlemek için tıkla` : `${surface.label} sayfasında gizli — dahil etmek için tıkla`}
+                  type="button"
+                >
+                  {surface.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Dahil olduğu tablolar ── */}
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Dahil Olduğu Tablolar</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Kapalı olan tablolarda temsilci sadece satır olarak gösterilmez; ortalama ve grafik hesapları etkilenmez.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {TABLE_EXCLUSIONS.map((table) => {
+              const included = !tableExclusions.includes(table.key);
+              return (
+                <button
+                  key={table.key}
+                  className={[
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                    included
+                      ? "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
+                      : "border-slate-200 bg-white text-slate-400 line-through hover:border-slate-300 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:border-slate-500 dark:hover:text-slate-300"
+                  ].join(" ")}
+                  onClick={() => toggleTableExclusion(table.key)}
+                  title={included ? `${table.label} tablosunda gösteriliyor — gizlemek için tıkla` : `${table.label} tablosunda gizli — dahil etmek için tıkla`}
+                  type="button"
+                >
+                  {table.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+            </div>
+
+            {/* ── Kariyer Zaman Çizelgesi (right column) ── */}
+            <div>
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Kariyer Zaman Çizelgesi</h3>
             <button
@@ -355,8 +467,11 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
           </div>
         </div>
 
-        {/* ── Kaydet ── */}
-        <div className="mt-6 flex justify-end border-t border-slate-200 pt-4 dark:border-slate-600">
+          </div>
+        </div>
+
+        {/* ── Kaydet (sticky footer) ── */}
+        <div className="flex justify-end border-t border-slate-200 dark:border-slate-600/60 px-6 py-4 bg-slate-50/60 dark:bg-slate-800/80">
           <button
             className="h-10 rounded-[10px] bg-[#2f6b7a] px-6 text-sm font-semibold text-white shadow-sm hover:bg-[#285d6a] disabled:opacity-50"
             disabled={isSaving || (isCreate && !displayName.trim())}
@@ -367,6 +482,7 @@ export function RepresentativeDetailModal({ representative, mode = "edit", defau
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

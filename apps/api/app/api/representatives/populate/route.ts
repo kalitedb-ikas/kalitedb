@@ -60,6 +60,10 @@ export async function POST(request: Request) {
         displayName: info.displayName,
         department: info.department,
         status: "active",
+        badges: [],
+        timeline: [],
+        exclusions: [],
+        tableExclusions: [],
         createdAt: now,
         updatedAt: now
       });

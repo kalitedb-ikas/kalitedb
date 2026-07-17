@@ -38,6 +38,12 @@ function toDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** "YYYY-MM-DD" -> local Date (UTC parse ile günün kaymasını önler) */
+function parseDateStr(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y!, (m ?? 1) - 1, d ?? 1);
+}
+
 function getMonthString(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -273,12 +279,23 @@ function EventFormModal(props: {
 
 // ─── Event card (used in day/3day/week views) ────────────────────────
 
-function EventCard(props: { event: TrainingEvent; canEdit: boolean; onEdit: () => void }) {
+function EventCard(props: { event: TrainingEvent; canEdit: boolean; isDragging: boolean; onEdit: () => void; onDragStart: () => void; onDragEnd: () => void }) {
   const { event } = props;
   return (
     <button
-      className="group/event flex w-full items-start gap-2 rounded-[10px] px-3 py-2.5 text-left text-sm transition hover:brightness-110"
+      className={[
+        "group/event flex w-full items-start gap-2 rounded-[10px] px-3 py-2.5 text-left text-sm transition hover:brightness-110",
+        props.isDragging ? "opacity-40" : "",
+        props.canEdit ? "cursor-grab active:cursor-grabbing" : ""
+      ].filter(Boolean).join(" ")}
+      draggable={props.canEdit}
       onClick={() => props.canEdit && props.onEdit()}
+      onDragEnd={props.onDragEnd}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", event.id);
+        e.dataTransfer.effectAllowed = "move";
+        props.onDragStart();
+      }}
       style={{ backgroundColor: event.color }}
       type="button"
     >
@@ -301,12 +318,23 @@ function EventCard(props: { event: TrainingEvent; canEdit: boolean; onEdit: () =
 
 // ─── Compact event pill (used in month view) ─────────────────────────
 
-function EventPill(props: { event: TrainingEvent; canEdit: boolean; onEdit: () => void }) {
+function EventPill(props: { event: TrainingEvent; canEdit: boolean; isDragging: boolean; onEdit: () => void; onDragStart: () => void; onDragEnd: () => void }) {
   const { event } = props;
   return (
     <button
-      className="group/event flex w-full items-start gap-1 rounded-[10px] px-1.5 py-1 text-left text-[11px] font-medium leading-tight text-white transition hover:brightness-110 sm:text-xs"
+      className={[
+        "group/event flex w-full items-start gap-1 rounded-[10px] px-1.5 py-1 text-left text-[11px] font-medium leading-tight text-white transition hover:brightness-110 sm:text-xs",
+        props.isDragging ? "opacity-40" : "",
+        props.canEdit ? "cursor-grab active:cursor-grabbing" : ""
+      ].filter(Boolean).join(" ")}
+      draggable={props.canEdit}
       onClick={() => props.canEdit && props.onEdit()}
+      onDragEnd={props.onDragEnd}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", event.id);
+        e.dataTransfer.effectAllowed = "move";
+        props.onDragStart();
+      }}
       style={{ backgroundColor: event.color }}
       title={[event.title, event.time ? `Saat: ${event.time}` : null, event.participants.length ? `Katılımcılar: ${event.participants.join(", ")}` : null, event.trainer ? `Eğitmen: ${event.trainer}` : null].filter(Boolean).join("\n")}
       type="button"
@@ -323,8 +351,15 @@ function MonthView(props: {
   currentDate: Date;
   eventsByDate: Map<string, TrainingEvent[]>;
   canEdit: boolean;
+  draggedEventId: string | null;
+  dragOverDate: string | null;
   onCreateEvent: (date: string) => void;
   onEditEvent: (event: TrainingEvent) => void;
+  onEventDragStart: (eventId: string) => void;
+  onEventDragEnd: () => void;
+  onDayDragOver: (date: string) => void;
+  onDayDragLeave: () => void;
+  onDayDrop: (date: string) => void;
 }) {
   const weeks = useMemo(
     () => getMonthCalendarDays(props.currentDate.getFullYear(), props.currentDate.getMonth()),
@@ -346,8 +381,29 @@ function MonthView(props: {
               {week.map((day) => {
                 const dayEvents = props.eventsByDate.get(day.date) ?? [];
                 const today = isToday(day.date);
+                const dragOver = props.canEdit && props.dragOverDate === day.date;
                 return (
-                  <div key={day.date} className={["group relative min-h-[120px] bg-white p-2 transition dark:bg-slate-900 sm:min-h-[140px]", !day.isCurrentMonth && "bg-slate-50/60 dark:bg-slate-900/50", today && "ring-2 ring-inset ring-blue-400 dark:ring-blue-500"].filter(Boolean).join(" ")}>
+                  <div
+                    key={day.date}
+                    className={[
+                      "group relative min-h-[120px] bg-white p-2 transition dark:bg-slate-900 sm:min-h-[140px]",
+                      !day.isCurrentMonth && "bg-slate-50/60 dark:bg-slate-900/50",
+                      today && "ring-2 ring-inset ring-blue-400 dark:ring-blue-500",
+                      dragOver && "ring-2 ring-inset ring-blue-500 bg-blue-50 dark:bg-blue-950/30"
+                    ].filter(Boolean).join(" ")}
+                    onDragLeave={() => props.canEdit && props.onDayDragLeave()}
+                    onDragOver={(e) => {
+                      if (!props.canEdit) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      props.onDayDragOver(day.date);
+                    }}
+                    onDrop={(e) => {
+                      if (!props.canEdit) return;
+                      e.preventDefault();
+                      props.onDayDrop(day.date);
+                    }}
+                  >
                     <div className="mb-1 flex items-start justify-between">
                       <span className={["inline-flex size-7 items-center justify-center rounded-full text-sm font-semibold", today ? "bg-blue-500 text-white" : day.isCurrentMonth ? "text-slate-800 dark:text-slate-200" : "text-slate-400 dark:text-slate-600"].join(" ")}>{day.day}</span>
                       {props.canEdit && day.isCurrentMonth ? (
@@ -356,7 +412,15 @@ function MonthView(props: {
                     </div>
                     <div className="space-y-1">
                       {dayEvents.map((event) => (
-                        <EventPill key={event.id} canEdit={props.canEdit} event={event} onEdit={() => props.onEditEvent(event)} />
+                        <EventPill
+                          key={event.id}
+                          canEdit={props.canEdit}
+                          event={event}
+                          isDragging={props.draggedEventId === event.id}
+                          onDragEnd={props.onEventDragEnd}
+                          onDragStart={() => props.onEventDragStart(event.id)}
+                          onEdit={() => props.onEditEvent(event)}
+                        />
                       ))}
                     </div>
                   </div>
@@ -377,8 +441,15 @@ function ColumnView(props: {
   days: Date[];
   eventsByDate: Map<string, TrainingEvent[]>;
   canEdit: boolean;
+  draggedEventId: string | null;
+  dragOverDate: string | null;
   onCreateEvent: (date: string) => void;
   onEditEvent: (event: TrainingEvent) => void;
+  onEventDragStart: (eventId: string) => void;
+  onEventDragEnd: () => void;
+  onDayDragOver: (date: string) => void;
+  onDayDragLeave: () => void;
+  onDayDrop: (date: string) => void;
 }) {
   const cols = props.days.length;
 
@@ -413,13 +484,27 @@ function ColumnView(props: {
             const dateStr = toDateStr(d);
             const dayEvents = props.eventsByDate.get(dateStr) ?? [];
             const today = isToday(dateStr);
+            const dragOver = props.canEdit && props.dragOverDate === dateStr;
             return (
               <div
                 key={dateStr}
                 className={[
                   "group min-h-[320px] bg-white p-3 dark:bg-slate-900",
-                  today && "ring-2 ring-inset ring-blue-400 dark:ring-blue-500"
+                  today && "ring-2 ring-inset ring-blue-400 dark:ring-blue-500",
+                  dragOver && "ring-2 ring-inset ring-blue-500 bg-blue-50 dark:bg-blue-950/30"
                 ].filter(Boolean).join(" ")}
+                onDragLeave={() => props.canEdit && props.onDayDragLeave()}
+                onDragOver={(e) => {
+                  if (!props.canEdit) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  props.onDayDragOver(dateStr);
+                }}
+                onDrop={(e) => {
+                  if (!props.canEdit) return;
+                  e.preventDefault();
+                  props.onDayDrop(dateStr);
+                }}
               >
                 {props.canEdit ? (
                   <button
@@ -433,7 +518,15 @@ function ColumnView(props: {
 
                 <div className="space-y-2">
                   {dayEvents.map((event) => (
-                    <EventCard key={event.id} canEdit={props.canEdit} event={event} onEdit={() => props.onEditEvent(event)} />
+                    <EventCard
+                      key={event.id}
+                      canEdit={props.canEdit}
+                      event={event}
+                      isDragging={props.draggedEventId === event.id}
+                      onDragEnd={props.onEventDragEnd}
+                      onDragStart={() => props.onEventDragStart(event.id)}
+                      onEdit={() => props.onEditEvent(event)}
+                    />
                   ))}
                 </div>
 
@@ -456,7 +549,7 @@ export function SalesCalendarPage(props: { currentUser?: AuthenticatedUser | und
   const auth = useAuth();
   const queryClient = useQueryClient();
   const currentUser = props.currentUser;
-  const canEdit = Boolean(currentUser);
+  const canEdit = Boolean(currentUser && ["admin", "manager", "team_leader", "team"].includes(currentUser.role));
 
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
@@ -466,6 +559,10 @@ export function SalesCalendarPage(props: { currentUser?: AuthenticatedUser | und
     | { type: "create"; defaultDate: string }
     | { type: "edit"; event: TrainingEvent }
   >({ type: "closed" });
+
+  // Sürükle-bırak: etkinlik başka bir güne bırakıldığında tarih güncellenir
+  const [draggedEventId, setDraggedEventId] = useState<string | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
   // Compute visible days based on view mode
   const visibleDays = useMemo((): Date[] => {
@@ -541,9 +638,11 @@ export function SalesCalendarPage(props: { currentUser?: AuthenticatedUser | und
         trainer: data.trainer.trim() || undefined,
         department: "sales"
       }),
-    onSuccess: () => {
+    onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ["training-events"] });
       setModalState({ type: "closed" });
+      // Kaydedilen tarihi görünür kıl (görünüm ayı dışındaysa oraya geç)
+      setAnchorDate(parseDateStr(created.date));
     }
   });
 
@@ -557,9 +656,11 @@ export function SalesCalendarPage(props: { currentUser?: AuthenticatedUser | und
         participants: data.participants.split(",").map((p) => p.trim()).filter(Boolean),
         trainer: data.trainer.trim() || undefined
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: ["training-events"] });
       setModalState({ type: "closed" });
+      // Tarih değiştiyse takvimi güncellenen tarihe götür
+      setAnchorDate(parseDateStr(updated.date));
     }
   });
 
@@ -571,10 +672,34 @@ export function SalesCalendarPage(props: { currentUser?: AuthenticatedUser | und
     }
   });
 
+  // Sürükle-bırak ile taşıma: sadece tarih alanı güncellenir, diğer alanlar korunur
+  const moveMutation = useMutation({
+    mutationFn: ({ eventId, date }: { eventId: string; date: string }) =>
+      api.updateTrainingEvent(auth.token, eventId, { date }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["training-events"] });
+    },
+    onSettled: () => {
+      setDraggedEventId(null);
+      setDragOverDate(null);
+    }
+  });
+
   const isSaving = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   const onCreateEvent = (date: string) => setModalState({ type: "create", defaultDate: date });
   const onEditEvent = (event: TrainingEvent) => setModalState({ type: "edit", event });
+
+  const onEventDragStart = (eventId: string) => setDraggedEventId(eventId);
+  const onEventDragEnd = () => {
+    setDraggedEventId(null);
+    setDragOverDate(null);
+  };
+  const onDayDragOver = (date: string) => setDragOverDate(date);
+  const onDayDragLeave = () => setDragOverDate(null);
+  const onDayDrop = (date: string) => {
+    if (draggedEventId) moveMutation.mutate({ eventId: draggedEventId, date });
+  };
 
   return (
     <div className="space-y-6">
@@ -644,17 +769,31 @@ export function SalesCalendarPage(props: { currentUser?: AuthenticatedUser | und
           <MonthView
             canEdit={canEdit}
             currentDate={anchorDate}
+            draggedEventId={draggedEventId}
+            dragOverDate={dragOverDate}
             eventsByDate={eventsByDate}
             onCreateEvent={onCreateEvent}
+            onDayDragLeave={onDayDragLeave}
+            onDayDragOver={onDayDragOver}
+            onDayDrop={onDayDrop}
             onEditEvent={onEditEvent}
+            onEventDragEnd={onEventDragEnd}
+            onEventDragStart={onEventDragStart}
           />
         ) : (
           <ColumnView
             canEdit={canEdit}
             days={visibleDays}
+            draggedEventId={draggedEventId}
+            dragOverDate={dragOverDate}
             eventsByDate={eventsByDate}
             onCreateEvent={onCreateEvent}
+            onDayDragLeave={onDayDragLeave}
+            onDayDragOver={onDayDragOver}
+            onDayDrop={onDayDrop}
             onEditEvent={onEditEvent}
+            onEventDragEnd={onEventDragEnd}
+            onEventDragStart={onEventDragStart}
           />
         )}
 

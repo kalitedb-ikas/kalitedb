@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
-import { formatNumber, formatPeriodMonth } from "../lib/format";
+import { formatNumber, formatPeriodMonth, getPreviousPeriod } from "../lib/format";
 import { getRepresentativeDisplayName, getRepresentativePhotoSrc } from "../lib/representative-photos";
 import { PeriodRangeFilter, type PeriodRangeValue } from "../components/period-range-filter";
 import {
@@ -86,9 +86,18 @@ export function QtPage() {
     [availablePeriods, selectedYear]
   );
 
+  // Varsayılan olarak içinde bulunduğumuz ayın bir öncesi seçili gelir (o ay için
+  // dönem kaydı varsa); yoksa yayınlanma durumuna göre en uygun döneme düşer.
+  const previousCalendarMonthId = useMemo(
+    () => getPreviousPeriod(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`),
+    [now]
+  );
   const defaultPeriod = useMemo(
-    () => selectDefaultReportPeriod(yearPeriods) ?? selectDefaultReportPeriod(availablePeriods),
-    [yearPeriods, availablePeriods]
+    () =>
+      availablePeriods.find((p) => p.month === previousCalendarMonthId) ??
+      selectDefaultReportPeriod(yearPeriods) ??
+      selectDefaultReportPeriod(availablePeriods),
+    [availablePeriods, previousCalendarMonthId, yearPeriods]
   );
 
   const periodId = yearPeriods.some((p) => p.id === periodRange.monthPeriodId)

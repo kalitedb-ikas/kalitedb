@@ -10,9 +10,11 @@
     "start": "next start -p 3001"
   },
   "dependencies": {
-    "@kalitedb/shared": "workspace:*",
+    "@elevenlabs/elevenlabs-js": "^2.44.0",
     "firebase-admin": "^13.4.0",
+    "js-sha256": "^0.11.1",
     "next": "^15.5.2",
+    "papaparse": "^5.5.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "zod": "^4.1.5"

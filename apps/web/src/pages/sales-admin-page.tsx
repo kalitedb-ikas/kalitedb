@@ -1,9 +1,8 @@
-import { SurfaceCard } from "@kalitedb/ui";
 import { normalizeKey } from "@kalitedb/shared";
-import type { Representative, SalesMeeting, SalesKpiData } from "@kalitedb/shared";
+import type { Representative, SalesMeeting, SalesKpiData, SalesKpiAgent, TimelineEvent } from "@kalitedb/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, FileQuestion, Handshake, LogOut, MessageSquare, MessageSquarePlus, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, Users, X } from "lucide-react";
+import { BookOpen, ClipboardCheck, Eye, EyeOff, FileQuestion, Handshake, LogOut, Maximize2, MessageSquare, MessageSquarePlus, Mic, Minimize2, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -12,13 +11,43 @@ import { collection, doc, getDocs, setDoc } from "firebase/firestore";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
 import { firebaseDb } from "../lib/firebase";
-import { parseTalkDurationLabelToSeconds } from "../lib/format";
+import { formatPeriodMonth, parseTalkDurationLabelToSeconds } from "../lib/format";
+import { AdminShell, AdminShellHeader, AdminShellSidebar, type AdminNavGroup } from "../components/admin-shell";
+import {
+  AddRowButton,
+  AdminButton,
+  AdminCard,
+  AdminDropzone,
+  ADMIN_INPUT,
+  ADMIN_INPUT_BASE,
+  ADMIN_TEXTAREA,
+  cx,
+  DeleteRowButton,
+  EmptyBlock,
+  ErrorBanner,
+  HeaderPill,
+  MiniInput,
+  SuccessBanner
+} from "../components/admin-ui";
 import { DataTable } from "../components/data-table";
 import { FancySelect } from "../components/fancy-select";
+import { LossReasonSelect } from "../components/loss-reason-select";
 import { RepresentativeDetailModal, BadgePill } from "../components/representative-detail-modal";
+import { RoleplayScenariosAdmin } from "../components/roleplay-scenarios-admin";
+import { RoleplayKnowledgeAdmin } from "../components/roleplay-knowledge-admin";
+import { ROLEPLAY_VISIBLE } from "../lib/feature-flags";
 
 
-type AdminSection = "audit" | "roleplay" | "evaluation" | "meetings" | "kpi" | "representatives" | "ramp";
+type AdminSection =
+  | "audit"
+  | "roleplay"
+  | "roleplay-scenarios"
+  | "roleplay-knowledge"
+  | "evaluation"
+  | "meetings"
+  | "kpi"
+  | "representatives"
+  | "ramp";
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
   const value = String(index + 1).padStart(2, "0");
@@ -83,6 +112,7 @@ export function SalesAdminPage() {
   const now = new Date();
 
   const [activeSection, setActiveSection] = useState<AdminSection>("audit");
+  const [sidebarQuery, setSidebarQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
   const [selectedMonthValue, setSelectedMonthValue] = useState(String(now.getMonth() + 1).padStart(2, "0"));
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
@@ -108,8 +138,21 @@ export function SalesAdminPage() {
   // Representatives state
   const [selectedRepKey, setSelectedRepKey] = useState<string | null>(null);
   const [repStatusFilter, setRepStatusFilter] = useState<"all" | "active" | "departed" | "department_changed">("all");
+  const [showDepartedReps, setShowDepartedReps] = useState(false);
 
   const activePeriodMonth = `${selectedYear}-${selectedMonthValue}`;
+
+  const meQuery = useQuery({
+    queryKey: ["me", auth.token],
+    queryFn: () => api.getMe(auth.token),
+    enabled: Boolean(auth.token),
+    staleTime: 5 * 60 * 1000
+  });
+  const me = meQuery.data ?? null;
+  const canManageRoleplayContent =
+    me?.role === "admin" ||
+    me?.role === "roleplay_admin" ||
+    (me?.roles ?? []).some((entry: { role: string }) => entry.role === "roleplay_admin");
 
   const periodsQuery = useQuery({
     queryKey: ["periods", auth.token],
@@ -139,12 +182,13 @@ export function SalesAdminPage() {
   });
 
   const updateRepresentativeMutation = useMutation({
-    mutationFn: (input: { key: string; displayName?: string; department?: string; badges?: string[]; timeline?: Array<Record<string, unknown>> }) => {
+    mutationFn: (input: { key: string; displayName?: string; department?: string; badges?: string[]; timeline?: Array<Record<string, unknown>>; exclusions?: string[] }) => {
       const body: Record<string, unknown> = {};
       if (input.displayName != null) body.displayName = input.displayName;
       if (input.department != null) body.department = input.department;
       if (input.badges != null) body.badges = input.badges;
       if (input.timeline != null) body.timeline = input.timeline;
+      if (input.exclusions != null) body.exclusions = input.exclusions;
       return api.updateRepresentative(auth.token, input.key, body as any);
     },
     onSuccess: async () => {
@@ -154,7 +198,7 @@ export function SalesAdminPage() {
   });
 
   const createRepresentativeMutation = useMutation({
-    mutationFn: (input: { displayName: string; department: string }) =>
+    mutationFn: (input: { displayName: string; department: string; badges?: string[]; timeline?: TimelineEvent[]; exclusions?: string[] }) =>
       api.createRepresentative(auth.token, input as any),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["representatives"] });
@@ -264,7 +308,7 @@ export function SalesAdminPage() {
   });
 
   const filteredSalesReps = useMemo(() => {
-    const registered = (representativesQuery.data ?? []).filter((r) => r.department === "sales");
+    const registered = (representativesQuery.data ?? []).filter((r) => r.department === "sales" || r.department === "partner");
     const registeredKeys = new Set(registered.map((r) => r.key));
 
     // KPI verilerindeki temsilcileri de dahil et (tüm dönemlerden, dönem bağımsız)
@@ -278,6 +322,8 @@ export function SalesAdminPage() {
           displayName: agent.name,
           department: "sales",
           status: "active",
+          exclusions: [],
+          tableExclusions: [],
           badges: [],
           timeline: [],
           createdAt: now,
@@ -287,11 +333,25 @@ export function SalesAdminPage() {
     }
 
     let reps = [...registered, ...derived];
-    if (repStatusFilter !== "all") reps = reps.filter((r) => r.status === repStatusFilter);
+    if (repStatusFilter !== "all") {
+      reps = reps.filter((r) => r.status === repStatusFilter);
+    } else if (!showDepartedReps) {
+      reps = reps.filter((r) => r.status !== "departed");
+    }
     return reps;
-  }, [representativesQuery.data, allSalesAgentsQuery.data, repStatusFilter]);
+  }, [representativesQuery.data, allSalesAgentsQuery.data, repStatusFilter, showDepartedReps]);
 
   const selectedRep = filteredSalesReps.find((r) => r.key === selectedRepKey) ?? null;
+
+  // Aktif satış/partner temsilcileri (KPI tablosunu temsilci adlarıyla ön-doldurmak için)
+  const activeSalesReps = useMemo(
+    () =>
+      (representativesQuery.data ?? [])
+        .filter((r) => (r.department === "sales" || r.department === "partner") && r.status === "active")
+        .sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"))
+        .map((r) => ({ key: r.key, name: r.displayName })),
+    [representativesQuery.data]
+  );
 
   const representativeColumns = useMemo<ColumnDef<Representative>[]>(
     () => [
@@ -299,7 +359,7 @@ export function SalesAdminPage() {
         header: "İsim",
         accessorKey: "displayName",
         cell: ({ row }) => (
-          <button className="text-left font-medium text-slate-900 hover:text-[#2f6b7a] hover:underline dark:text-slate-200 dark:hover:text-sky-400" onClick={() => setSelectedRepKey(row.original.key)} type="button">
+          <button className="text-left font-medium text-slate-900 hover:text-[var(--adm-accent)] hover:underline dark:text-slate-200 dark:hover:text-sky-400" onClick={() => setSelectedRepKey(row.original.key)} type="button">
             {row.original.displayName}
           </button>
         )
@@ -383,7 +443,7 @@ export function SalesAdminPage() {
     } else {
       // Kayıtlı veri yoksa aktif satış temsilcilerini otomatik doldur
       const activeReps = (representativesQuery.data ?? [])
-        .filter((r) => r.department === "sales" && r.status === "active")
+        .filter((r) => (r.department === "sales" || r.department === "partner") && r.status === "active")
         .sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
       if (activeReps.length > 0) {
         setAuditRows(activeReps.map((rep) => ({
@@ -418,7 +478,7 @@ export function SalesAdminPage() {
       );
     } else {
       const activeReps = (representativesQuery.data ?? [])
-        .filter((r) => r.department === "sales" && r.status === "active")
+        .filter((r) => (r.department === "sales" || r.department === "partner") && r.status === "active")
         .sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
       if (activeReps.length > 0) {
         setRoleplayRows(activeReps.map((rep) => ({
@@ -743,17 +803,21 @@ export function SalesAdminPage() {
         status?: "devam_ediyor" | "kapandi" | "kaybedildi";
         licenseDetail?: string;
         licenseAmount?: number | null;
+        lossReason?: string;
+        lossNote?: string;
       }[] = [];
 
       for (let i = 1; i < parsedRows.length; i++) {
         const cols = parsedRows[i]!;
-        // CSV: Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, ...
+        // CSV: Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu
         const date = cols[0]?.trim() ?? "";
         const advisorRaw = cols[1]?.trim() ?? "";
         const customer = cols[2]?.trim() ?? "";
         const statusRaw = cols[3]?.trim() ?? "";
         const licenseDetail = cols[4]?.trim() ?? "";
         const licenseAmountRaw = cols[5]?.trim() ?? "";
+        const lossReasonRaw = cols[6]?.trim() ?? "";
+        const lossNoteRaw = cols[7]?.trim() ?? "";
 
         if (!customer && !advisorRaw) continue;
 
@@ -800,7 +864,9 @@ export function SalesAdminPage() {
           licenseAmount,
           ...(formattedDate ? { date: formattedDate } : {}),
           ...(status ? { status } : {}),
-          ...(licenseDetail ? { licenseDetail } : {})
+          ...(licenseDetail ? { licenseDetail } : {}),
+          ...(status === "kaybedildi" && lossReasonRaw ? { lossReason: lossReasonRaw } : {}),
+          ...(status === "kaybedildi" && lossNoteRaw ? { lossNote: lossNoteRaw } : {})
         });
       }
 
@@ -846,18 +912,32 @@ export function SalesAdminPage() {
         setSelectedPeriodId(periodId);
       }
 
-      // Hedef satırı (row 1, columns 1-7)
+      // ── Başlık satırı: kolonlar isimle eşlenir, sıra önemsiz (Q&T Team Report) ──
+      const columnIndex = resolveKpiCsvColumns(parsedRows[0]!);
+      const missingHeaders = KPI_CSV_REQUIRED.filter((f) => columnIndex[f.key] === undefined);
+      if (missingHeaders.length > 0) {
+        throw new Error(`CSV başlık satırında şu kolonlar bulunamadı: ${missingHeaders.map((f) => f.label).join(", ")}`);
+      }
+      const cellAt = (row: string[], key: KpiCsvField): string => {
+        const idx = columnIndex[key];
+        return idx === undefined ? "" : (row[idx] ?? "").trim();
+      };
+      // "Ort" / "*" = değerlendirme yok; "#DIV/0!" gibi formül artıkları null'a düşer
+      const parsePerf = (raw: string): number | null =>
+        raw === "" || raw === "*" || raw.toLocaleUpperCase("tr-TR") === "ORT" ? null : parseTurkishNumber(raw);
+
+      // Hedef satırı (row 1)
       const targetRow = parsedRows[1]!;
-      const talkDurationLabel = (targetRow[5] ?? "").trim();
+      const talkDurationLabel = cellAt(targetRow, "talkDurationSeconds");
       const targets = {
-        perfScore: parseTurkishNumber(targetRow[1] ?? "") ?? 0,
-        salesAmount: parseTurkishNumber(targetRow[2] ?? "") ?? 0,
-        licenseCount: parseTurkishNumber(targetRow[3] ?? "") ?? 0,
-        avgLicensePrice: parseTurkishNumber(targetRow[4] ?? "") ?? 0,
+        perfScore: parseTurkishNumber(cellAt(targetRow, "perfScore")) ?? 0,
+        salesAmount: parseTurkishNumber(cellAt(targetRow, "salesAmount")) ?? 0,
+        licenseCount: parseTurkishNumber(cellAt(targetRow, "licenseCount")) ?? 0,
+        avgLicensePrice: parseTurkishNumber(cellAt(targetRow, "avgLicensePrice")) ?? 0,
         talkDurationLabel,
         talkDurationTargetSeconds: parseTalkDurationLabelToSeconds(talkDurationLabel),
-        callAttempts: parseTurkishNumber(targetRow[6] ?? "") ?? 0,
-        conversionRate: parseTurkishNumber(targetRow[7] ?? "") ?? 0
+        callAttempts: parseTurkishNumber(cellAt(targetRow, "callAttempts")) ?? 0,
+        conversionRate: parseTurkishNumber(cellAt(targetRow, "conversionRate")) ?? 0
       };
 
       // ── Tablo 1: Ana KPI temsilci satırları (row 2+, ORTALAMA/TOPLAM'a kadar) ──
@@ -876,6 +956,12 @@ export function SalesAdminPage() {
         scaleConversion: number;
         scalePlusConversion: number;
         totalConversion: number;
+        twoPlusOneCount: number | null;
+        twoPlusOnePercent: number | null;
+        preOnbCount: number | null;
+        hubspotScore: number | null;
+        domainCount: number | null;
+        outboundLeadCount: number | null;
       }[] = [];
 
       for (let i = 2; i < parsedRows.length; i++) {
@@ -889,18 +975,24 @@ export function SalesAdminPage() {
         agents.push({
           agentKey: normalizeKey(name),
           agentName: name,
-          perfScore: (cols[1] ?? "").trim() === "*" ? null : parseTurkishNumber(cols[1] ?? ""),
-          salesAmount: parseTurkishNumber(cols[2] ?? "") ?? 0,
-          licenseCount: parseTurkishNumber(cols[3] ?? "") ?? 0,
-          avgLicensePrice: parseTurkishNumber(cols[4] ?? "") ?? 0,
-          talkDurationSeconds: parseHmsToSeconds(cols[5] ?? ""),
-          callAttempts: parseTurkishNumber(cols[6] ?? "") ?? 0,
-          conversionRate: parseTurkishNumber(cols[7] ?? "") ?? 0,
+          perfScore: parsePerf(cellAt(cols, "perfScore")),
+          salesAmount: parseTurkishNumber(cellAt(cols, "salesAmount")) ?? 0,
+          licenseCount: parseTurkishNumber(cellAt(cols, "licenseCount")) ?? 0,
+          avgLicensePrice: parseTurkishNumber(cellAt(cols, "avgLicensePrice")) ?? 0,
+          talkDurationSeconds: parseHmsToSeconds(cellAt(cols, "talkDurationSeconds")),
+          callAttempts: parseTurkishNumber(cellAt(cols, "callAttempts")) ?? 0,
+          conversionRate: parseTurkishNumber(cellAt(cols, "conversionRate")) ?? 0,
           scaleCount: 0,
           scalePlusCount: 0,
           scaleConversion: 0,
           scalePlusConversion: 0,
-          totalConversion: 0
+          totalConversion: 0,
+          twoPlusOneCount: parseTurkishNumber(cellAt(cols, "twoPlusOneCount")),
+          twoPlusOnePercent: parseTurkishNumber(cellAt(cols, "twoPlusOnePercent")),
+          preOnbCount: parseTurkishNumber(cellAt(cols, "preOnbCount")),
+          hubspotScore: parseHubspotScore(cellAt(cols, "hubspotScore")),
+          domainCount: parseTurkishNumber(cellAt(cols, "domainCount")),
+          outboundLeadCount: parseTurkishNumber(cellAt(cols, "outboundLeadCount"))
         });
       }
 
@@ -908,7 +1000,10 @@ export function SalesAdminPage() {
         throw new Error("CSV dosyasında geçerli temsilci verisi bulunamadı.");
       }
 
-      // ── Tablo 2: 2+1 Dönüşüm verileri (Scale 2+1 başlığını bul) ──
+      // ── Tablo 2 (eski format): ayrı "SCALE 2+1" dönüşüm tablosu ──
+      // Yeni formatta 2+1 verisi ana tabloda; bu blok yalnız eski CSV'lerde
+      // veri bulur (yeni formattaki lisans özetinin "Scale 2+1" satırından
+      // sonra temsilci adı gelmediği için döngü hemen kırılır).
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i]!;
         const cell1 = (row[1] ?? "").trim().toLocaleUpperCase("tr-TR");
@@ -933,7 +1028,7 @@ export function SalesAdminPage() {
       }
 
       // ── Tablo 3: Aylık lisans özeti (Pre., Scale, Scale 2+1, Scale Plus, Scale Plus 2+1) ──
-      let licenseSummary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number } | undefined;
+      let licenseSummary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number } | undefined;
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i]!;
         const cell1 = (row[1] ?? "").trim().toLocaleUpperCase("tr-TR");
@@ -945,17 +1040,30 @@ export function SalesAdminPage() {
           const scalePlusRow = parsedRows[i + 3];
           const scalePlus21Row = parsedRows[i + 4];
 
-          const parseCount = (raw: string) => {
-            const cleaned = raw.replace(/\//g, "").trim();
-            return parseTurkishNumber(cleaned) ?? 0;
+          // Değer kolonu formata göre kayıyor (eski: 5, yeni: 7); etiketten
+          // sonraki İLK sayısal hücreyi al — "6 adet 3+2" gibi notlar değerden
+          // sonra geldiği için karışmaz.
+          const parseCount = (row: string[] | undefined): number => {
+            if (!row) return 0;
+            for (let c = 2; c < row.length; c++) {
+              const cleaned = (row[c] ?? "").replace(/\//g, "").trim();
+              if (!cleaned) continue;
+              const num = parseTurkishNumber(cleaned);
+              if (num !== null) return num;
+            }
+            return 0;
           };
 
           licenseSummary = {
-            preCount: parseCount(preRow?.[5] ?? preRow?.[4] ?? "0"),
-            scaleCount: parseCount(scaleRow?.[5] ?? scaleRow?.[4] ?? "0"),
-            scale2Plus1Count: parseCount(scale21Row?.[5] ?? scale21Row?.[4] ?? "0"),
-            scalePlusCount: parseCount(scalePlusRow?.[5] ?? scalePlusRow?.[4] ?? "0"),
-            scalePlus2Plus1Count: parseCount(scalePlus21Row?.[5] ?? scalePlus21Row?.[4] ?? "0")
+            preCount: parseCount(preRow),
+            scaleCount: parseCount(scaleRow),
+            scale2Plus1Count: parseCount(scale21Row),
+            scalePlusCount: parseCount(scalePlusRow),
+            scalePlus2Plus1Count: parseCount(scalePlus21Row),
+            // CSV'de "3+2" adedi serbest metin not olarak geçebilir (örn. "6 adet 3+2"),
+            // otomatik ayrıştırılmıyor — Aylık Lisans Özeti'nden manuel girilir. Mevcut
+            // değeri koru ki CSV'yi yeniden yüklemek manuel girilen sayıyı silmesin.
+            scale3Plus2Count: (kpiDataQuery.data as any)?.licenseSummary?.scale3Plus2Count ?? 0
           };
           break;
         }
@@ -976,6 +1084,68 @@ export function SalesAdminPage() {
       setKpiImportSuccess(true);
       setTimeout(() => setKpiImportSuccess(false), 3000);
     }
+  });
+
+  // Veri olmayan bir dönemde KPI iskeleti oluşturur (manuel giriş için).
+  // Aktif satış temsilcilerini satır olarak ön-doldurur; dönem yoksa CSV
+  // import ile aynı mantıkla önce dönemi oluşturur.
+  const initKpiMutation = useMutation({
+    mutationFn: async () => {
+      let periodId = selectedPeriodId;
+      if (!periodId) {
+        const compareToPeriodId = salesPeriods.find((p) => p.month === getPreviousMonth(activePeriodMonth))?.id;
+        const created = await api.createPeriod(auth.token, {
+          month: activePeriodMonth,
+          title: formatSalesPeriodTitle(activePeriodMonth),
+          department: "sales",
+          ...(compareToPeriodId ? { compareToPeriodId } : {})
+        });
+        periodId = created.id;
+        setSelectedPeriodId(periodId);
+      }
+      const payload: Record<string, unknown> = {
+        targets: {
+          perfScore: 0, salesAmount: 0, licenseCount: 0, avgLicensePrice: 0,
+          talkDurationLabel: "", talkDurationTargetSeconds: 0,
+          callAttempts: 0, conversionRate: 0
+        },
+        agents: activeSalesReps.map((rep) => makeBlankKpiAgent(rep.key, rep.name)),
+        updatedAt: new Date().toISOString()
+      };
+      await api.saveSalesKpiData(auth.token, periodId, payload as any);
+      return periodId;
+    },
+    onSuccess: async (savedPeriodId) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sales-kpi"] }),
+        queryClient.invalidateQueries({ queryKey: ["periods", auth.token] }),
+        queryClient.invalidateQueries({ queryKey: ["period-details", auth.token, savedPeriodId] })
+      ]);
+    }
+  });
+
+  // Mevcut tabloya, henüz eklenmemiş aktif satış temsilcilerini ekler.
+  const fillRepsMutation = useMutation({
+    mutationFn: async () => {
+      const current = kpiDataQuery.data;
+      if (!current || !selectedPeriodId) throw new Error("Bu dönem için KPI verisi yok.");
+      const present = new Set<string>();
+      for (const a of current.agents) {
+        present.add(a.agentKey || normalizeKey(a.agentName));
+        present.add(normalizeKey(a.agentName));
+      }
+      const missing = activeSalesReps.filter((rep) => !present.has(rep.key) && !present.has(normalizeKey(rep.name)));
+      if (missing.length === 0) return selectedPeriodId;
+      const payload: Record<string, unknown> = {
+        targets: current.targets,
+        agents: [...current.agents, ...missing.map((rep) => makeBlankKpiAgent(rep.key, rep.name))],
+        ...(current.licenseSummary ? { licenseSummary: current.licenseSummary } : {}),
+        updatedAt: new Date().toISOString()
+      };
+      await api.saveSalesKpiData(auth.token, selectedPeriodId, payload as any);
+      return selectedPeriodId;
+    },
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["sales-kpi"] }); }
   });
 
   /* ── Tekil silme/güncelleme mutasyonları ── */
@@ -1052,7 +1222,7 @@ export function SalesAdminPage() {
   });
 
   const updateLicenseSummaryMutation = useMutation({
-    mutationFn: (summary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number }) =>
+    mutationFn: (summary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number }) =>
       api.updateLicenseSummary(auth.token, selectedPeriodId, summary),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["sales-kpi"] }); }
   });
@@ -1090,15 +1260,27 @@ export function SalesAdminPage() {
       const text = e.target?.result as string;
       if (!text) return;
 
-      const rows: EvaluationEntryRow[] = [];
       // CSV'deki çok satırlı alanları düzgün parse et
       const parsedRows = parseCsvRows(text);
+      if (parsedRows.length < 2) return;
 
+      // Kolonlar başlık adına göre eşlenir (Q&T Team Report: Puanlama, SORULAR,
+      // CEVAPLAR); başlık bulunamazsa eski sabit düzene (Puanlama,,Soru,Cevap) düşer.
+      const header = parsedRows[0]!.map((cell) => normalizeKpiCsvHeader(cell));
+      const findCol = (aliases: string[], legacyIndex: number) => {
+        const idx = header.findIndex((h) => aliases.includes(h));
+        return idx === -1 ? legacyIndex : idx;
+      };
+      const scoreCol = findCol(["PUANLAMA", "PUAN"], 0);
+      const questionCol = findCol(["SORULAR", "SORU"], 2);
+      const answerCol = findCol(["CEVAPLAR", "CEVAP"], 3);
+
+      const rows: EvaluationEntryRow[] = [];
       for (let i = 1; i < parsedRows.length; i++) {
         const cols = parsedRows[i]!;
-        const score = cols[0]?.trim() ?? "";
-        const question = cols[2]?.trim() ?? "";
-        const answer = cols[3]?.trim() ?? "";
+        const score = cols[scoreCol]?.trim() ?? "";
+        const question = cols[questionCol]?.trim() ?? "";
+        const answer = cols[answerCol]?.trim() ?? "";
 
         // Boş satırları ve sadece puan olan satırları (toplam satırı gibi) atla
         if (!question) continue;
@@ -1130,7 +1312,7 @@ export function SalesAdminPage() {
   const availableAgents = useMemo(() => {
     const names = new Map<string, string>();
     // Temsilciler listesindeki aktif satış temsilcileri
-    const reps = (representativesQuery.data ?? []).filter((r) => r.department === "sales" && r.status === "active");
+    const reps = (representativesQuery.data ?? []).filter((r) => (r.department === "sales" || r.department === "partner") && r.status === "active");
     for (const rep of reps) {
       names.set(rep.key, rep.displayName);
     }
@@ -1192,133 +1374,166 @@ export function SalesAdminPage() {
     }
   };
 
+  const sectionMeta: Record<AdminSection, { label: string; description: string; icon: ReactNode }> = {
+    audit: { label: "Audit Girişi", description: "Temsilci bazlı audit skorlarını CSV ile veya manuel ekleyin.", icon: <ClipboardCheck size={14} /> },
+    roleplay: { label: "Role-Play Girişi", description: "Role-play ve RevOps çalışma sayıları ile notları yönetin.", icon: <Play size={14} /> },
+    "roleplay-scenarios": { label: "Role-Play Senaryoları", description: "Sesli role-play senaryolarını panelden yönet.", icon: <Mic size={14} /> },
+    "roleplay-knowledge": { label: "ikas Bilgi Bankası", description: "Role-play ajanına gidecek ikas bilgi dokümanlarını yönet.", icon: <BookOpen size={14} /> },
+    evaluation: { label: "Değerlendirme Soruları", description: "Dönem değerlendirme sorularını ve cevap skorlarını tanımlayın.", icon: <FileQuestion size={14} /> },
+    kpi: { label: "KPI Verileri", description: "Hedefler, temsilci performans verileri ve lisans özetini yönetin.", icon: <Target size={14} /> },
+    meetings: { label: "Satış Toplantıları", description: "Toplantı listesini yönetin; CSV import ve satır düzenleme.", icon: <Handshake size={14} /> },
+    representatives: { label: "Temsilciler", description: "Satış ve partner temsilcilerini yönetin.", icon: <Users size={14} /> },
+    ramp: { label: "RAMP Girişi", description: "Yeni katılan temsilciler için RAMP dönemini yönetin.", icon: <TrendingUp size={14} /> }
+  };
+
+  const activeMeta = sectionMeta[activeSection];
+
+  const navGroups: AdminNavGroup[] = [
+    {
+      id: "evaluation",
+      label: "Değerlendirme",
+      items: (ROLEPLAY_VISIBLE ? (["audit", "roleplay", "evaluation"] as const) : (["audit", "evaluation"] as const)).map((id) => ({
+        id,
+        label: sectionMeta[id].label,
+        description: sectionMeta[id].description,
+        icon: sectionMeta[id].icon,
+        active: activeSection === id,
+        onClick: () => setActiveSection(id)
+      }))
+    },
+    {
+      id: "performance",
+      label: "Performans & Operasyon",
+      items: (["kpi", "meetings"] as const).map((id) => ({
+        id,
+        label: sectionMeta[id].label,
+        description: sectionMeta[id].description,
+        icon: sectionMeta[id].icon,
+        active: activeSection === id,
+        onClick: () => setActiveSection(id)
+      }))
+    },
+    {
+      id: "team",
+      label: "Takım",
+      items: (["representatives", "ramp"] as const).map((id) => ({
+        id,
+        label: sectionMeta[id].label,
+        description: sectionMeta[id].description,
+        icon: sectionMeta[id].icon,
+        active: activeSection === id,
+        onClick: () => setActiveSection(id)
+      }))
+    },
+    ...(ROLEPLAY_VISIBLE && canManageRoleplayContent
+      ? [
+          {
+            id: "roleplay-cms",
+            label: "Role-Play CMS",
+            items: (["roleplay-scenarios", "roleplay-knowledge"] as const).map((id) => ({
+              id,
+              label: sectionMeta[id].label,
+              description: sectionMeta[id].description,
+              icon: sectionMeta[id].icon,
+              active: activeSection === id,
+              onClick: () => setActiveSection(id)
+            }))
+          }
+        ]
+      : [])
+  ];
+
+  const showSaveAction = activeSection === "audit" || activeSection === "roleplay" || activeSection === "evaluation";
+
+  const sidebarHeader = (
+    <div className="space-y-3">
+      <p className="truncate text-xs font-medium text-slate-400">
+        {auth.user?.email ?? "Yerel yönetim erişimi"}
+      </p>
+      <div>
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Dönem</p>
+        <div className="grid grid-cols-2 gap-2">
+          <FancySelect
+            size="md"
+            className="w-full"
+            panelWidthClass="w-36"
+            options={availableYears.map((year) => ({ value: year, label: year }))}
+            value={selectedYear}
+            onChange={setSelectedYear}
+            placeholder="Yıl"
+          />
+          <FancySelect
+            size="md"
+            className="w-full"
+            panelWidthClass="w-40"
+            options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
+            value={selectedMonthValue}
+            onChange={setSelectedMonthValue}
+            placeholder="Ay"
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  const sidebarFooter = (
+    <button
+      className="inline-flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white"
+      onClick={() => void auth.logout()}
+      type="button"
+    >
+      <LogOut size={15} />
+      Çıkış Yap
+    </button>
+  );
+
+  const headerActions = (
+    <>
+      {showSaveAction ? (
+        <AdminButton
+          icon={<Save size={14} />}
+          variant="primary"
+          disabled={isSaving || validRowCount === 0}
+          onClick={handleSave}
+        >
+          {isSaving ? "Kaydediliyor..." : "Kaydet"}
+        </AdminButton>
+      ) : null}
+      <AdminButton icon={<RefreshCw size={14} />} onClick={() => void refreshCurrentView()}>
+        Yenile
+      </AdminButton>
+    </>
+  );
+
+  const headerPills = (
+    <>
+      <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
+      <HeaderPill tone="success">Manuel Giriş</HeaderPill>
+      <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
+    </>
+  );
+
   return (
-    <div className="rounded-[10px] border border-sky-100/90 bg-[#edf6fb] p-5 shadow-[0_34px_90px_rgba(15,23,42,0.12)] dark:border-slate-700 dark:bg-slate-900/80">
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        {/* Sidebar */}
-        <aside className="overflow-hidden rounded-[10px] border border-slate-200/90 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-800">
-          <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-700">
-            <p className="text-sm text-slate-500">{auth.user?.email ?? "Yerel yönetim erişimi"}</p>
-          </div>
-
-          <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-700">
-            <SidebarSectionTitle>Dönem</SidebarSectionTitle>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-              <InputField label="Yıl">
-                <FancySelect
-                  size="lg"
-                  className="w-full"
-                  panelWidthClass="w-40"
-                  options={availableYears.map((year) => ({ value: year, label: year }))}
-                  value={selectedYear}
-                  onChange={setSelectedYear}
-                  placeholder="Yıl"
-                />
-              </InputField>
-              <InputField label="Ay">
-                <FancySelect
-                  size="lg"
-                  className="w-full"
-                  panelWidthClass="w-44"
-                  options={MONTH_OPTIONS.map((month) => ({ value: month.value, label: month.label }))}
-                  value={selectedMonthValue}
-                  onChange={setSelectedMonthValue}
-                  placeholder="Ay"
-                />
-              </InputField>
-            </div>
-          </div>
-
-          <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-700">
-            <SidebarSectionTitle>Bölümler</SidebarSectionTitle>
-            <div className="mt-5 space-y-2">
-              <SidebarButton
-                active={activeSection === "audit"}
-                icon={<ClipboardCheck size={15} />}
-                label="Audit girişi"
-                onClick={() => setActiveSection("audit")}
-              />
-              <SidebarButton
-                active={activeSection === "roleplay"}
-                icon={<Play size={15} />}
-                label="Role-Play girişi"
-                onClick={() => setActiveSection("roleplay")}
-              />
-              <SidebarButton
-                active={activeSection === "evaluation"}
-                icon={<FileQuestion size={15} />}
-                label="Değerlendirme soruları"
-                onClick={() => setActiveSection("evaluation")}
-              />
-              <SidebarButton
-                active={activeSection === "kpi"}
-                icon={<Target size={15} />}
-                label="KPI verileri"
-                onClick={() => setActiveSection("kpi")}
-              />
-              <SidebarButton
-                active={activeSection === "meetings"}
-                icon={<Handshake size={15} />}
-                label="Satış toplantıları"
-                onClick={() => setActiveSection("meetings")}
-              />
-              <SidebarButton
-                active={activeSection === "representatives"}
-                icon={<Users size={15} />}
-                label="Temsilciler"
-                onClick={() => setActiveSection("representatives")}
-              />
-              <SidebarButton
-                active={activeSection === "ramp"}
-                icon={<TrendingUp size={15} />}
-                label="RAMP Girişi"
-                onClick={() => setActiveSection("ramp")}
-              />
-            </div>
-          </div>
-
-          <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-700">
-            <SidebarSectionTitle>Aksiyonlar</SidebarSectionTitle>
-            <div className="mt-5 space-y-2">
-              <SidebarActionButton
-                disabled={isSaving || validRowCount === 0}
-                icon={<Save size={15} />}
-                onClick={handleSave}
-                primary
-              >
-                {isSaving ? "Kaydediliyor..." : "Kaydet"}
-              </SidebarActionButton>
-              <SidebarActionButton icon={<RefreshCw size={15} />} onClick={() => void refreshCurrentView()}>
-                Veriyi yenile
-              </SidebarActionButton>
-            </div>
-          </div>
-
-          <div className="px-6 py-6">
-            <button
-              className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
-              onClick={() => void auth.logout()}
-              type="button"
-            >
-              <LogOut size={16} />
-              Çıkış Yap
-            </button>
-          </div>
-        </aside>
-
-        {/* Ana içerik */}
-        <main className="min-w-0 space-y-4">
-          <section className="rounded-[10px] border border-slate-200/90 bg-white px-8 py-6 shadow-[0_12px_34px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-800">
-            <div className="flex flex-wrap items-center gap-2">
-              <HeaderPill>{activeSection === "audit" ? "Audit girişi" : activeSection === "roleplay" ? "Role-Play girişi" : activeSection === "evaluation" ? "Değerlendirme soruları" : activeSection === "kpi" ? "KPI verileri" : activeSection === "representatives" ? "Temsilciler" : activeSection === "ramp" ? "RAMP Girişi" : "Satış toplantıları"}</HeaderPill>
-              <HeaderPill tone="accent">{formatPeriodChip(activePeriodMonth)}</HeaderPill>
-              <HeaderPill tone="success">Manuel Giriş</HeaderPill>
-              <HeaderPill tone={currentStatusTone}>{currentStatusLabel}</HeaderPill>
-            </div>
-            <h1 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-100 sm:text-4xl">
-              Satış Veri Yönetim Paneli
-            </h1>
-          </section>
+    <AdminShell
+      accent="sales"
+      sidebar={
+        <AdminShellSidebar
+          title="Yönetim Paneli"
+          subtitle="Satış"
+          header={sidebarHeader}
+          search={{ value: sidebarQuery, onChange: setSidebarQuery, placeholder: "Bölüm ara..." }}
+          groups={navGroups}
+          footer={sidebarFooter}
+        />
+      }
+    >
+      <AdminShellHeader
+        breadcrumb={<span>Yönetim · Satış</span>}
+        title={activeMeta.label}
+        description={activeMeta.description}
+        pills={headerPills}
+        actions={headerActions}
+      />
 
           {/* ── Audit Bölümü ── */}
           {activeSection === "audit" ? (
@@ -1397,6 +1612,9 @@ export function SalesAdminPage() {
               kpiAgentCount={kpiAgentCount}
               kpiData={kpiDataQuery.data}
               kpiImportSuccess={kpiImportSuccess}
+              initKpiMutation={initKpiMutation}
+              fillRepsMutation={fillRepsMutation}
+              activeReps={activeSalesReps}
               resetAgentsMutation={resetKpiAgentsMutation}
               saveKpiMutation={saveKpiMutation}
               selectedPeriodId={selectedPeriodId}
@@ -1408,7 +1626,7 @@ export function SalesAdminPage() {
             <div className="space-y-6">
               <div className="flex flex-wrap items-center gap-3">
                 <button
-                  className="inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a]"
+                  className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--adm-accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)]"
                   onClick={() => setShowCreateRepModal(true)}
                   type="button"
                 >
@@ -1416,6 +1634,21 @@ export function SalesAdminPage() {
                   Yeni Temsilci
                 </button>
                 <div className="ml-auto flex items-center gap-2">
+                  <button
+                    className={cx(
+                      "inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-2 text-sm font-medium transition",
+                      showDepartedReps
+                        ? "border-[var(--adm-accent-border)] bg-[var(--adm-accent-soft)] text-[var(--adm-accent-text)]"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300"
+                    )}
+                    disabled={repStatusFilter !== "all"}
+                    onClick={() => setShowDepartedReps((v) => !v)}
+                    title={repStatusFilter !== "all" ? "Yalnızca \"Tüm Durumlar\" seçiliyken kullanılabilir" : undefined}
+                    type="button"
+                  >
+                    {showDepartedReps ? <Eye size={14} /> : <EyeOff size={14} />}
+                    Ayrılanlar {showDepartedReps ? "gösteriliyor" : "gizli"}
+                  </button>
                   <select
                     className="rounded-[10px] border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 transition focus:border-primary/40 focus:outline-none"
                     value={repStatusFilter}
@@ -1434,9 +1667,9 @@ export function SalesAdminPage() {
               ) : filteredSalesReps.length === 0 ? (
                 <EmptyBlock message="Henüz satış temsilcisi kaydı yok. Veri içe aktarıldığında temsilciler otomatik oluşturulur." />
               ) : (
-                <SurfaceCard title={`Satış Temsilcileri (${filteredSalesReps.length})`} description="Temsilci durumlarını görüntüleyin ve düzenleyin." variant="default">
+                <AdminCard title={`Satış Temsilcileri (${filteredSalesReps.length})`} description="Temsilci durumlarını görüntüleyin ve düzenleyin." variant="default">
                   <DataTable columns={representativeColumns} data={filteredSalesReps} density="compact" />
-                </SurfaceCard>
+                </AdminCard>
               )}
               {selectedRep ? (
                 <RepresentativeDetailModal
@@ -1453,10 +1686,22 @@ export function SalesAdminPage() {
                   defaultDepartment="sales"
                   isSaving={createRepresentativeMutation.isPending}
                   onClose={() => setShowCreateRepModal(false)}
-                  onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "sales" })}
+                  onSave={(data) => createRepresentativeMutation.mutate({ displayName: data.displayName!, department: data.department ?? "sales", badges: data.badges, timeline: data.timeline, exclusions: data.exclusions })}
                 />
               ) : null}
             </div>
+          ) : activeSection === "roleplay-scenarios" ? (
+            canManageRoleplayContent ? (
+              <RoleplayScenariosAdmin />
+            ) : (
+              <p className="text-sm text-slate-500">Bu alanı yalnızca role-play yöneticileri görebilir.</p>
+            )
+          ) : activeSection === "roleplay-knowledge" ? (
+            canManageRoleplayContent ? (
+              <RoleplayKnowledgeAdmin />
+            ) : (
+              <p className="text-sm text-slate-500">Bu alanı yalnızca role-play yöneticileri görebilir.</p>
+            )
           ) : activeSection === "ramp" ? (
             <RampSection selectedPeriodId={selectedPeriodId} activePeriodMonth={activePeriodMonth} kpiAgents={(kpiDataQuery.data as any)?.agents ?? []} />
           ) : (
@@ -1473,9 +1718,7 @@ export function SalesAdminPage() {
               updateMeetingMutation={updateMeetingMutation}
             />
           )}
-        </main>
-      </div>
-    </div>
+    </AdminShell>
   );
 }
 
@@ -1522,7 +1765,7 @@ function AuditSection(props: {
 
         {auditSaveSuccess ? <SuccessBanner message="Veriler başarıyla kaydedildi." /> : null}
 
-        <SurfaceCard
+        <AdminCard
           description="Her satır bir temsilciyi temsil eder. Temsilci adı dolu olan satırlar kaydedilir."
           title="Audit Skoru Girişi"
           variant="default"
@@ -1531,12 +1774,12 @@ function AuditSection(props: {
             <EmptyBlock message="Dönem hazırlanıyor..." />
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+              <div className="overflow-x-auto rounded-[14px] border border-slate-200 dark:border-slate-700">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/50">
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Temsilci adı</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Audit skoru</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Temsilci adı</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Audit skoru</th>
                       <th className="w-12 px-4 py-3" />
                     </tr>
                   </thead>
@@ -1552,7 +1795,7 @@ function AuditSection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <input
-                            className="h-11 w-32 rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_INPUT_BASE, "w-32")}
                             inputMode="decimal"
                             onChange={(e) => onUpdateRow(row.id, "auditScore", e.target.value)}
                             placeholder="0–100"
@@ -1571,7 +1814,7 @@ function AuditSection(props: {
 
               <div className="flex flex-wrap items-center gap-3">
                 <AddRowButton onClick={onAddRow} />
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300 dark:hover:border-slate-500">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-[var(--adm-accent)] hover:bg-[var(--adm-accent-soft)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300">
                   <Upload size={13} />
                   CSV'den doldur
                   <input
@@ -1601,7 +1844,7 @@ function AuditSection(props: {
               ) : null}
             </div>
           )}
-        </SurfaceCard>
+        </AdminCard>
     </div>
   );
 }
@@ -1654,7 +1897,7 @@ function RoleplaySection(props: {
 
         {roleplaySaveSuccess ? <SuccessBanner message="Role-Play verileri başarıyla kaydedildi." /> : null}
 
-        <SurfaceCard
+        <AdminCard
           description="Her satır bir temsilciyi temsil eder. Temsilci adı dolu olan satırlar kaydedilir."
           title="Role-Play Veri Girişi"
           variant="default"
@@ -1663,14 +1906,14 @@ function RoleplaySection(props: {
             <EmptyBlock message="Dönem hazırlanıyor..." />
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+              <div className="overflow-x-auto rounded-[14px] border border-slate-200 dark:border-slate-700">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/50">
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Temsilci adı</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">IS Role-Play Adet</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">RevOPS</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Not</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Temsilci adı</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">IS Role-Play Adet</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">RevOPS</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Not</th>
                       <th className="w-12 px-4 py-3" />
                     </tr>
                   </thead>
@@ -1679,7 +1922,7 @@ function RoleplaySection(props: {
                       <tr key={row.id} className="bg-white dark:bg-slate-800">
                         <td className="px-4 py-2">
                           <select
-                            className="h-11 w-full min-w-[180px] rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                            className={cx(ADMIN_INPUT, "min-w-[180px]")}
                             onChange={(e) => onUpdateRow(row.id, "agentName", e.target.value)}
                             value={row.agentName}
                           >
@@ -1697,7 +1940,7 @@ function RoleplaySection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <input
-                            className="h-11 w-32 rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_INPUT_BASE, "w-32")}
                             min={0}
                             onChange={(e) => onUpdateRow(row.id, "rolePlayCount", e.target.value)}
                             placeholder="0"
@@ -1707,7 +1950,7 @@ function RoleplaySection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <input
-                            className="h-11 w-32 rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_INPUT_BASE, "w-32")}
                             min={0}
                             onChange={(e) => onUpdateRow(row.id, "revOpsCount", e.target.value)}
                             placeholder="0"
@@ -1741,7 +1984,7 @@ function RoleplaySection(props: {
 
               <div className="flex flex-wrap items-center gap-3">
                 <AddRowButton onClick={onAddRow} />
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300 dark:hover:border-slate-500">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-[var(--adm-accent)] hover:bg-[var(--adm-accent-soft)] hover:text-[var(--adm-accent-text)] dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-300">
                   <Upload size={13} />
                   CSV'den doldur
                   <input
@@ -1772,7 +2015,7 @@ function RoleplaySection(props: {
               ) : null}
             </div>
           )}
-        </SurfaceCard>
+        </AdminCard>
 
       {noteModalRow && (
         <NoteModal
@@ -1836,7 +2079,7 @@ function EvaluationSection(props: {
 
         {evaluationSaveSuccess ? <SuccessBanner message="Değerlendirme soruları başarıyla kaydedildi." /> : null}
 
-        <SurfaceCard
+        <AdminCard
           description="Her satır bir değerlendirme sorusunu temsil eder. CSV dosyasından toplu aktarım yapabilirsiniz."
           title="Soru Girişi"
           variant="default"
@@ -1847,7 +2090,7 @@ function EvaluationSection(props: {
             <div className="space-y-4">
               {/* CSV Import */}
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-[10px] border border-sky-200 bg-sky-50 px-5 text-sm font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 dark:border-sky-700/40 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:border-sky-600/60 dark:hover:bg-sky-900/50">
+                <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-[12px] border border-[var(--adm-accent-border)] bg-[var(--adm-accent-soft)] px-5 text-sm font-semibold text-[var(--adm-accent-text)] transition hover:brightness-95">
                   <Upload size={14} />
                   CSV Yükle
                   <input
@@ -1864,17 +2107,17 @@ function EvaluationSection(props: {
                   />
                 </label>
                 <span className="text-xs text-slate-400 dark:text-slate-500">
-                  Format: Puanlama,,Soru,Cevap
+                  Format: Puanlama, SORULAR, CEVAPLAR — kolonlar başlık adına göre eşlenir
                 </span>
               </div>
 
-              <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+              <div className="overflow-x-auto rounded-[14px] border border-slate-200 dark:border-slate-700">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/50">
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Soru</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Cevap</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 w-28">Puan</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Soru</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Cevap</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 w-28">Puan</th>
                       <th className="w-12 px-4 py-3" />
                     </tr>
                   </thead>
@@ -1883,7 +2126,7 @@ function EvaluationSection(props: {
                       <tr key={row.id} className="bg-white dark:bg-slate-800">
                         <td className="px-4 py-2">
                           <textarea
-                            className="min-h-[44px] w-full resize-y rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_TEXTAREA, "min-h-[44px]")}
                             onChange={(e) => onUpdateRow(row.id, "questionText", e.target.value)}
                             placeholder="Soru metni"
                             rows={2}
@@ -1892,7 +2135,7 @@ function EvaluationSection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <textarea
-                            className="min-h-[44px] w-full resize-y rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_TEXTAREA, "min-h-[44px]")}
                             onChange={(e) => onUpdateRow(row.id, "answer", e.target.value)}
                             placeholder="Cevap"
                             rows={2}
@@ -1901,7 +2144,7 @@ function EvaluationSection(props: {
                         </td>
                         <td className="px-4 py-2">
                           <input
-                            className="h-11 w-24 rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+                            className={cx(ADMIN_INPUT_BASE, "w-24")}
                             inputMode="decimal"
                             onChange={(e) => onUpdateRow(row.id, "score", e.target.value)}
                             placeholder="0"
@@ -1941,7 +2184,7 @@ function EvaluationSection(props: {
               ) : null}
             </div>
           )}
-        </SurfaceCard>
+        </AdminCard>
     </div>
   );
 }
@@ -1973,19 +2216,24 @@ function MeetingsSection(props: {
   const [manualForm, setManualForm] = useState({
     date: "", qualityMember: "", salesRepresentative: "", customerName: "",
     status: "devam_ediyor" as "devam_ediyor" | "kapandi" | "kaybedildi",
-    licenseDetail: "", licenseAmount: ""
+    licenseDetail: "", licenseAmount: "",
+    lossReason: "", lossNote: ""
   });
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      saveMeetingsMutation.mutate(file);
-      e.target.value = "";
-    }
-  };
+  const existingLossReasons = useMemo(
+    () => {
+      const set = new Set<string>();
+      for (const m of meetings) {
+        if (m.lossReason && m.lossReason.trim()) set.add(m.lossReason.trim());
+      }
+      return Array.from(set);
+    },
+    [meetings]
+  );
 
   const handleManualAdd = () => {
     if (!manualForm.customerName.trim() || !manualForm.salesRepresentative.trim()) return;
+    const isLost = manualForm.status === "kaybedildi";
     createMeetingMutation.mutate({
       date: manualForm.date || undefined,
       qualityMember: manualForm.qualityMember.trim(),
@@ -1993,9 +2241,11 @@ function MeetingsSection(props: {
       customerName: manualForm.customerName.trim(),
       status: manualForm.status,
       licenseDetail: manualForm.licenseDetail.trim() || undefined,
-      licenseAmount: manualForm.licenseAmount ? Number(manualForm.licenseAmount) : null
+      licenseAmount: manualForm.licenseAmount ? Number(manualForm.licenseAmount) : null,
+      ...(isLost && manualForm.lossReason.trim() ? { lossReason: manualForm.lossReason.trim() } : {}),
+      ...(isLost && manualForm.lossNote.trim() ? { lossNote: manualForm.lossNote.trim() } : {})
     });
-    setManualForm({ date: "", qualityMember: "", salesRepresentative: "", customerName: "", status: "devam_ediyor", licenseDetail: "", licenseAmount: "" });
+    setManualForm({ date: "", qualityMember: "", salesRepresentative: "", customerName: "", status: "devam_ediyor", licenseDetail: "", licenseAmount: "", lossReason: "", lossNote: "" });
   };
 
   const statusLabel = (s: string | undefined) =>
@@ -2010,7 +2260,7 @@ function MeetingsSection(props: {
         </div>
 
         {/* Manuel Ekleme */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Manuel Toplantı Ekle</h3>
             <button
@@ -2042,9 +2292,22 @@ function MeetingsSection(props: {
               </div>
               <MiniInput label="Lisans Detayı" value={manualForm.licenseDetail} onChange={(v) => setManualForm((p) => ({ ...p, licenseDetail: v }))} />
               <MiniInput label="Lisans Tutarı" value={manualForm.licenseAmount} onChange={(v) => setManualForm((p) => ({ ...p, licenseAmount: v }))} type="number" />
+              {manualForm.status === "kaybedildi" ? (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-slate-500">Kayıp Sebebi</span>
+                    <LossReasonSelect
+                      value={manualForm.lossReason}
+                      onChange={(v) => setManualForm((p) => ({ ...p, lossReason: v }))}
+                      existingReasons={existingLossReasons}
+                    />
+                  </div>
+                  <MiniInput label="Kayıp Notu" value={manualForm.lossNote} onChange={(v) => setManualForm((p) => ({ ...p, lossNote: v }))} />
+                </>
+              ) : null}
               <div className="flex items-end">
                 <button
-                  className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+                  className="h-10 rounded-[10px] bg-[var(--adm-accent)] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
                   disabled={createMeetingMutation.isPending || !manualForm.customerName.trim() || !manualForm.salesRepresentative.trim()}
                   onClick={handleManualAdd}
                   type="button"
@@ -2057,26 +2320,13 @@ function MeetingsSection(props: {
         </section>
 
         {/* CSV Import */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">CSV İçe Aktarım</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-            CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı</code>
+            CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu</code>
           </p>
           <div className="mt-4">
-            <label
-              className={[
-                "flex cursor-pointer flex-col items-center justify-center rounded-[10px] border-2 border-dashed px-6 py-8 transition",
-                saveMeetingsMutation.isPending
-                  ? "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
-                  : "border-slate-300 bg-white hover:border-sky-400 hover:bg-sky-50/40 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-sky-500 dark:hover:bg-sky-900/20"
-              ].join(" ")}
-            >
-              <Upload className="text-slate-400" size={24} />
-              <span className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
-                {saveMeetingsMutation.isPending ? "Yükleniyor..." : "CSV dosyası seçin veya sürükleyin"}
-              </span>
-              <input accept=".csv" className="hidden" disabled={saveMeetingsMutation.isPending} onChange={handleFileSelect} type="file" />
-            </label>
+            <AdminDropzone busy={saveMeetingsMutation.isPending} onFile={(file) => saveMeetingsMutation.mutate(file)} />
           </div>
           {saveMeetingsMutation.isError ? <div className="mt-3"><ErrorBanner message={(saveMeetingsMutation.error as Error)?.message ?? "Bir hata oluştu."} /></div> : null}
           {meetingsImportSuccess ? <SuccessBanner message="Toplantı verileri başarıyla içe aktarıldı." /> : null}
@@ -2155,44 +2405,23 @@ function KpiSection(props: {
   kpiImportSuccess: boolean;
   selectedPeriodId: string;
   saveKpiMutation: { isPending: boolean; isError: boolean; error: unknown; mutate: (file: File) => void };
+  initKpiMutation: { mutate: () => void; isPending: boolean };
+  fillRepsMutation: { mutate: () => void; isPending: boolean };
+  activeReps: { key: string; name: string }[];
   addAgentMutation: { mutate: (a: any) => void; isPending: boolean };
   updateAgentMutation: { mutate: (p: { agentKey: string; updates: Record<string, unknown> }) => void; isPending: boolean };
   deleteAgentMutation: { mutate: (k: string) => void; isPending: boolean };
   resetAgentsMutation: { mutate: () => void; isPending: boolean };
   updateTargetsMutation: { mutate: (t: Record<string, unknown>) => void; isPending: boolean };
-  updateLicenseSummaryMutation: { mutate: (s: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number }) => void; isPending: boolean };
+  updateLicenseSummaryMutation: { mutate: (s: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number }) => void; isPending: boolean };
 }) {
   const {
     kpiAgentCount, kpiData, kpiImportSuccess,
-    saveKpiMutation, addAgentMutation, updateAgentMutation, deleteAgentMutation, resetAgentsMutation, updateTargetsMutation, updateLicenseSummaryMutation
+    saveKpiMutation, initKpiMutation, fillRepsMutation, activeReps, addAgentMutation, updateAgentMutation, deleteAgentMutation, resetAgentsMutation, updateTargetsMutation, updateLicenseSummaryMutation
   } = props;
-
-  const [showManualForm, setShowManualForm] = useState(false);
-  const [agentForm, setAgentForm] = useState({
-    agentName: "", perfScore: "", salesAmount: "", licenseCount: "",
-    avgLicensePrice: "", talkDurationSeconds: "", callAttempts: "", conversionRate: "",
-    scaleCount: "", scalePlusCount: "", scaleConversion: "", scalePlusConversion: "", totalConversion: ""
-  });
-
-  const [editingTargets, setEditingTargets] = useState(false);
-  const [targetDraft, setTargetDraft] = useState<Record<string, string>>({});
 
   const [editingLicenseSummary, setEditingLicenseSummary] = useState(false);
   const [licenseSummaryDraft, setLicenseSummaryDraft] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (kpiData?.targets) {
-      setTargetDraft({
-        perfScore: String(kpiData.targets.perfScore),
-        salesAmount: String(kpiData.targets.salesAmount),
-        licenseCount: String(kpiData.targets.licenseCount),
-        avgLicensePrice: String(kpiData.targets.avgLicensePrice),
-        talkDurationLabel: kpiData.targets.talkDurationLabel,
-        callAttempts: String(kpiData.targets.callAttempts),
-        conversionRate: String(kpiData.targets.conversionRate)
-      });
-    }
-  }, [kpiData?.targets]);
 
   useEffect(() => {
     if ((kpiData as any)?.licenseSummary) {
@@ -2202,38 +2431,11 @@ function KpiSection(props: {
         scaleCount: String(ls.scaleCount ?? 0),
         scale2Plus1Count: String(ls.scale2Plus1Count ?? 0),
         scalePlusCount: String(ls.scalePlusCount ?? 0),
-        scalePlus2Plus1Count: String(ls.scalePlus2Plus1Count ?? 0)
+        scalePlus2Plus1Count: String(ls.scalePlus2Plus1Count ?? 0),
+        scale3Plus2Count: String(ls.scale3Plus2Count ?? 0)
       });
     }
   }, [(kpiData as any)?.licenseSummary]);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      saveKpiMutation.mutate(file);
-      e.target.value = "";
-    }
-  };
-
-  const handleAddAgent = () => {
-    if (!agentForm.agentName.trim()) return;
-    addAgentMutation.mutate({
-      agentName: agentForm.agentName.trim(),
-      perfScore: agentForm.perfScore ? Number(agentForm.perfScore) : null,
-      salesAmount: Number(agentForm.salesAmount) || 0,
-      licenseCount: Number(agentForm.licenseCount) || 0,
-      avgLicensePrice: Number(agentForm.avgLicensePrice) || 0,
-      talkDurationSeconds: Number(agentForm.talkDurationSeconds) || 0,
-      callAttempts: Number(agentForm.callAttempts) || 0,
-      conversionRate: Number(agentForm.conversionRate) || 0,
-      scaleCount: Number(agentForm.scaleCount) || 0,
-      scalePlusCount: Number(agentForm.scalePlusCount) || 0,
-      scaleConversion: Number(agentForm.scaleConversion) || 0,
-      scalePlusConversion: Number(agentForm.scalePlusConversion) || 0,
-      totalConversion: Number(agentForm.totalConversion) || 0
-    });
-    setAgentForm({ agentName: "", perfScore: "", salesAmount: "", licenseCount: "", avgLicensePrice: "", talkDurationSeconds: "", callAttempts: "", conversionRate: "", scaleCount: "", scalePlusCount: "", scaleConversion: "", scalePlusConversion: "", totalConversion: "" });
-  };
 
   const handleSaveLicenseSummary = () => {
     updateLicenseSummaryMutation.mutate({
@@ -2241,27 +2443,11 @@ function KpiSection(props: {
       scaleCount: Number(licenseSummaryDraft.scaleCount) || 0,
       scale2Plus1Count: Number(licenseSummaryDraft.scale2Plus1Count) || 0,
       scalePlusCount: Number(licenseSummaryDraft.scalePlusCount) || 0,
-      scalePlus2Plus1Count: Number(licenseSummaryDraft.scalePlus2Plus1Count) || 0
+      scalePlus2Plus1Count: Number(licenseSummaryDraft.scalePlus2Plus1Count) || 0,
+      scale3Plus2Count: Number(licenseSummaryDraft.scale3Plus2Count) || 0
     });
     setEditingLicenseSummary(false);
   };
-
-  const handleSaveTargets = () => {
-    const talkDurationLabel = targetDraft.talkDurationLabel ?? "";
-    updateTargetsMutation.mutate({
-      perfScore: Number(targetDraft.perfScore) || 0,
-      salesAmount: Number(targetDraft.salesAmount) || 0,
-      licenseCount: Number(targetDraft.licenseCount) || 0,
-      avgLicensePrice: Number(targetDraft.avgLicensePrice) || 0,
-      talkDurationLabel,
-      talkDurationTargetSeconds: parseTalkDurationLabelToSeconds(talkDurationLabel),
-      callAttempts: Number(targetDraft.callAttempts) || 0,
-      conversionRate: Number(targetDraft.conversionRate) || 0
-    });
-    setEditingTargets(false);
-  };
-
-  const formatTryCurrency = (v: number) => new Intl.NumberFormat("tr-TR").format(v) + " TRY";
 
   return (
     <div className="space-y-6">
@@ -2271,58 +2457,22 @@ function KpiSection(props: {
           {kpiAgentCount > 0 && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">{kpiAgentCount} temsilci</span>}
         </div>
 
-        {/* Hedef Düzenleme */}
-        {kpiData?.targets ? (
-          <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Hedef Değerler</h3>
-              <button
-                className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700"
-                onClick={() => setEditingTargets(!editingTargets)}
-                type="button"
-              >
-                {editingTargets ? <X size={12} /> : <Pencil size={12} />}
-                {editingTargets ? "Vazgeç" : "Düzenle"}
-              </button>
-            </div>
-            {editingTargets ? (
-              <div className="mt-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <MiniInput label="Perf. Değ." value={targetDraft.perfScore ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, perfScore: v }))} type="number" />
-                  <MiniInput label="Satış Tutarı" value={targetDraft.salesAmount ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, salesAmount: v }))} type="number" />
-                  <MiniInput label="Lisans Adeti" value={targetDraft.licenseCount ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, licenseCount: v }))} type="number" />
-                  <MiniInput label="Ort. Lisans Fiyatı" value={targetDraft.avgLicensePrice ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, avgLicensePrice: v }))} type="number" />
-                  <MiniInput label="Konuşma Süresi" value={targetDraft.talkDurationLabel ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, talkDurationLabel: v }))} />
-                  <MiniInput label="Arama Denemesi" value={targetDraft.callAttempts ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, callAttempts: v }))} type="number" />
-                  <MiniInput label="Dönüşüm Oranı" value={targetDraft.conversionRate ?? ""} onChange={(v) => setTargetDraft((p) => ({ ...p, conversionRate: v }))} type="number" />
-                  <div className="flex items-end">
-                    <button
-                      className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
-                      disabled={updateTargetsMutation.isPending}
-                      onClick={handleSaveTargets}
-                      type="button"
-                    >
-                      {updateTargetsMutation.isPending ? "Kaydediliyor..." : "Kaydet"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                <div><span className="text-slate-500">Perf. Değ.:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.perfScore}</span></div>
-                <div><span className="text-slate-500">Satış Tutarı:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{formatTryCurrency(kpiData.targets.salesAmount)}</span></div>
-                <div><span className="text-slate-500">Lisans:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.licenseCount}</span></div>
-                <div><span className="text-slate-500">Ort. Fiyat:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{formatTryCurrency(kpiData.targets.avgLicensePrice)}</span></div>
-                <div><span className="text-slate-500">Konuşma:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.talkDurationLabel}</span></div>
-                <div><span className="text-slate-500">Arama:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.callAttempts}</span></div>
-                <div><span className="text-slate-500">Dönüşüm:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{kpiData.targets.conversionRate}%</span></div>
-              </div>
-            )}
-          </section>
-        ) : null}
+        {/* Temsilci KPI Tablosu (spreadsheet) */}
+        <KpiGrid
+          kpiData={kpiData}
+          activePeriodMonth={props.activePeriodMonth}
+          addAgentMutation={addAgentMutation}
+          updateAgentMutation={updateAgentMutation}
+          deleteAgentMutation={deleteAgentMutation}
+          resetAgentsMutation={resetAgentsMutation}
+          updateTargetsMutation={updateTargetsMutation}
+          initKpiMutation={initKpiMutation}
+          fillRepsMutation={fillRepsMutation}
+          activeReps={activeReps}
+        />
 
         {/* Lisans Özet Tablosu */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Aylık Lisans Özeti</h3>
             <button
@@ -2336,15 +2486,16 @@ function KpiSection(props: {
           </div>
           {editingLicenseSummary ? (
             <div className="mt-4 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                 <MiniInput label="Pre." value={licenseSummaryDraft.preCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, preCount: v }))} type="number" />
                 <MiniInput label="Scale" value={licenseSummaryDraft.scaleCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scaleCount: v }))} type="number" />
                 <MiniInput label="Scale 2+1" value={licenseSummaryDraft.scale2Plus1Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scale2Plus1Count: v }))} type="number" />
                 <MiniInput label="Scale Plus" value={licenseSummaryDraft.scalePlusCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scalePlusCount: v }))} type="number" />
                 <MiniInput label="Scale Plus 2+1" value={licenseSummaryDraft.scalePlus2Plus1Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scalePlus2Plus1Count: v }))} type="number" />
+                <MiniInput label="3+2" value={licenseSummaryDraft.scale3Plus2Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scale3Plus2Count: v }))} type="number" />
               </div>
               <button
-                className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+                className="h-10 rounded-[10px] bg-[var(--adm-accent)] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
                 disabled={updateLicenseSummaryMutation.isPending}
                 onClick={handleSaveLicenseSummary}
                 type="button"
@@ -2359,131 +2510,587 @@ function KpiSection(props: {
               <div><span className="text-slate-500">Scale 2+1:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scale2Plus1Count}</span></div>
               <div><span className="text-slate-500">Scale Plus:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scalePlusCount}</span></div>
               <div><span className="text-slate-500">Scale Plus 2+1:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scalePlus2Plus1Count}</span></div>
+              <div><span className="text-slate-500">3+2:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scale3Plus2Count ?? 0}</span></div>
             </div>
           ) : (
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Henüz lisans özeti girilmemiş. Düzenle butonuyla ekleyin.</p>
           )}
         </section>
 
-        {/* Manuel Temsilci Ekleme */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
-          <div className="flex items-center justify-between">
-            <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Manuel Temsilci Ekle</h3>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700"
-              onClick={() => setShowManualForm(!showManualForm)}
-              type="button"
-            >
-              {showManualForm ? <X size={14} /> : <Plus size={14} />}
-              {showManualForm ? "Kapat" : "Yeni Temsilci"}
-            </button>
-          </div>
-          {showManualForm && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MiniInput label="Temsilci Adı *" value={agentForm.agentName} onChange={(v) => setAgentForm((p) => ({ ...p, agentName: v }))} />
-              <MiniInput label="Perf. Değ." value={agentForm.perfScore} onChange={(v) => setAgentForm((p) => ({ ...p, perfScore: v }))} type="number" />
-              <MiniInput label="Satış Tutarı" value={agentForm.salesAmount} onChange={(v) => setAgentForm((p) => ({ ...p, salesAmount: v }))} type="number" />
-              <MiniInput label="Lisans Adeti" value={agentForm.licenseCount} onChange={(v) => setAgentForm((p) => ({ ...p, licenseCount: v }))} type="number" />
-              <MiniInput label="Ort. Lisans Fiyatı" value={agentForm.avgLicensePrice} onChange={(v) => setAgentForm((p) => ({ ...p, avgLicensePrice: v }))} type="number" />
-              <MiniInput label="Konuşma Süresi (sn)" value={agentForm.talkDurationSeconds} onChange={(v) => setAgentForm((p) => ({ ...p, talkDurationSeconds: v }))} type="number" />
-              <MiniInput label="Arama Denemesi" value={agentForm.callAttempts} onChange={(v) => setAgentForm((p) => ({ ...p, callAttempts: v }))} type="number" />
-              <MiniInput label="Dönüşüm Oranı (%)" value={agentForm.conversionRate} onChange={(v) => setAgentForm((p) => ({ ...p, conversionRate: v }))} type="number" />
-              <MiniInput label="Scale 2+1" value={agentForm.scaleCount} onChange={(v) => setAgentForm((p) => ({ ...p, scaleCount: v }))} type="number" />
-              <MiniInput label="Scale %" value={agentForm.scaleConversion} onChange={(v) => setAgentForm((p) => ({ ...p, scaleConversion: v }))} type="number" />
-              <MiniInput label="Scale Plus 2+1" value={agentForm.scalePlusCount} onChange={(v) => setAgentForm((p) => ({ ...p, scalePlusCount: v }))} type="number" />
-              <MiniInput label="Scale Plus %" value={agentForm.scalePlusConversion} onChange={(v) => setAgentForm((p) => ({ ...p, scalePlusConversion: v }))} type="number" />
-              <MiniInput label="Toplam %" value={agentForm.totalConversion} onChange={(v) => setAgentForm((p) => ({ ...p, totalConversion: v }))} type="number" />
-              <div className="flex items-end">
-                <button
-                  className="h-10 rounded-[10px] bg-[#2f6b7a] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
-                  disabled={addAgentMutation.isPending || !agentForm.agentName.trim()}
-                  onClick={handleAddAgent}
-                  type="button"
-                >
-                  {addAgentMutation.isPending ? "Ekleniyor..." : "Ekle"}
-                </button>
-              </div>
-            </div>
-          )}
-        </section>
-
         {/* CSV Import */}
-        <section className="rounded-[10px] border border-slate-200/80 bg-white p-6 dark:border-slate-700 dark:bg-slate-800/60">
+        <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">CSV İçe Aktarım</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-            CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">KPI's, PERF. DEĞ., [AY], LİSANS ADETİ, ORT. LİSANS FİYATI, TOPLAM KONUŞMA SÜRESİ, ARAMA DENEMESİ, DÖNÜŞÜM ORANI</code>
+            CSV formatı (Q&T Team Report): <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">PERF. DEĞ., [AY], LİSANS ADETİ, ORTALAMA LİSANS FİYATI, 2+1, %2+1, TOPLAM KONUŞMA SÜRESİ, ARAMA DENEMESİ, Pre Onb, Hubspot, Domain, Outbound / Eski Lead, DÖNÜŞÜM ORANI</code>
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-400 dark:text-slate-500">
+            Kolonlar başlık adına göre eşlenir; sıra farklı olabilir. NetGSM ve EK SÜRELER grupları içe aktarılmaz.
           </p>
           <div className="mt-4">
-            <label
-              className={[
-                "flex cursor-pointer flex-col items-center justify-center rounded-[10px] border-2 border-dashed px-6 py-8 transition",
-                saveKpiMutation.isPending
-                  ? "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
-                  : "border-slate-300 bg-white hover:border-sky-400 hover:bg-sky-50/40 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-sky-500 dark:hover:bg-sky-900/20"
-              ].join(" ")}
-            >
-              <Upload className="text-slate-400" size={24} />
-              <span className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
-                {saveKpiMutation.isPending ? "Yükleniyor..." : "CSV dosyası seçin veya sürükleyin"}
-              </span>
-              <input accept=".csv" className="hidden" disabled={saveKpiMutation.isPending} onChange={handleFileSelect} type="file" />
-            </label>
+            <AdminDropzone busy={saveKpiMutation.isPending} onFile={(file) => saveKpiMutation.mutate(file)} />
           </div>
           {saveKpiMutation.isError ? <div className="mt-3"><ErrorBanner message={(saveKpiMutation.error as Error)?.message ?? "Bir hata oluştu."} /></div> : null}
           {kpiImportSuccess ? <SuccessBanner message="KPI verileri başarıyla içe aktarıldı." /> : null}
         </section>
-
-        {/* Kayıtlı Temsilci Verileri */}
-        {kpiData && kpiData.agents.length > 0 ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{kpiData.agents.length} temsilci kaydı</p>
-              <button
-                className="inline-flex items-center gap-1.5 rounded-[10px] border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 dark:border-rose-700/40 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/40 disabled:opacity-50"
-                disabled={resetAgentsMutation.isPending}
-                onClick={() => { if (confirm("Tüm temsilci KPI verilerini silmek istediğinize emin misiniz?")) resetAgentsMutation.mutate(); }}
-                type="button"
-              >
-                <Trash2 size={12} />
-                {resetAgentsMutation.isPending ? "Siliniyor..." : "Tümünü sil"}
-              </button>
-            </div>
-          <EditableSavedData
-            columns={["Temsilci", "Perf. Değ.", "Satış Tutarı", "Lisans", "Ort. Fiyat", "Konuşma (sn)", "Arama", "Dönüşüm %", "Scale 2+1", "Scale %", "Scale+ 2+1", "Scale+ %", "Toplam %"]}
-            rows={kpiData.agents.map((a) => ({
-              id: a.agentKey ?? normalizeKey(a.agentName),
-              cells: [
-                a.agentName,
-                a.perfScore !== null ? String(a.perfScore) : "",
-                String(a.salesAmount),
-                String(a.licenseCount),
-                String(a.avgLicensePrice),
-                String(a.talkDurationSeconds),
-                String(a.callAttempts),
-                String(a.conversionRate),
-                String(a.scaleCount ?? 0),
-                String(a.scaleConversion ?? 0),
-                String(a.scalePlusCount ?? 0),
-                String(a.scalePlusConversion ?? 0),
-                String(a.totalConversion ?? 0)
-              ],
-              fields: ["agentName", "perfScore", "salesAmount", "licenseCount", "avgLicensePrice", "talkDurationSeconds", "callAttempts", "conversionRate", "scaleCount", "scaleConversion", "scalePlusCount", "scalePlusConversion", "totalConversion"],
-              types: ["text", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number"] as ("text" | "number")[]
-            }))}
-            onDelete={(agentKey) => deleteAgentMutation.mutate(agentKey)}
-            onUpdate={(agentKey, field, value) => {
-              const updates: Record<string, unknown> = {};
-              if (field === "agentName") updates[field] = value;
-              else if (field === "perfScore") updates[field] = value === "" ? null : Number(value);
-              else updates[field] = Number(value) || 0;
-              updateAgentMutation.mutate({ agentKey, updates });
-            }}
-            isDeleting={deleteAgentMutation.isPending}
-          />
-          </div>
-        ) : null}
     </div>
   );
+}
+
+/* ── KPI Temsilci Tablosu (spreadsheet manuel giriş) ── */
+
+type KpiCellKind = "int" | "decimal" | "currency" | "percent" | "duration";
+
+type KpiAgentNumericKey =
+  | "perfScore" | "salesAmount" | "licenseCount" | "avgLicensePrice"
+  | "talkDurationSeconds" | "callAttempts" | "conversionRate"
+  | "twoPlusOneCount" | "twoPlusOnePercent"
+  | "preOnbCount" | "hubspotScore" | "domainCount" | "outboundLeadCount";
+
+/** Boş bırakılınca 0 yerine null yazılan alanlar (veri yok anlamında). */
+const NULLABLE_KPI_KEYS = new Set<KpiAgentNumericKey>([
+  "perfScore", "twoPlusOneCount", "twoPlusOnePercent",
+  "preOnbCount", "hubspotScore", "domainCount", "outboundLeadCount"
+]);
+
+type KpiGridColumn = {
+  key: KpiAgentNumericKey;
+  label: string;
+  kind: KpiCellKind;
+  /** Hedef (yeşil) satırında düzenlenebilir bir karşılığı var mı */
+  hasTarget: boolean;
+  /** TOPLAM satırında toplanır mı (ortalama her sütun için hesaplanır) */
+  sum: boolean;
+};
+
+function formatTrInt(value: number): string {
+  return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(value));
+}
+
+function formatTrDecimal(value: number, digits = 2): string {
+  return new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(value);
+}
+
+function formatTryMoney(value: number): string {
+  return `${formatTrInt(value)} TRY`;
+}
+
+function formatSecondsToHms(total: number): string {
+  const sec = Math.max(0, Math.round(total));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+/** "HH:MM:SS", "MM:SS" veya düz saniye/sayı kabul eder; saniyeye çevirir. */
+function parseFlexibleHms(raw: string): number {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return 0;
+  if (!trimmed.includes(":")) {
+    const n = parseTurkishNumber(trimmed);
+    return n === null ? 0 : Math.round(n);
+  }
+  const parts = trimmed.split(":").map((p) => Number(p.trim()) || 0);
+  if (parts.length === 3) return (parts[0] ?? 0) * 3600 + (parts[1] ?? 0) * 60 + (parts[2] ?? 0);
+  if (parts.length === 2) return (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
+  return 0;
+}
+
+function formatKpiCellValue(kind: KpiCellKind, value: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  switch (kind) {
+    case "currency": return formatTryMoney(value);
+    case "percent": return `${formatTrDecimal(value, 2)}%`;
+    case "duration": return formatSecondsToHms(value);
+    case "decimal": return formatTrDecimal(value, 3);
+    case "int":
+    default: return formatTrInt(value);
+  }
+}
+
+function seedKpiEditValue(kind: KpiCellKind, value: number | null): string {
+  if (value === null || value === undefined) return "";
+  if (kind === "duration") return formatSecondsToHms(value);
+  // parseTurkishNumber nokta=binlik, virgül=ondalık sayar; JS ondalık noktasını
+  // virgüle çevirerek round-trip güvenli hale getiriyoruz (1.72 → "1,72").
+  return String(value).replace(".", ",");
+}
+
+function parseKpiEditValue(kind: KpiCellKind, raw: string): number {
+  if (kind === "duration") return parseFlexibleHms(raw);
+  const n = parseTurkishNumber(raw);
+  return n === null ? 0 : n;
+}
+
+const KPI_GRID_CELL_INPUT =
+  "h-7 w-full min-w-[68px] rounded-md border border-slate-200 bg-white px-1.5 text-right text-[13px] tabular-nums text-slate-800 placeholder:text-slate-300 focus:border-sky-400 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100";
+
+/** Sıfır metrikli boş bir KPI temsilci satırı üretir (manuel giriş ön-doldurma). */
+function makeBlankKpiAgent(key: string, name: string) {
+  return {
+    agentKey: key || normalizeKey(name),
+    agentName: name,
+    perfScore: null as number | null,
+    salesAmount: 0,
+    licenseCount: 0,
+    avgLicensePrice: 0,
+    talkDurationSeconds: 0,
+    callAttempts: 0,
+    conversionRate: 0,
+    scaleCount: 0,
+    scalePlusCount: 0,
+    scaleConversion: 0,
+    scalePlusConversion: 0,
+    totalConversion: 0,
+    twoPlusOneCount: null as number | null,
+    twoPlusOnePercent: null as number | null,
+    preOnbCount: null as number | null,
+    hubspotScore: null as number | null,
+    domainCount: null as number | null,
+    outboundLeadCount: null as number | null
+  };
+}
+
+function KpiGrid(props: {
+  kpiData: SalesKpiData | null | undefined;
+  activePeriodMonth: string;
+  addAgentMutation: { mutate: (a: Record<string, unknown>) => void; isPending: boolean };
+  updateAgentMutation: { mutate: (p: { agentKey: string; updates: Record<string, unknown> }) => void; isPending: boolean };
+  deleteAgentMutation: { mutate: (k: string) => void; isPending: boolean };
+  resetAgentsMutation: { mutate: () => void; isPending: boolean };
+  updateTargetsMutation: { mutate: (t: Record<string, unknown>) => void; isPending: boolean };
+  initKpiMutation: { mutate: () => void; isPending: boolean };
+  fillRepsMutation: { mutate: () => void; isPending: boolean };
+  activeReps: { key: string; name: string }[];
+}) {
+  const { kpiData, activePeriodMonth, addAgentMutation, updateAgentMutation, deleteAgentMutation, resetAgentsMutation, updateTargetsMutation, initKpiMutation, fillRepsMutation, activeReps } = props;
+  const agents: SalesKpiAgent[] = kpiData?.agents ?? [];
+  const targets = kpiData?.targets ?? null;
+
+  const monthLabel = formatPeriodMonth(activePeriodMonth);
+  const salesLabel = monthLabel === "-" ? "Satış (TRY)" : `${monthLabel} (TRY)`;
+
+  // Kolon sırası Q&T Team Report CSV'sini takip eder
+  const columns = useMemo<KpiGridColumn[]>(() => [
+    { key: "perfScore", label: "Perf. Değ.", kind: "int", hasTarget: true, sum: false },
+    { key: "salesAmount", label: salesLabel, kind: "currency", hasTarget: true, sum: true },
+    { key: "licenseCount", label: "Lisans Adedi", kind: "int", hasTarget: true, sum: true },
+    { key: "avgLicensePrice", label: "Ort. Lisans Fiyatı", kind: "currency", hasTarget: true, sum: false },
+    { key: "twoPlusOneCount", label: "2+1", kind: "int", hasTarget: false, sum: true },
+    { key: "twoPlusOnePercent", label: "%2+1", kind: "percent", hasTarget: false, sum: false },
+    { key: "talkDurationSeconds", label: "Konuşma Süresi", kind: "duration", hasTarget: true, sum: false },
+    { key: "callAttempts", label: "Arama Denemesi", kind: "int", hasTarget: true, sum: true },
+    { key: "preOnbCount", label: "Pre Onb", kind: "int", hasTarget: false, sum: true },
+    { key: "hubspotScore", label: "Hubspot", kind: "decimal", hasTarget: false, sum: false },
+    { key: "domainCount", label: "Domain", kind: "int", hasTarget: false, sum: true },
+    { key: "outboundLeadCount", label: "Outbound / Eski Lead", kind: "int", hasTarget: false, sum: true },
+    { key: "conversionRate", label: "Dönüşüm Oranı", kind: "percent", hasTarget: true, sum: false }
+  ], [salesLabel]);
+
+  const [editing, setEditing] = useState<{ rowId: string; key: KpiAgentNumericKey | "agentName" } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const emptyNewRow: Record<string, string> = {
+    agentName: "", perfScore: "", salesAmount: "", licenseCount: "", avgLicensePrice: "",
+    twoPlusOneCount: "", twoPlusOnePercent: "", talkDurationSeconds: "", callAttempts: "",
+    preOnbCount: "", hubspotScore: "", domainCount: "", outboundLeadCount: "", conversionRate: ""
+  };
+  const [newRow, setNewRow] = useState<Record<string, string>>(emptyNewRow);
+
+  const stats = useMemo(() => {
+    const acc: Record<string, { sum: number; count: number }> = {};
+    for (const col of columns) acc[col.key] = { sum: 0, count: 0 };
+    for (const agent of agents) {
+      for (const col of columns) {
+        const v = agent[col.key];
+        if (typeof v !== "number" || Number.isNaN(v)) continue;
+        const bucket = acc[col.key]!;
+        bucket.sum += v;
+        bucket.count += 1;
+      }
+    }
+    return acc;
+  }, [agents, columns]);
+
+  // Tabloda henüz olmayan aktif temsilciler (tek tıkla eklemek için)
+  const missingReps = useMemo(() => {
+    const present = new Set<string>();
+    for (const agent of agents) {
+      present.add(agent.agentKey || normalizeKey(agent.agentName));
+      present.add(normalizeKey(agent.agentName));
+    }
+    return activeReps.filter((rep) => !present.has(rep.key) && !present.has(normalizeKey(rep.name)));
+  }, [agents, activeReps]);
+
+  // Tam ekran (maximize) modu: ESC ile çık + arka plan kaydırmasını kilitle
+  const [maximized, setMaximized] = useState(false);
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMaximized(false); };
+    window.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [maximized]);
+
+  const beginEdit = (rowId: string, key: KpiAgentNumericKey | "agentName", seed: string) => {
+    setEditing({ rowId, key });
+    setEditValue(seed);
+  };
+  const cancelEdit = () => setEditing(null);
+
+  const commitAgentEdit = (agentKey: string, key: KpiAgentNumericKey | "agentName") => {
+    const updates: Record<string, unknown> = {};
+    if (key === "agentName") {
+      const name = editValue.trim();
+      if (name) updates.agentName = name;
+    } else if (NULLABLE_KPI_KEYS.has(key)) {
+      const col = columns.find((c) => c.key === key);
+      updates[key] = editValue.trim() === "" ? null : parseKpiEditValue(col?.kind ?? "int", editValue);
+    } else {
+      const col = columns.find((c) => c.key === key);
+      updates[key] = parseKpiEditValue(col?.kind ?? "int", editValue);
+    }
+    if (Object.keys(updates).length > 0) updateAgentMutation.mutate({ agentKey, updates });
+    setEditing(null);
+  };
+
+  const targetValueFor = (key: KpiAgentNumericKey): number | null => {
+    if (!targets) return null;
+    switch (key) {
+      case "perfScore": return targets.perfScore;
+      case "salesAmount": return targets.salesAmount;
+      case "licenseCount": return targets.licenseCount;
+      case "avgLicensePrice": return targets.avgLicensePrice;
+      case "callAttempts": return targets.callAttempts;
+      case "conversionRate": return targets.conversionRate;
+      default: return null;
+    }
+  };
+
+  const commitTargetEdit = (key: KpiAgentNumericKey) => {
+    if (!targets) { setEditing(null); return; }
+    const next: Record<string, unknown> = {
+      perfScore: targets.perfScore,
+      salesAmount: targets.salesAmount,
+      licenseCount: targets.licenseCount,
+      avgLicensePrice: targets.avgLicensePrice,
+      talkDurationLabel: targets.talkDurationLabel,
+      talkDurationTargetSeconds: targets.talkDurationTargetSeconds ?? parseTalkDurationLabelToSeconds(targets.talkDurationLabel),
+      callAttempts: targets.callAttempts,
+      conversionRate: targets.conversionRate,
+      perPersonSalesTarget: targets.perPersonSalesTarget ?? null
+    };
+    if (key === "talkDurationSeconds") {
+      next.talkDurationLabel = editValue.trim();
+      next.talkDurationTargetSeconds = parseTalkDurationLabelToSeconds(editValue.trim());
+    } else {
+      const col = columns.find((c) => c.key === key);
+      next[key] = parseKpiEditValue(col?.kind ?? "int", editValue);
+    }
+    updateTargetsMutation.mutate(next);
+    setEditing(null);
+  };
+
+  const handleAdd = () => {
+    if (!(newRow.agentName ?? "").trim()) return;
+    const nullable = (kind: KpiCellKind, raw: string | undefined) =>
+      (raw ?? "").trim() === "" ? null : parseKpiEditValue(kind, raw ?? "");
+    addAgentMutation.mutate({
+      agentName: (newRow.agentName ?? "").trim(),
+      perfScore: nullable("int", newRow.perfScore),
+      salesAmount: parseKpiEditValue("currency", newRow.salesAmount ?? ""),
+      licenseCount: parseKpiEditValue("int", newRow.licenseCount ?? ""),
+      avgLicensePrice: parseKpiEditValue("currency", newRow.avgLicensePrice ?? ""),
+      talkDurationSeconds: parseFlexibleHms(newRow.talkDurationSeconds ?? ""),
+      callAttempts: parseKpiEditValue("int", newRow.callAttempts ?? ""),
+      conversionRate: parseKpiEditValue("percent", newRow.conversionRate ?? ""),
+      twoPlusOneCount: nullable("int", newRow.twoPlusOneCount),
+      twoPlusOnePercent: nullable("percent", newRow.twoPlusOnePercent),
+      preOnbCount: nullable("int", newRow.preOnbCount),
+      hubspotScore: nullable("decimal", newRow.hubspotScore),
+      domainCount: nullable("int", newRow.domainCount),
+      outboundLeadCount: nullable("int", newRow.outboundLeadCount)
+    });
+    setNewRow(emptyNewRow);
+  };
+
+  const renderInput = (commit: () => void, opts?: { align?: "left" | "right"; numeric?: boolean }) => (
+    <input
+      autoFocus
+      className={[
+        "h-7 w-full min-w-[68px] rounded-md border border-sky-400 bg-white px-1.5 text-[13px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-300 dark:border-sky-500 dark:bg-slate-700 dark:text-slate-100",
+        opts?.align === "left" ? "text-left" : "text-right tabular-nums"
+      ].join(" ")}
+      inputMode={opts?.numeric === false ? undefined : "decimal"}
+      onBlur={commit}
+      onChange={(e) => setEditValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(); }
+        if (e.key === "Escape") { e.stopPropagation(); cancelEdit(); }
+      }}
+      value={editValue}
+    />
+  );
+
+  if (!kpiData || !targets) {
+    return (
+      <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
+        <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Temsilci KPI Tablosu</h3>
+        <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
+          Bu dönem{monthLabel !== "-" ? ` (${monthLabel})` : ""} için henüz KPI verisi yok.{" "}
+          {activeReps.length > 0
+            ? <>Tabloyu oluşturduğunuzda <span className="font-medium text-slate-700 dark:text-slate-300">{activeReps.length} aktif temsilci</span> satır olarak hazır gelir; sadece değerleri doldurursunuz. </>
+            : <>Boş bir tablo oluşturup hedefleri ve temsilcileri elle girebilirsiniz. </>}
+          Dilerseniz aşağıdaki <span className="font-medium text-slate-700 dark:text-slate-300">CSV İçe Aktarım</span> ile toplu da yükleyebilirsiniz.
+        </p>
+        <button
+          className="mt-4 inline-flex items-center gap-2 rounded-[10px] bg-[var(--adm-accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
+          disabled={initKpiMutation.isPending}
+          onClick={() => initKpiMutation.mutate()}
+          type="button"
+        >
+          <Plus size={16} />
+          {initKpiMutation.isPending
+            ? "Oluşturuluyor..."
+            : activeReps.length > 0 ? `Tabloyu oluştur (${activeReps.length} temsilci)` : "Boş tablo oluştur"}
+        </button>
+      </section>
+    );
+  }
+
+  const actionCol = columns.length + 2; // sticky name + columns + işlem
+
+  const gridContent = (
+    <section className={maximized
+      ? "fixed inset-0 z-50 flex flex-col border-0 bg-white p-3 dark:bg-slate-900 sm:p-4"
+      : "rounded-[16px] border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900 sm:p-5"}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">Temsilci KPI Tablosu</h3>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            {agents.length} temsilci{monthLabel !== "-" ? ` · ${monthLabel}` : ""} · hücreye tıklayarak düzenleyin
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--adm-accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)]"
+            onClick={() => setAddOpen((v) => !v)}
+            type="button"
+          >
+            {addOpen ? <X size={14} /> : <Plus size={14} />}
+            {addOpen ? "Satırı kapat" : "Temsilci ekle"}
+          </button>
+          {missingReps.length > 0 ? (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--adm-accent-border)] bg-[var(--adm-accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-accent-text)] transition hover:brightness-95 disabled:opacity-50 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
+              disabled={fillRepsMutation.isPending}
+              onClick={() => fillRepsMutation.mutate()}
+              title="Tabloda olmayan aktif temsilcileri ekle"
+              type="button"
+            >
+              <UserPlus size={13} />
+              {fillRepsMutation.isPending ? "Ekleniyor..." : `Tüm temsilcileri ekle (${missingReps.length})`}
+            </button>
+          ) : null}
+          {agents.length > 0 ? (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-50 dark:border-rose-700/40 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/40"
+              disabled={resetAgentsMutation.isPending}
+              onClick={() => { if (confirm("Tüm temsilci KPI verilerini silmek istediğinize emin misiniz?")) resetAgentsMutation.mutate(); }}
+              type="button"
+            >
+              <Trash2 size={12} />
+              {resetAgentsMutation.isPending ? "Siliniyor..." : "Tümünü sil"}
+            </button>
+          ) : null}
+          <button
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            onClick={() => setMaximized((v) => !v)}
+            title={maximized ? "Küçült (Esc)" : "Tam ekran"}
+            type="button"
+          >
+            {maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            {maximized ? "Küçült" : "Tam ekran"}
+          </button>
+        </div>
+      </div>
+
+      <div className={maximized
+        ? "min-h-0 flex-1 overflow-auto rounded-[10px] border border-slate-200 dark:border-slate-700"
+        : "overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-700"}>
+        <table className="min-w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-slate-100 dark:bg-slate-700/50">
+              <th className="sticky left-0 top-0 z-30 border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">Temsilci</th>
+              {columns.map((col) => (
+                <th key={col.key} className="sticky top-0 z-20 whitespace-nowrap border-b border-l border-slate-200 bg-slate-100 px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">{col.label}</th>
+              ))}
+              <th className="sticky top-0 z-20 border-b border-l border-slate-200 bg-slate-100 px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-600 dark:bg-slate-700">İşlem</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* HEDEF satırı */}
+            <tr className="bg-emerald-50 dark:bg-emerald-900/20">
+              <th scope="row" className="sticky left-0 z-10 border-b border-emerald-200 bg-emerald-50 px-3 py-1.5 text-left text-[12px] font-bold uppercase tracking-wide text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-900/30 dark:text-emerald-300">Hedef</th>
+              {columns.map((col) => {
+                const isEd = editing?.rowId === "__target__" && editing?.key === col.key;
+                if (!col.hasTarget) {
+                  return <td key={col.key} className="border-b border-l border-emerald-200/60 px-2 py-1.5 text-right text-[13px] text-emerald-700/30 dark:border-emerald-800/30 dark:text-emerald-300/30">—</td>;
+                }
+                const display = col.key === "talkDurationSeconds" ? (targets.talkDurationLabel || "—") : formatKpiCellValue(col.kind, targetValueFor(col.key));
+                const seed = col.key === "talkDurationSeconds" ? targets.talkDurationLabel : seedKpiEditValue(col.kind, targetValueFor(col.key));
+                return (
+                  <td key={col.key} className="border-b border-l border-emerald-200/60 px-1 py-1 text-right dark:border-emerald-800/30">
+                    {isEd ? renderInput(() => commitTargetEdit(col.key), { numeric: col.key !== "talkDurationSeconds" }) : (
+                      <button
+                        className="block w-full rounded px-1 py-0.5 text-right text-[13px] font-semibold tabular-nums text-emerald-800 transition hover:bg-emerald-100/70 dark:text-emerald-200 dark:hover:bg-emerald-800/30"
+                        onClick={() => beginEdit("__target__", col.key, seed)}
+                        title="Hedefi düzenle"
+                        type="button"
+                      >
+                        {display}
+                      </button>
+                    )}
+                  </td>
+                );
+              })}
+              <td className="border-b border-l border-emerald-200/60 dark:border-emerald-800/30" />
+            </tr>
+
+            {/* Temsilci satırları */}
+            {agents.map((agent) => {
+              const rowId = agent.agentKey || normalizeKey(agent.agentName);
+              const nameEditing = editing?.rowId === rowId && editing?.key === "agentName";
+              return (
+                <tr key={rowId} className="group border-b border-slate-100 transition last:border-b-0 hover:bg-slate-50 dark:border-slate-700/40 dark:hover:bg-slate-700/30">
+                  <th scope="row" className="sticky left-0 z-10 bg-white px-3 py-1 text-left group-hover:bg-slate-50 dark:bg-slate-800 dark:group-hover:bg-slate-700/40">
+                    {nameEditing ? renderInput(() => commitAgentEdit(rowId, "agentName"), { align: "left", numeric: false }) : (
+                      <button
+                        className="block max-w-[200px] truncate text-left text-[13px] font-medium text-slate-900 transition hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400"
+                        onClick={() => beginEdit(rowId, "agentName", agent.agentName)}
+                        title={agent.agentName}
+                        type="button"
+                      >
+                        {agent.agentName}
+                      </button>
+                    )}
+                  </th>
+                  {columns.map((col) => {
+                    const raw = agent[col.key];
+                    const value = typeof raw === "number" ? raw : null;
+                    const isEd = editing?.rowId === rowId && editing?.key === col.key;
+                    return (
+                      <td key={col.key} className="border-l border-slate-100 px-1 py-1 text-right dark:border-slate-700/40">
+                        {isEd ? renderInput(() => commitAgentEdit(rowId, col.key)) : (
+                          <button
+                            className="block w-full rounded px-1 py-0.5 text-right text-[13px] tabular-nums text-slate-700 transition hover:bg-sky-50 dark:text-slate-300 dark:hover:bg-sky-900/20"
+                            onClick={() => beginEdit(rowId, col.key, seedKpiEditValue(col.kind, value))}
+                            title="Düzenlemek için tıklayın"
+                            type="button"
+                          >
+                            {formatKpiCellValue(col.kind, value)}
+                          </button>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className="border-l border-slate-100 px-2 py-1 text-right dark:border-slate-700/40">
+                    {confirmDeleteId === rowId ? (
+                      <span className="inline-flex items-center gap-1">
+                        <button className="rounded-md bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-rose-600" onClick={() => { deleteAgentMutation.mutate(rowId); setConfirmDeleteId(null); }} type="button">Sil</button>
+                        <button className="rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700" onClick={() => setConfirmDeleteId(null)} type="button">İptal</button>
+                      </span>
+                    ) : (
+                      <button className="invisible inline-flex size-6 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition hover:border-rose-300 hover:text-rose-500 group-hover:visible dark:border-slate-600 dark:hover:border-rose-700/40 dark:hover:text-rose-400" onClick={() => setConfirmDeleteId(rowId)} title="Sil" type="button">
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+
+            {/* Yeni temsilci ekleme satırı */}
+            {addOpen ? (
+              <tr className="border-t border-sky-200 bg-sky-50/50 dark:border-sky-800/40 dark:bg-sky-900/10">
+                <th scope="row" className="sticky left-0 z-10 bg-sky-50 px-3 py-1 text-left dark:bg-sky-900/20">
+                  <input
+                    className="h-7 w-full min-w-[140px] rounded-md border border-sky-300 bg-white px-2 text-[13px] text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none dark:border-sky-600 dark:bg-slate-700 dark:text-slate-100"
+                    onChange={(e) => setNewRow((p) => ({ ...p, agentName: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+                    placeholder="Temsilci adı *"
+                    value={newRow.agentName ?? ""}
+                  />
+                </th>
+                {columns.map((col) => (
+                  <td key={col.key} className="border-l border-sky-200/60 px-1 py-1 dark:border-sky-800/30">
+                    <input
+                      className={KPI_GRID_CELL_INPUT}
+                      inputMode="decimal"
+                      onChange={(e) => setNewRow((p) => ({ ...p, [col.key]: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+                      placeholder={col.kind === "duration" ? "00:00:00" : ""}
+                      value={newRow[col.key] ?? ""}
+                    />
+                  </td>
+                ))}
+                <td className="border-l border-sky-200/60 px-2 py-1 text-right dark:border-sky-800/30">
+                  <button
+                    className="rounded-md bg-[var(--adm-accent)] px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
+                    disabled={addAgentMutation.isPending || !(newRow.agentName ?? "").trim()}
+                    onClick={handleAdd}
+                    type="button"
+                  >
+                    {addAgentMutation.isPending ? "..." : "Ekle"}
+                  </button>
+                </td>
+              </tr>
+            ) : null}
+
+            {agents.length === 0 && !addOpen ? (
+              <tr>
+                <td className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400" colSpan={actionCol}>
+                  Henüz temsilci yok. “Temsilci ekle” ile satır açın veya CSV içe aktarın.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+          {agents.length > 0 ? (
+            <tfoot>
+              <tr className="border-t-2 border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30">
+                <th scope="row" className="sticky left-0 z-10 bg-slate-50 px-3 py-1.5 text-left text-[12px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-300">Ortalama</th>
+                {columns.map((col) => {
+                  const bucket = stats[col.key]!;
+                  const avg = bucket.count > 0 ? bucket.sum / bucket.count : null;
+                  return <td key={col.key} className="border-l border-slate-200 px-2 py-1.5 text-right text-[13px] font-semibold tabular-nums text-slate-700 dark:border-slate-600 dark:text-slate-200">{avg === null ? "—" : formatKpiCellValue(col.kind, avg)}</td>;
+                })}
+                <td className="border-l border-slate-200 dark:border-slate-600" />
+              </tr>
+              <tr className="bg-slate-100 dark:bg-slate-700/50">
+                <th scope="row" className="sticky left-0 z-10 bg-slate-100 px-3 py-1.5 text-left text-[12px] font-bold uppercase tracking-wide text-slate-700 dark:bg-slate-700 dark:text-slate-200">Toplam</th>
+                {columns.map((col) => {
+                  const bucket = stats[col.key]!;
+                  return <td key={col.key} className="border-l border-slate-200 px-2 py-1.5 text-right text-[13px] font-bold tabular-nums text-slate-800 dark:border-slate-600 dark:text-slate-100">{col.sum ? formatKpiCellValue(col.kind, bucket.sum) : ""}</td>;
+                })}
+                <td className="border-l border-slate-200 dark:border-slate-600" />
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+    </section>
+  );
+
+  // Tam ekran modunda admin-shell'in backdrop-blur'ü position:fixed için
+  // containing-block oluşturur; bu yüzden overlay'i body'ye portal ediyoruz.
+  return maximized ? createPortal(gridContent, document.body) : gridContent;
 }
 
 /* ── KPI CSV Yardımcı Fonksiyonlar ── */
@@ -2496,6 +3103,82 @@ function parseTurkishNumber(raw: string): number | null {
   cleaned = cleaned.replace(/\./g, "").replace(",", ".");
   const num = Number.parseFloat(cleaned);
   return Number.isNaN(num) ? null : num;
+}
+
+/** Hubspot puanı 0-10 aralığında ondalıklı gelir ("9.916" / "9,916"); buradaki
+ *  nokta binlik ayracı DEĞİL ondalık ayraçtır, parseTurkishNumber kullanma. */
+function parseHubspotScore(raw: string): number | null {
+  const cleaned = (raw ?? "").replace(/%/g, "").trim();
+  if (!cleaned || cleaned === "*") return null;
+  const num = Number.parseFloat(cleaned.replace(",", "."));
+  return Number.isNaN(num) ? null : num;
+}
+
+/* KPI CSV kolonları başlık ADINA göre eşlenir (Q&T Team Report formatı);
+   kolon sırası değişse de import bozulmaz. Ay kolonu (satış cirosu) ay adıyla
+   gelir. NetGSM ve EK SÜRELER grupları bilinçli olarak alınmıyor. */
+
+type KpiCsvField =
+  | "perfScore" | "salesAmount" | "licenseCount" | "avgLicensePrice"
+  | "twoPlusOneCount" | "twoPlusOnePercent" | "talkDurationSeconds"
+  | "callAttempts" | "preOnbCount" | "hubspotScore" | "domainCount"
+  | "outboundLeadCount" | "conversionRate";
+
+const KPI_CSV_MONTH_HEADERS = [
+  "OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
+  "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"
+];
+
+const KPI_CSV_HEADER_ALIASES: Record<KpiCsvField, string[]> = {
+  perfScore: ["PERF DEĞ", "PERF DEĞERLENDİRME"],
+  salesAmount: KPI_CSV_MONTH_HEADERS,
+  licenseCount: ["LİSANS ADETİ", "LİSANS ADEDİ"],
+  avgLicensePrice: ["ORTALAMA LİSANS FİYATI", "ORT LİSANS FİYATI"],
+  twoPlusOneCount: ["2+1"],
+  twoPlusOnePercent: ["%2+1", "2+1 %"],
+  talkDurationSeconds: ["TOPLAM KONUŞMA SÜRESİ"],
+  callAttempts: ["ARAMA DENEMESİ"],
+  preOnbCount: ["PRE ONB", "PRE ONBOARDING"],
+  hubspotScore: ["HUBSPOT"],
+  // TR-upper "Domain" → "DOMAİN" (noktalı İ); iki yazımı da kabul et
+  domainCount: ["DOMAIN", "DOMAİN"],
+  outboundLeadCount: ["OUTBOUND / ESKİ LEAD", "OUTBOUND ESKİ LEAD", "OUTBOUND"],
+  conversionRate: ["DÖNÜŞÜM ORANI"]
+};
+
+const KPI_CSV_REQUIRED: { key: KpiCsvField; label: string }[] = [
+  { key: "perfScore", label: "PERF. DEĞ." },
+  { key: "salesAmount", label: "AY (ör. HAZİRAN)" },
+  { key: "licenseCount", label: "LİSANS ADETİ" },
+  { key: "avgLicensePrice", label: "ORTALAMA LİSANS FİYATI" },
+  { key: "talkDurationSeconds", label: "TOPLAM KONUŞMA SÜRESİ" },
+  { key: "callAttempts", label: "ARAMA DENEMESİ" },
+  { key: "conversionRate", label: "DÖNÜŞÜM ORANI" }
+];
+
+/** Başlık hücresini eşleme için normalize eder: TR-upper, noktasız, tek boşluk. */
+function normalizeKpiCsvHeader(raw: string): string {
+  return (raw ?? "")
+    .trim()
+    .toLocaleUpperCase("tr-TR")
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveKpiCsvColumns(headerRow: string[]): Partial<Record<KpiCsvField, number>> {
+  const map: Partial<Record<KpiCsvField, number>> = {};
+  headerRow.forEach((cell, idx) => {
+    const normalized = normalizeKpiCsvHeader(cell);
+    if (!normalized) return;
+    for (const [field, aliases] of Object.entries(KPI_CSV_HEADER_ALIASES) as [KpiCsvField, string[]][]) {
+      if (map[field] === undefined && aliases.includes(normalized)) {
+        map[field] = idx;
+        break;
+      }
+    }
+  });
+  return map;
 }
 
 type QuarterlyReport = {
@@ -2692,7 +3375,7 @@ function AgentCombobox(props: { agents: string[]; value: string; onChange: (v: s
     <>
       <input
         ref={inputRef}
-        className="h-11 w-full rounded-[10px] border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-primary/40 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder:text-slate-500"
+        className={ADMIN_INPUT}
         onChange={(e) => { props.onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         placeholder="Temsilci seçin veya yazın"
@@ -2722,131 +3405,6 @@ function AgentCombobox(props: { agents: string[]; value: string; onChange: (v: s
   );
 }
 
-function SidebarButton(props: { active: boolean; label: string; icon?: ReactNode; onClick: () => void }) {
-  return (
-    <button
-      className={[
-        "flex w-full items-center gap-2.5 rounded-[10px] border px-4 py-3 text-left text-sm font-semibold transition",
-        props.active
-          ? "border-[#2f6b7a] bg-[#2f6b7a] text-white shadow-[0_16px_34px_rgba(47,107,122,0.22)]"
-          : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-100"
-      ].join(" ")}
-      onClick={props.onClick}
-      type="button"
-    >
-      {props.icon}
-      {props.label}
-    </button>
-  );
-}
-
-function SidebarSectionTitle(props: { children: ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{props.children}</p>;
-}
-
-function SidebarActionButton(props: {
-  children: ReactNode;
-  icon: ReactNode;
-  onClick: () => void;
-  primary?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      className={[
-        "inline-flex w-full items-center justify-center gap-2 rounded-[10px] px-4 py-3 text-sm font-semibold transition",
-        props.primary
-          ? "bg-[#2f6b7a] text-white shadow-[0_14px_28px_rgba(47,107,122,0.18)] hover:bg-[#285d6a]"
-          : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-600",
-        props.disabled ? "cursor-not-allowed opacity-50" : ""
-      ].join(" ")}
-      disabled={props.disabled}
-      onClick={props.onClick}
-      type="button"
-    >
-      {props.icon}
-      {props.children}
-    </button>
-  );
-}
-
-function HeaderPill(props: { children: ReactNode; tone?: "neutral" | "accent" | "success" }) {
-  const tone = props.tone ?? "neutral";
-  return (
-    <span
-      className={[
-        "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
-        tone === "accent"
-          ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-700/40 dark:bg-sky-900/30 dark:text-sky-400"
-          : tone === "success"
-            ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400"
-            : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-400"
-      ].join(" ")}
-    >
-      {props.children}
-    </span>
-  );
-}
-
-function InputField(props: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{props.label}</span>
-      {props.children}
-    </label>
-  );
-}
-
-function EmptyBlock(props: { message: string }) {
-  return (
-    <div className="rounded-[10px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700/30 dark:text-slate-400">
-      {props.message}
-    </div>
-  );
-}
-
-function ErrorBanner(props: { message: string; prefix?: string }) {
-  return (
-    <div className="rounded-[10px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-700/40 dark:bg-rose-900/30 dark:text-rose-400">
-      {props.prefix ? `${props.prefix}: ` : ""}{props.message}
-    </div>
-  );
-}
-
-function SuccessBanner(props: { message: string }) {
-  return (
-    <div className="rounded-[10px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-900/30 dark:text-emerald-400">
-      {props.message}
-    </div>
-  );
-}
-
-function DeleteRowButton(props: { onClick: () => void }) {
-  return (
-    <button
-      className="inline-flex size-9 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:text-rose-500 dark:border-slate-600 dark:text-slate-500 dark:hover:border-rose-700/40 dark:hover:text-rose-400"
-      onClick={props.onClick}
-      title="Satırı sil"
-      type="button"
-    >
-      <Trash2 size={13} />
-    </button>
-  );
-}
-
-function AddRowButton(props: { onClick: () => void }) {
-  return (
-    <button
-      className="inline-flex h-11 items-center gap-2 rounded-[10px] border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-600"
-      onClick={props.onClick}
-      type="button"
-    >
-      <Plus size={14} />
-      Satır ekle
-    </button>
-  );
-}
-
 function NoteModal(props: {
   agentName: string;
   isSaving?: boolean;
@@ -2859,7 +3417,7 @@ function NoteModal(props: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={props.onClose}>
       <div
-        className="mx-4 w-full max-w-md rounded-[10px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.18)] dark:border-slate-600 dark:bg-slate-800"
+        className="mx-4 w-full max-w-md rounded-[18px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.18)] dark:border-slate-600 dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -2890,7 +3448,7 @@ function NoteModal(props: {
             Vazgeç
           </button>
           <button
-            className="rounded-[10px] bg-[#2f6b7a] px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(47,107,122,0.18)] transition hover:bg-[#285d6a] disabled:opacity-50"
+            className="rounded-[10px] bg-[var(--adm-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(47,107,122,0.18)] transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
             disabled={props.isSaving}
             onClick={() => props.onSave(draft)}
             type="button"
@@ -3028,23 +3586,6 @@ function EditableSavedData(props: {
   );
 }
 
-function MiniInput(props: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
-  // type="number" virgüllü ondalık değerleri (7,5) kabul etmez, text+inputMode kullan
-  const isNumeric = props.type === "number";
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{props.label}</span>
-      <input
-        className="h-10 rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-sky-300 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
-        inputMode={isNumeric ? "decimal" : undefined}
-        onChange={(e) => props.onChange(e.target.value)}
-        type={isNumeric ? "text" : (props.type ?? "text")}
-        value={props.value}
-      />
-    </div>
-  );
-}
-
 /* ── RAMP Giriş Bölümü ── */
 
 type RampRowData = { agentKey: string; agentName: string; pipeline: string; growAmount: string; scaleAmount: string; scalePlusAmount: string };
@@ -3145,7 +3686,7 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
       {saveSuccess ? <SuccessBanner message="RAMP verileri başarıyla kaydedildi." /> : null}
 
       {/* Hedefler */}
-      <SurfaceCard title="RAMP Hedefleri" description="Varsayılan hedefleri dönem bazında ayarlayabilirsiniz." variant="default">
+      <AdminCard title="RAMP Hedefleri" description="Varsayılan hedefleri dönem bazında ayarlayabilirsiniz." variant="default">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-500">Dokunma Hedefi</label>
@@ -3164,10 +3705,10 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
             <input className={inputCls} value={targets.pipelineCoverage} onChange={(e) => setTargets((p) => ({ ...p, pipelineCoverage: e.target.value }))} />
           </div>
         </div>
-      </SurfaceCard>
+      </AdminCard>
 
       {/* Temsilci Verileri */}
-      <SurfaceCard title="Temsilci RAMP Verileri" description="Pipeline ve paket bazlı satış tutarlarını girin." variant="default">
+      <AdminCard title="Temsilci RAMP Verileri" description="Pipeline ve paket bazlı satış tutarlarını girin." variant="default">
         {!selectedPeriodId ? (
           <p className="text-sm text-slate-500">Önce sol panelden ay ve yıl seçerek bir dönem oluşturun.</p>
         ) : !loaded ? (
@@ -3175,7 +3716,7 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
         ) : rows.length === 0 ? (
           <p className="text-sm text-slate-500">Seçili dönemde KPI verisi bulunamadı. Önce KPI verilerini yükleyin.</p>
         ) : (
-          <div className="overflow-x-auto rounded-[10px] border border-slate-200 dark:border-slate-600">
+          <div className="overflow-x-auto rounded-[14px] border border-slate-200 dark:border-slate-700">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-700/50">
@@ -3202,7 +3743,7 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
         )}
         <div className="mt-4 flex justify-end">
           <button
-            className="inline-flex items-center gap-2 rounded-[10px] bg-[#2f6b7a] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#285d6a] disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--adm-accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
             disabled={saving || rows.length === 0}
             onClick={() => void handleSave()}
             type="button"
@@ -3211,7 +3752,7 @@ function RampSection(props: { selectedPeriodId: string; activePeriodMonth: strin
             {saving ? "Kaydediliyor..." : "Kaydet"}
           </button>
         </div>
-      </SurfaceCard>
+      </AdminCard>
     </div>
   );
 }
