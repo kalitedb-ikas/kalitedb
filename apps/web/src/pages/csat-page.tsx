@@ -290,7 +290,6 @@ export function CsatPage() {
         return left.agentName.localeCompare(right.agentName, "tr");
       });
 
-    // Eşit puanda Temsilci aynı puanlıların en üstünde gösterilir.
     return applyTopRankPreference(
       sortedRows.map((row) => ({ label: row.agentName, value: row.callEvaluationAverage, row }))
     ).map((item) => item.row);

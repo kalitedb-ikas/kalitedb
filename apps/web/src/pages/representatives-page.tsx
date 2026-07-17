@@ -406,13 +406,8 @@ export function RepresentativesPage() {
 
   const rankingModalData = useMemo(() => {
     if (!rankingModalMetric) return null;
-    const isPriorityName = (name: string | null | undefined) =>
-      typeof name === "string" && name.toLocaleLowerCase("tr").includes("temsilci");
-    const priorityTiebreaker = (a: { agentName?: string | null }, b: { agentName?: string | null }) => {
-      const ap = isPriorityName(a.agentName) ? 1 : 0;
-      const bp = isPriorityName(b.agentName) ? 1 : 0;
-      return bp - ap;
-    };
+    const nameTiebreaker = (a: { agentName?: string | null }, b: { agentName?: string | null }) =>
+      (a.agentName ?? "").localeCompare(b.agentName ?? "", "tr");
     if (rankingModalMetric === "auditScore") {
       const valid = auditMetrics.filter((a) => a.auditScore != null);
       return {
@@ -420,7 +415,7 @@ export function RepresentativesPage() {
         rows: [...valid]
           .sort((a, b) => {
             const diff = (b.auditScore ?? 0) - (a.auditScore ?? 0);
-            return diff !== 0 ? diff : priorityTiebreaker(a, b);
+            return diff !== 0 ? diff : nameTiebreaker(a, b);
           })
           .map((a, i) => ({ rank: i + 1, agentKey: a.agentKey, name: a.agentName, value: formatAuditScore(a.auditScore!) }))
       };
@@ -435,7 +430,7 @@ export function RepresentativesPage() {
           const av = def.getValue(a) as number;
           const bv = def.getValue(b) as number;
           const diff = def.direction === "lower" ? av - bv : bv - av;
-          return diff !== 0 ? diff : priorityTiebreaker(a, b);
+          return diff !== 0 ? diff : nameTiebreaker(a, b);
         })
         .map((a, i) => ({ rank: i + 1, agentKey: a.agentKey, name: a.agentName, value: def.format(def.getValue(a) as number) }))
     };

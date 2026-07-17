@@ -234,7 +234,6 @@ export function AuditPage() {
         return left.agentName.localeCompare(right.agentName, "tr");
       });
 
-    // Eşit puanda Temsilci aynı puanlıların en üstünde gösterilir.
     const preferenceOrdered = applyTopRankPreference(
       sortedAgents.map((agent) => ({ label: agent.agentName, value: agent.auditScoreDisplay, agent }))
     ).map((item) => item.agent);

@@ -69,24 +69,11 @@ function pickFirst(items: DashboardMetricItem[]): DashboardMetricItem | undefine
   return items[0];
 }
 
-const FEATURED_LABEL_PATTERN = /temsilci/i;
-
 export function applyTopRankPreference<T extends { label: string; value: unknown }>(
   items: T[],
   limit?: number
 ): T[] {
-  const trim = (list: T[]) => (limit !== undefined ? list.slice(0, limit) : list);
-  const featuredIdx = items.findIndex((item) => FEATURED_LABEL_PATTERN.test(item.label));
-  if (featuredIdx <= 0) return trim(items);
-  const featured = items[featuredIdx];
-  if (!featured) return trim(items);
-  const firstTiedIdx = items.findIndex((item) => item.value === featured.value);
-  if (firstTiedIdx < 0 || firstTiedIdx >= featuredIdx) return trim(items);
-  if (limit !== undefined && firstTiedIdx >= limit) return trim(items);
-  const result = [...items];
-  result.splice(featuredIdx, 1);
-  result.splice(firstTiedIdx, 0, featured);
-  return trim(result);
+  return limit !== undefined ? items.slice(0, limit) : items;
 }
 
 function formatJoinedLabels(labels: string[]): string {
