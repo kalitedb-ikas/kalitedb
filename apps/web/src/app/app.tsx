@@ -34,6 +34,7 @@ import { AuditLogPage } from "../pages/audit-log-page";
 import { SalesRampPage } from "../pages/sales-ramp-page";
 import { ROLEPLAY_VISIBLE } from "../lib/feature-flags";
 import { useRepScope } from "../lib/use-rep-scope";
+import { useEnsureCurrentPeriods } from "../lib/use-ensure-current-period";
 import { canAccessDepartment, getDefaultDepartment } from "../lib/department-access";
 
 function LoadingScreen() {
@@ -63,6 +64,7 @@ function AppRoutes() {
   });
 
   const currentUser = meQuery.isSuccess ? meQuery.data : undefined;
+  useEnsureCurrentPeriods(currentUser);
   const repScope = useRepScope(currentUser);
   const defaultDepartment = getDefaultDepartment(currentUser);
   const defaultDepartmentHome =
