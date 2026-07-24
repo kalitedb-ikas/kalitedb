@@ -809,7 +809,7 @@ export function SalesAdminPage() {
 
       for (let i = 1; i < parsedRows.length; i++) {
         const cols = parsedRows[i]!;
-        // CSV: Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu
+        // CSV: Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisans Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu
         const date = cols[0]?.trim() ?? "";
         const advisorRaw = cols[1]?.trim() ?? "";
         const customer = cols[2]?.trim() ?? "";
@@ -2323,7 +2323,7 @@ function MeetingsSection(props: {
         <section className="rounded-[16px] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-16px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900">
           <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-100">CSV İçe Aktarım</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-            CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisan Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu</code>
+            CSV formatı: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-700">Tarih, Süreç Danışmanı, HS Kaydı, Süreç Takibi, Lisans Detayı, Lisans Tutarı, Kayıp Sebebi, Kayıp Notu</code>
           </p>
           <div className="mt-4">
             <AdminDropzone busy={saveMeetingsMutation.isPending} onFile={(file) => saveMeetingsMutation.mutate(file)} />

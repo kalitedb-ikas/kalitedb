@@ -349,7 +349,7 @@ function buildColumns(
       size: 130
     }),
     columnHelper.accessor("licenseDetail", {
-      header: "Lisan Detayı",
+      header: "Lisans Detayı",
       cell: (info) => info.getValue() || "—",
       size: 160
     }),
@@ -602,7 +602,7 @@ function MeetingFormModal(props: {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Lisan Detayı</label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Lisans Detayı</label>
               <input
                 className="h-10 w-full rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm transition focus:border-blue-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 onChange={(e) => update("licenseDetail", e.target.value)}
