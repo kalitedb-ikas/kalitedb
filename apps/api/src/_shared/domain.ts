@@ -459,6 +459,10 @@ export const salesMeetingSchema = z.object({
   qualityMember: z.string().min(1),
   salesRepresentative: z.string().min(1),
   customerName: z.string().min(1),
+  // HS kaydının HubSpot (ya da başka bir sistemdeki) bağlantısı. Boş string =
+  // link yok; şema kasıtlı olarak gevşek, çünkü GET tarafı safeParse ile
+  // filtreliyor ve sıkı bir URL kuralı eski kayıtları sessizce düşürür.
+  customerUrl: z.string().trim().max(2000).optional(),
   status: salesMeetingStatusSchema.optional(),
   licenseDetail: z.string().optional(),
   licenseAmount: z.number().nullable().optional(),

@@ -1006,6 +1006,7 @@ async function saveSalesMeetingsToFirebase(
       qualityMember: meeting.qualityMember,
       salesRepresentative: meeting.salesRepresentative,
       customerName: meeting.customerName,
+      customerUrl: meeting.customerUrl ?? "",
       status: meeting.status ?? "devam_ediyor",
       licenseDetail: meeting.licenseDetail ?? "",
       licenseAmount: meeting.licenseAmount ?? null,

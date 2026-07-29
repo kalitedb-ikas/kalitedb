@@ -3,7 +3,7 @@ import { selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { SalesMeeting, SalesMeetingStatus } from "@kalitedb/shared";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, Plus, X } from "lucide-react";
+import { Check, ExternalLink, Link2, Pencil, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
@@ -23,6 +23,7 @@ type MeetingRow = {
   qualityMember: string;
   salesRepresentative: string;
   customerName: string;
+  customerUrl: string;
   status: string;
   licenseDetail: string;
   licenseAmount: number | null;
@@ -135,6 +136,188 @@ function InlineStatusSelect(props: { status: string; onChange: (next: string) =>
             </button>
           ))}
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Kullanıcının yapıştırdığı adresi kaydedilebilir hâle getirir.
+// "" = link yok, null = geçersiz (kaydetme).
+function normalizeCustomerUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(withScheme);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (!parsed.hostname.includes(".")) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+// Yalnızca http/https adresleri tıklanabilir render edilir (javascript: vb. engelli).
+function isSafeHttpUrl(value: string): boolean {
+  if (!value) return false;
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function HsRecordCell(props: {
+  name: string;
+  url: string;
+  onSave?: ((url: string) => void) | undefined;
+  disabled?: boolean | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(props.url);
+  const [error, setError] = useState("");
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setDraft(props.url);
+      setError("");
+    }
+  }, [open, props.url]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (popRef.current?.contains(target)) return;
+      if (btnRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const hasLink = isSafeHttpUrl(props.url);
+
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const POPOVER_WIDTH = 320;
+      const POPOVER_EST_HEIGHT = 160;
+      const MARGIN = 12;
+      const maxLeft = window.innerWidth - POPOVER_WIDTH - MARGIN;
+      const left = Math.max(MARGIN, Math.min(rect.left, maxLeft));
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const top =
+        spaceBelow < POPOVER_EST_HEIGHT + MARGIN && rect.top > POPOVER_EST_HEIGHT + MARGIN
+          ? rect.top - POPOVER_EST_HEIGHT - 4
+          : rect.bottom + 4;
+      setPos({ top, left });
+    }
+    setOpen((o) => !o);
+  };
+
+  const handleSave = () => {
+    const normalized = normalizeCustomerUrl(draft);
+    if (normalized === null) {
+      setError("Geçerli bir adres girin (ör. https://app.hubspot.com/...).");
+      return;
+    }
+    props.onSave?.(normalized);
+    setOpen(false);
+  };
+
+  return (
+    <div className="flex items-start gap-1.5">
+      {hasLink ? (
+        <a
+          className="font-medium text-blue-600 underline decoration-blue-300 underline-offset-2 transition hover:text-blue-700 hover:decoration-blue-500 dark:text-blue-400 dark:decoration-blue-500/50 dark:hover:text-blue-300"
+          href={props.url}
+          rel="noopener noreferrer"
+          target="_blank"
+          title={props.url}
+        >
+          {props.name}
+          <ExternalLink aria-hidden className="ml-1 inline-block size-3 align-[-1px]" />
+        </a>
+      ) : (
+        <span className="font-medium text-slate-900 dark:text-slate-100">{props.name}</span>
+      )}
+
+      {props.onSave ? (
+        <>
+          <button
+            ref={btnRef}
+            aria-label={hasLink ? "HS kaydı linkini düzenle" : "HS kaydı linki ekle"}
+            className={[
+              "inline-flex size-6 shrink-0 items-center justify-center rounded-full transition",
+              hasLink
+                ? "text-slate-300 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                : "text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            ].join(" ")}
+            disabled={props.disabled}
+            onClick={handleOpen}
+            title={hasLink ? "Linki düzenle" : "Link ekle"}
+            type="button"
+          >
+            <Link2 size={13} />
+          </button>
+
+          {open
+            ? createPortal(
+                <div
+                  ref={popRef}
+                  className="fixed z-50 w-[320px] rounded-[10px] border border-slate-200 bg-white p-3 shadow-[0_18px_44px_rgba(15,23,42,0.18)] dark:border-slate-600 dark:bg-slate-800"
+                  style={{ top: pos.top, left: pos.left }}
+                >
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">HS Kaydı Linki</label>
+                  <input
+                    autoFocus
+                    className="mt-1.5 h-9 w-full rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-900 transition focus:border-blue-400 focus:outline-none dark:border-slate-600 dark:bg-slate-700/50 dark:text-slate-100"
+                    onChange={(e) => { setDraft(e.target.value); setError(""); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSave();
+                      if (e.key === "Escape") setOpen(false);
+                    }}
+                    placeholder="https://app.hubspot.com/..."
+                    type="url"
+                    value={draft}
+                  />
+                  {error ? <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400">{error}</p> : null}
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    {hasLink ? (
+                      <button
+                        className="mr-auto h-8 rounded-[8px] px-2 text-xs font-medium text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20"
+                        onClick={() => { props.onSave?.(""); setOpen(false); }}
+                        type="button"
+                      >
+                        Linki kaldır
+                      </button>
+                    ) : null}
+                    <button
+                      className="h-8 rounded-[8px] border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                      onClick={() => setOpen(false)}
+                      type="button"
+                    >
+                      Vazgeç
+                    </button>
+                    <button
+                      className="inline-flex h-8 items-center gap-1 rounded-[8px] bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                      onClick={handleSave}
+                      type="button"
+                    >
+                      <Check size={12} />
+                      Kaydet
+                    </button>
+                  </div>
+                </div>,
+                document.body
+              )
+            : null}
+        </>
       ) : null}
     </div>
   );
@@ -314,7 +497,9 @@ function buildColumns(
   onLossSave?: (rowId: string, data: { reason: string; note: string }) => void,
   lossExistingReasons?: string[],
   lossUpdating?: boolean,
-  onEdit?: (row: MeetingRow) => void
+  onEdit?: (row: MeetingRow) => void,
+  onCustomerUrlSave?: (rowId: string, url: string) => void,
+  customerUrlUpdating?: boolean
 ) {
   return [
     columnHelper.accessor("qualityMember", {
@@ -330,7 +515,14 @@ function buildColumns(
     columnHelper.accessor("customerName", {
       header: "HS Kaydı",
       cell: (info) => (
-        <span className="font-medium text-slate-900 dark:text-slate-100">{info.getValue()}</span>
+        <HsRecordCell
+          name={info.getValue()}
+          url={info.row.original.customerUrl}
+          disabled={customerUrlUpdating}
+          onSave={
+            onCustomerUrlSave ? (url) => onCustomerUrlSave(info.row.original.id, url) : undefined
+          }
+        />
       ),
       size: 180
     }),
@@ -418,6 +610,7 @@ function toRows(meetings: SalesMeeting[]): MeetingRow[] {
     qualityMember: m.qualityMember,
     salesRepresentative: m.salesRepresentative,
     customerName: m.customerName,
+    customerUrl: m.customerUrl ?? "",
     status: normalizeStatus(m.status),
     licenseDetail: m.licenseDetail ?? "",
     licenseAmount: m.licenseAmount ?? null,
@@ -431,6 +624,7 @@ type MeetingFormData = {
   qualityMember: string;
   salesRepresentative: string;
   customerName: string;
+  customerUrl: string;
   status: string;
   licenseDetail: string;
   licenseAmount: string;
@@ -443,6 +637,7 @@ const emptyMeetingForm: MeetingFormData = {
   qualityMember: "",
   salesRepresentative: "",
   customerName: "",
+  customerUrl: "",
   status: "",
   licenseDetail: "",
   licenseAmount: "",
@@ -459,6 +654,7 @@ function existingToPayload(m: SalesMeeting): MeetingPayload {
     qualityMember: m.qualityMember,
     salesRepresentative: m.salesRepresentative,
     customerName: m.customerName,
+    customerUrl: m.customerUrl ?? "",
     licenseAmount: m.licenseAmount ?? null,
     ...(m.date ? { date: m.date } : {}),
     ...(m.status ? { status: m.status } : {}),
@@ -476,6 +672,7 @@ function formToPayload(data: MeetingFormData, periodId: string): MeetingPayload 
     qualityMember: data.qualityMember.trim(),
     salesRepresentative: data.salesRepresentative.trim(),
     customerName: data.customerName.trim(),
+    customerUrl: normalizeCustomerUrl(data.customerUrl) ?? "",
     licenseAmount: data.licenseAmount ? Number(data.licenseAmount) : null,
     ...(data.date ? { date: data.date } : {}),
     ...(data.status ? { status: data.status as SalesMeetingStatus } : {}),
@@ -493,6 +690,7 @@ function rowToForm(row: MeetingRow): MeetingFormData {
     qualityMember: row.qualityMember,
     salesRepresentative: row.salesRepresentative,
     customerName: row.customerName,
+    customerUrl: row.customerUrl,
     status: row.status,
     licenseDetail: row.licenseDetail,
     licenseAmount: row.licenseAmount != null ? String(row.licenseAmount) : "",
@@ -519,7 +717,8 @@ function MeetingFormModal(props: {
 
   if (!props.open) return null;
 
-  const canSave = form.customerName.trim().length > 0 && !props.saving;
+  const urlError = normalizeCustomerUrl(form.customerUrl) === null;
+  const canSave = form.customerName.trim().length > 0 && !urlError && !props.saving;
 
   const update = (field: keyof MeetingFormData, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -598,6 +797,22 @@ function MeetingFormModal(props: {
               type="text"
               value={form.customerName}
             />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">HS Kaydı Linki</label>
+            <input
+              className="h-10 w-full rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm transition focus:border-blue-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              onChange={(e) => update("customerUrl", e.target.value)}
+              placeholder="https://app.hubspot.com/..."
+              type="url"
+              value={form.customerUrl}
+            />
+            {urlError ? (
+              <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
+                Geçerli bir adres girin (ör. https://app.hubspot.com/...).
+              </p>
+            ) : null}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -722,6 +937,7 @@ export function SalesMeetingsPage() {
           qualityMember: m.qualityMember,
           salesRepresentative: m.salesRepresentative,
           customerName: m.customerName,
+          customerUrl: m.customerUrl ?? "",
           licenseAmount: m.licenseAmount ?? null,
           ...(m.date ? { date: m.date } : {}),
           ...(newStatus ? { status: newStatus } : {}),
@@ -744,6 +960,16 @@ export function SalesMeetingsPage() {
         lossReason: reason || undefined,
         lossNote: note || undefined
       });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["sales-meetings", auth.token, periodId] });
+    }
+  });
+
+  const updateCustomerUrlMutation = useMutation({
+    mutationFn: async ({ meetingId, url }: { meetingId: string; url: string }) => {
+      if (!periodId) throw new Error("Dönem seçili değil.");
+      await api.updateSalesMeeting(auth.token, periodId, meetingId, { customerUrl: url });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["sales-meetings", auth.token, periodId] });
@@ -818,10 +1044,17 @@ export function SalesMeetingsPage() {
       (rowId, data) => updateLossDataMutation.mutate({ meetingId: rowId, reason: data.reason, note: data.note }),
       existingReasons,
       updateLossDataMutation.isPending,
-      (row) => setModal({ mode: "edit", row })
+      (row) => setModal({ mode: "edit", row }),
+      (rowId, url) => updateCustomerUrlMutation.mutate({ meetingId: rowId, url }),
+      updateCustomerUrlMutation.isPending
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [updateStatusMutation.isPending, updateLossDataMutation.isPending, existingReasons]
+    [
+      updateStatusMutation.isPending,
+      updateLossDataMutation.isPending,
+      updateCustomerUrlMutation.isPending,
+      existingReasons
+    ]
   );
 
   const modalInitial = useMemo(
