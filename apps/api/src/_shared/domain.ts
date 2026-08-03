@@ -522,15 +522,49 @@ export const salesKpiTargetsSchema = z.object({
   perPersonSalesTarget: z.number().nullable().optional().default(null)
 });
 
+/** Aylık lisans özeti: 4 plan (Lift, Scale, Scale Plus, Premium) × 3 taahhüt
+ *  varyantı (peşin, 2+1, 3+2). Alan adları tarihsel: `preCount` ailesi
+ *  "Premium", `scale3Plus2Count` ise "Scale 3+2" olarak etiketlenir — eski
+ *  dönem kayıtları migration'sız okunabilsin diye anahtarlar korunmuştur.
+ *  Sonradan eklenen alanların hepsi optional/0 varsayılanlıdır. */
 export const licenseSummarySchema = z.object({
-  preCount: z.number(),
+  // Lift
+  liftCount: z.number().optional().default(0),
+  lift2Plus1Count: z.number().optional().default(0),
+  lift3Plus2Count: z.number().optional().default(0),
+  // Scale
   scaleCount: z.number(),
   scale2Plus1Count: z.number(),
+  /** "3+2" paketiyle satılan Scale lisans adedi — eski dönem kayıtlarında yok, varsayılan 0. */
+  scale3Plus2Count: z.number().optional().default(0),
+  // Scale Plus
   scalePlusCount: z.number(),
   scalePlus2Plus1Count: z.number(),
-  /** "3+2" paketiyle satılan lisans adedi — eski dönem kayıtlarında yok, varsayılan 0. */
-  scale3Plus2Count: z.number().optional().default(0)
+  scalePlus3Plus2Count: z.number().optional().default(0),
+  /** Premium (eski etiket: "Pre."). Anahtar geriye dönük uyumluluk için korundu. */
+  preCount: z.number(),
+  premium2Plus1Count: z.number().optional().default(0),
+  premium3Plus2Count: z.number().optional().default(0)
 });
+
+/** Lisans özeti alanlarının UI sırası ve etiketleri — form, okuma görünümü ve
+ *  grafik lejandı tek kaynaktan beslensin diye burada tanımlı. */
+export const LICENSE_SUMMARY_PLANS = [
+  { label: "Lift", baseKey: "liftCount", twoPlusOneKey: "lift2Plus1Count", threePlusTwoKey: "lift3Plus2Count" },
+  { label: "Scale", baseKey: "scaleCount", twoPlusOneKey: "scale2Plus1Count", threePlusTwoKey: "scale3Plus2Count" },
+  { label: "Scale Plus", baseKey: "scalePlusCount", twoPlusOneKey: "scalePlus2Plus1Count", threePlusTwoKey: "scalePlus3Plus2Count" },
+  { label: "Premium", baseKey: "preCount", twoPlusOneKey: "premium2Plus1Count", threePlusTwoKey: "premium3Plus2Count" }
+] as const satisfies ReadonlyArray<{
+  label: string;
+  baseKey: keyof z.infer<typeof licenseSummarySchema>;
+  twoPlusOneKey: keyof z.infer<typeof licenseSummarySchema>;
+  threePlusTwoKey: keyof z.infer<typeof licenseSummarySchema>;
+}>;
+
+/** Tüm lisans özeti alan anahtarları — sıfırlama/toplama döngüleri için. */
+export const LICENSE_SUMMARY_KEYS = LICENSE_SUMMARY_PLANS.flatMap(
+  (p) => [p.baseKey, p.twoPlusOneKey, p.threePlusTwoKey]
+) as ReadonlyArray<keyof z.infer<typeof licenseSummarySchema>>;
 
 export const salesKpiDataSchema = z.object({
   targets: salesKpiTargetsSchema,

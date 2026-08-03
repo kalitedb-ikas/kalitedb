@@ -7,7 +7,7 @@ import {
   StatCard,
   SurfaceCard
 } from "@kalitedb/ui";
-import { getTwoPlusOneCount, selectDefaultReportPeriod } from "@kalitedb/shared";
+import { getTwoPlusOneCount, LICENSE_SUMMARY_PLANS, selectDefaultReportPeriod } from "@kalitedb/shared";
 import type { SalesKpiAgent, LicenseSummary, ReportPeriod } from "@kalitedb/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -124,13 +124,6 @@ function truncateName(name: string, max = 10): string {
   return name.slice(0, max - 1) + "…";
 }
 
-const DONUT_KEYS = [
-  { key: "scaleCount", label: "Scale" },
-  { key: "scalePlusCount", label: "Scale Plus" },
-  { key: "preCount", label: "Pre" },
-  { key: "scale3Plus2Count", label: "3+2" }
-] as const;
-
 type DonutSubItem = { name: string; value: number };
 type DonutSlice = {
   name: string;
@@ -146,27 +139,27 @@ function computeLicenseDonut(
   salesInk: string
 ): DonutSlice[] {
   const donutColors = [salesInk, brand.accent, brand.sky, brand.emerald];
-  const lsTotal = licenseSummary
-    ? licenseSummary.preCount +
-      licenseSummary.scaleCount +
-      licenseSummary.scalePlusCount +
-      licenseSummary.scale3Plus2Count
-    : 0;
 
-  if (licenseSummary && lsTotal > 0) {
-    return DONUT_KEYS.map((item, i) => {
+  // Dilim = planın toplam lisansı (peşin + 2+1 + 3+2); taahhüt kırılımı
+  // lejandda alt-kalem olarak gösterilir.
+  if (licenseSummary) {
+    const slices = LICENSE_SUMMARY_PLANS.map((plan, i) => {
+      const base = licenseSummary[plan.baseKey] ?? 0;
+      const two = licenseSummary[plan.twoPlusOneKey] ?? 0;
+      const three = licenseSummary[plan.threePlusTwoKey] ?? 0;
       const slice: DonutSlice = {
-        name: item.label,
-        value: licenseSummary[item.key],
+        name: plan.label,
+        value: base + two + three,
         color: donutColors[i] ?? salesInk
       };
-      if (item.key === "scaleCount") {
-        slice.subItems = [{ name: "2+1", value: licenseSummary.scale2Plus1Count }];
-      } else if (item.key === "scalePlusCount") {
-        slice.subItems = [{ name: "2+1", value: licenseSummary.scalePlus2Plus1Count }];
-      }
+      const subItems = [
+        { name: "2+1", value: two },
+        { name: "3+2", value: three }
+      ].filter((s) => s.value > 0);
+      if (subItems.length > 0) slice.subItems = subItems;
       return slice;
     }).filter((d) => d.value > 0);
+    if (slices.length > 0) return slices;
   }
 
   const totalScale = agents.reduce((s, a) => s + (a.scaleCount ?? 0), 0);

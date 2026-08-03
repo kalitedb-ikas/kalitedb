@@ -1,5 +1,5 @@
-import { normalizeKey } from "@kalitedb/shared";
-import type { Representative, SalesMeeting, SalesKpiData, SalesKpiAgent, TimelineEvent } from "@kalitedb/shared";
+import { LICENSE_SUMMARY_KEYS, LICENSE_SUMMARY_PLANS, normalizeKey } from "@kalitedb/shared";
+import type { LicenseSummary, Representative, SalesMeeting, SalesKpiData, SalesKpiAgent, TimelineEvent } from "@kalitedb/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, ClipboardCheck, Eye, EyeOff, FileQuestion, Handshake, LogOut, Maximize2, MessageSquare, MessageSquarePlus, Mic, Minimize2, Pencil, Play, Plus, RefreshCw, Save, Target, Trash2, TrendingUp, Upload, UserPlus, Users, X } from "lucide-react";
@@ -1028,7 +1028,7 @@ export function SalesAdminPage() {
       }
 
       // ── Tablo 3: Aylık lisans özeti (Pre., Scale, Scale 2+1, Scale Plus, Scale Plus 2+1) ──
-      let licenseSummary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number } | undefined;
+      let licenseSummary: LicenseSummary | undefined;
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i]!;
         const cell1 = (row[1] ?? "").trim().toLocaleUpperCase("tr-TR");
@@ -1054,16 +1054,25 @@ export function SalesAdminPage() {
             return 0;
           };
 
+          // CSV yalnızca Premium(Pre.)/Scale/Scale 2+1/Scale Plus/Scale Plus 2+1
+          // satırlarını taşır. Lift ve tüm 3+2 alanları CSV'de serbest metin not
+          // olarak geçebildiği için (örn. "6 adet 3+2") ayrıştırılmıyor; Aylık
+          // Lisans Özeti'nden manuel girilir. Mevcut değerleri koru ki CSV'yi
+          // yeniden yüklemek manuel girilen sayıları silmesin.
+          const prev = (kpiDataQuery.data as any)?.licenseSummary ?? {};
           licenseSummary = {
-            preCount: parseCount(preRow),
+            liftCount: prev.liftCount ?? 0,
+            lift2Plus1Count: prev.lift2Plus1Count ?? 0,
+            lift3Plus2Count: prev.lift3Plus2Count ?? 0,
             scaleCount: parseCount(scaleRow),
             scale2Plus1Count: parseCount(scale21Row),
+            scale3Plus2Count: prev.scale3Plus2Count ?? 0,
             scalePlusCount: parseCount(scalePlusRow),
             scalePlus2Plus1Count: parseCount(scalePlus21Row),
-            // CSV'de "3+2" adedi serbest metin not olarak geçebilir (örn. "6 adet 3+2"),
-            // otomatik ayrıştırılmıyor — Aylık Lisans Özeti'nden manuel girilir. Mevcut
-            // değeri koru ki CSV'yi yeniden yüklemek manuel girilen sayıyı silmesin.
-            scale3Plus2Count: (kpiDataQuery.data as any)?.licenseSummary?.scale3Plus2Count ?? 0
+            scalePlus3Plus2Count: prev.scalePlus3Plus2Count ?? 0,
+            preCount: parseCount(preRow),
+            premium2Plus1Count: prev.premium2Plus1Count ?? 0,
+            premium3Plus2Count: prev.premium3Plus2Count ?? 0
           };
           break;
         }
@@ -1222,7 +1231,7 @@ export function SalesAdminPage() {
   });
 
   const updateLicenseSummaryMutation = useMutation({
-    mutationFn: (summary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number }) =>
+    mutationFn: (summary: LicenseSummary) =>
       api.updateLicenseSummary(auth.token, selectedPeriodId, summary),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["sales-kpi"] }); }
   });
@@ -2413,7 +2422,7 @@ function KpiSection(props: {
   deleteAgentMutation: { mutate: (k: string) => void; isPending: boolean };
   resetAgentsMutation: { mutate: () => void; isPending: boolean };
   updateTargetsMutation: { mutate: (t: Record<string, unknown>) => void; isPending: boolean };
-  updateLicenseSummaryMutation: { mutate: (s: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number }) => void; isPending: boolean };
+  updateLicenseSummaryMutation: { mutate: (s: LicenseSummary) => void; isPending: boolean };
 }) {
   const {
     kpiAgentCount, kpiData, kpiImportSuccess,
@@ -2426,26 +2435,16 @@ function KpiSection(props: {
   useEffect(() => {
     if ((kpiData as any)?.licenseSummary) {
       const ls = (kpiData as any).licenseSummary;
-      setLicenseSummaryDraft({
-        preCount: String(ls.preCount ?? 0),
-        scaleCount: String(ls.scaleCount ?? 0),
-        scale2Plus1Count: String(ls.scale2Plus1Count ?? 0),
-        scalePlusCount: String(ls.scalePlusCount ?? 0),
-        scalePlus2Plus1Count: String(ls.scalePlus2Plus1Count ?? 0),
-        scale3Plus2Count: String(ls.scale3Plus2Count ?? 0)
-      });
+      const draft: Record<string, string> = {};
+      for (const key of LICENSE_SUMMARY_KEYS) draft[key] = String(ls[key] ?? 0);
+      setLicenseSummaryDraft(draft);
     }
   }, [(kpiData as any)?.licenseSummary]);
 
   const handleSaveLicenseSummary = () => {
-    updateLicenseSummaryMutation.mutate({
-      preCount: Number(licenseSummaryDraft.preCount) || 0,
-      scaleCount: Number(licenseSummaryDraft.scaleCount) || 0,
-      scale2Plus1Count: Number(licenseSummaryDraft.scale2Plus1Count) || 0,
-      scalePlusCount: Number(licenseSummaryDraft.scalePlusCount) || 0,
-      scalePlus2Plus1Count: Number(licenseSummaryDraft.scalePlus2Plus1Count) || 0,
-      scale3Plus2Count: Number(licenseSummaryDraft.scale3Plus2Count) || 0
-    });
+    const payload = {} as Record<string, number>;
+    for (const key of LICENSE_SUMMARY_KEYS) payload[key] = Number(licenseSummaryDraft[key]) || 0;
+    updateLicenseSummaryMutation.mutate(payload as unknown as LicenseSummary);
     setEditingLicenseSummary(false);
   };
 
@@ -2485,15 +2484,17 @@ function KpiSection(props: {
             </button>
           </div>
           {editingLicenseSummary ? (
-            <div className="mt-4 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                <MiniInput label="Pre." value={licenseSummaryDraft.preCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, preCount: v }))} type="number" />
-                <MiniInput label="Scale" value={licenseSummaryDraft.scaleCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scaleCount: v }))} type="number" />
-                <MiniInput label="Scale 2+1" value={licenseSummaryDraft.scale2Plus1Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scale2Plus1Count: v }))} type="number" />
-                <MiniInput label="Scale Plus" value={licenseSummaryDraft.scalePlusCount ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scalePlusCount: v }))} type="number" />
-                <MiniInput label="Scale Plus 2+1" value={licenseSummaryDraft.scalePlus2Plus1Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scalePlus2Plus1Count: v }))} type="number" />
-                <MiniInput label="3+2" value={licenseSummaryDraft.scale3Plus2Count ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, scale3Plus2Count: v }))} type="number" />
-              </div>
+            <div className="mt-4 space-y-4">
+              {LICENSE_SUMMARY_PLANS.map((plan) => (
+                <div key={plan.label}>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{plan.label}</p>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                    <MiniInput label="Peşin" value={licenseSummaryDraft[plan.baseKey] ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, [plan.baseKey]: v }))} type="number" />
+                    <MiniInput label="2+1" value={licenseSummaryDraft[plan.twoPlusOneKey] ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, [plan.twoPlusOneKey]: v }))} type="number" />
+                    <MiniInput label="3+2" value={licenseSummaryDraft[plan.threePlusTwoKey] ?? ""} onChange={(v) => setLicenseSummaryDraft((p) => ({ ...p, [plan.threePlusTwoKey]: v }))} type="number" />
+                  </div>
+                </div>
+              ))}
               <button
                 className="h-10 rounded-[10px] bg-[var(--adm-accent)] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--adm-accent-strong)] disabled:opacity-50"
                 disabled={updateLicenseSummaryMutation.isPending}
@@ -2504,13 +2505,35 @@ function KpiSection(props: {
               </button>
             </div>
           ) : (kpiData as any)?.licenseSummary ? (
-            <div className="mt-3 flex flex-wrap gap-4 text-sm">
-              <div><span className="text-slate-500">Pre.:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.preCount}</span></div>
-              <div><span className="text-slate-500">Scale:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scaleCount}</span></div>
-              <div><span className="text-slate-500">Scale 2+1:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scale2Plus1Count}</span></div>
-              <div><span className="text-slate-500">Scale Plus:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scalePlusCount}</span></div>
-              <div><span className="text-slate-500">Scale Plus 2+1:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scalePlus2Plus1Count}</span></div>
-              <div><span className="text-slate-500">3+2:</span> <span className="font-medium text-slate-800 dark:text-slate-200">{(kpiData as any).licenseSummary.scale3Plus2Count ?? 0}</span></div>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[420px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700">
+                    <th className="py-2 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Plan</th>
+                    <th className="py-2 px-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Peşin</th>
+                    <th className="py-2 px-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">2+1</th>
+                    <th className="py-2 px-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">3+2</th>
+                    <th className="py-2 pl-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Toplam</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {LICENSE_SUMMARY_PLANS.map((plan) => {
+                    const ls = (kpiData as any).licenseSummary;
+                    const base = ls[plan.baseKey] ?? 0;
+                    const two = ls[plan.twoPlusOneKey] ?? 0;
+                    const three = ls[plan.threePlusTwoKey] ?? 0;
+                    return (
+                      <tr key={plan.label} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                        <td className="py-2 pr-4 font-medium text-slate-800 dark:text-slate-200">{plan.label}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-slate-700 dark:text-slate-300">{base}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-slate-700 dark:text-slate-300">{two}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-slate-700 dark:text-slate-300">{three}</td>
+                        <td className="py-2 pl-3 text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100">{base + two + three}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Henüz lisans özeti girilmemiş. Düzenle butonuyla ekleyin.</p>

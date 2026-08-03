@@ -9,6 +9,7 @@ import type {
   DashboardSnapshot,
   DatasetType,
   KpiMetricKey,
+  LicenseSummary,
   QtManualEntry,
   ReportPeriod,
   SalesEvaluationQuestion,
@@ -2056,7 +2057,7 @@ export const api = {
   async updateLicenseSummary(
     token: string | null,
     periodId: string,
-    licenseSummary: { preCount: number; scaleCount: number; scale2Plus1Count: number; scalePlusCount: number; scalePlus2Plus1Count: number; scale3Plus2Count: number }
+    licenseSummary: LicenseSummary
   ): Promise<void> {
     const hasFbAuth = canUseFirebaseClientFallback() || (await waitForFirebaseAuth());
     if (canUseFirebaseReadMode() && hasFbAuth && firebaseDb) {

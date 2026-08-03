@@ -8,6 +8,7 @@ import type {
   SalesKpiAgent,
   SalesKpiData
 } from "@kalitedb/shared";
+import { LICENSE_SUMMARY_KEYS } from "@kalitedb/shared";
 
 import type { PeriodRangeValue } from "../components/period-range-filter";
 import { parseTalkDurationLabelToSeconds } from "./format";
@@ -43,6 +44,14 @@ export function getQuarterPeriodIds(
 
 /* ── Sales KPI aggregation ── */
 
+/** Tüm lisans alanları 0 olan taze bir özet. Alan listesi shared'daki
+ *  LICENSE_SUMMARY_KEYS'ten gelir; yeni plan eklendiğinde burası değişmez. */
+export function makeEmptyLicenseSummary(): LicenseSummary {
+  const empty = {} as Record<(typeof LICENSE_SUMMARY_KEYS)[number], number>;
+  for (const key of LICENSE_SUMMARY_KEYS) empty[key] = 0;
+  return empty as LicenseSummary;
+}
+
 export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
   agents: SalesKpiAgent[];
   licenseSummary: LicenseSummary;
@@ -52,14 +61,7 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
   if (valid.length === 0) {
     return {
       agents: [],
-      licenseSummary: {
-        preCount: 0,
-        scaleCount: 0,
-        scale2Plus1Count: 0,
-        scalePlusCount: 0,
-        scalePlus2Plus1Count: 0,
-        scale3Plus2Count: 0
-      },
+      licenseSummary: makeEmptyLicenseSummary(),
       targets: null
     };
   }
@@ -116,23 +118,12 @@ export function aggregateMultiPeriodKpi(datasets: (SalesKpiData | null)[]): {
     hubspotScore: sums.hubspotScore != null ? sums.hubspotScore / count : null
   }));
 
-  // Lisans özeti: toplama
-  const licenseSummary: LicenseSummary = {
-    preCount: 0,
-    scaleCount: 0,
-    scale2Plus1Count: 0,
-    scalePlusCount: 0,
-    scalePlus2Plus1Count: 0,
-    scale3Plus2Count: 0
-  };
+  // Lisans özeti: toplama. Eski dönem kayıtlarında yeni alanlar yok → ?? 0.
+  const licenseSummary = makeEmptyLicenseSummary();
   for (const dataset of valid) {
-    if (dataset.licenseSummary) {
-      licenseSummary.preCount += dataset.licenseSummary.preCount;
-      licenseSummary.scaleCount += dataset.licenseSummary.scaleCount;
-      licenseSummary.scale2Plus1Count += dataset.licenseSummary.scale2Plus1Count;
-      licenseSummary.scalePlusCount += dataset.licenseSummary.scalePlusCount;
-      licenseSummary.scalePlus2Plus1Count += dataset.licenseSummary.scalePlus2Plus1Count;
-      licenseSummary.scale3Plus2Count += dataset.licenseSummary.scale3Plus2Count ?? 0;
+    if (!dataset.licenseSummary) continue;
+    for (const key of LICENSE_SUMMARY_KEYS) {
+      licenseSummary[key] = (licenseSummary[key] ?? 0) + (dataset.licenseSummary[key] ?? 0);
     }
   }
 

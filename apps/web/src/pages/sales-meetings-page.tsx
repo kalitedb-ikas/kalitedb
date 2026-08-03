@@ -920,6 +920,14 @@ export function SalesMeetingsPage() {
     staleTime: 5 * 60 * 1000
   });
 
+  // Kalite katkı payının paydası: dönemin takım geneli satış cirosu.
+  const kpiQuery = useQuery({
+    enabled: Boolean(periodId),
+    queryKey: ["sales-kpi", auth.token, periodId],
+    queryFn: () => api.getSalesKpiData(auth.token, periodId!),
+    staleTime: 5 * 60 * 1000
+  });
+
   const [modal, setModal] = useState<{ mode: "add" } | { mode: "edit"; row: MeetingRow } | null>(null);
 
   const updateStatusMutation = useMutation({
@@ -1062,6 +1070,15 @@ export function SalesMeetingsPage() {
     [modal]
   );
 
+  // Kalite ekibinin katıldığı ve kapanan toplantıların cirosu, takımın aynı
+  // dönemdeki toplam satış cirosunun yüzde kaçı. KPI verisi girilmemiş ya da
+  // toplam ciro 0 ise oran hesaplanamaz (null) — kart "—" gösterir.
+  const qualityContribution = useMemo(() => {
+    const teamTotal = (kpiQuery.data?.agents ?? []).reduce((sum, a) => sum + (a.salesAmount ?? 0), 0);
+    if (teamTotal <= 0) return { pct: null as number | null, teamTotal: 0 };
+    return { pct: (summary.totalSales / teamTotal) * 100, teamTotal };
+  }, [kpiQuery.data, summary.totalSales]);
+
   const periodLabel = selectedPeriod ? formatPeriodMonth(selectedPeriod.month) : "";
   const licenseDetails = Object.entries(summary.licenseBreakdown)
     .sort(([a], [b]) => a.localeCompare(b, "tr"))
@@ -1079,7 +1096,7 @@ export function SalesMeetingsPage() {
 
       {/* Aylık Özet */}
       <SurfaceCard title={`${periodLabel} Özet`}>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <StatCard
             label="Toplantı Adet"
             value={String(summary.meetingCount)}
@@ -1087,6 +1104,30 @@ export function SalesMeetingsPage() {
           <StatCard
             label="Toplam Lisans"
             value={String(summary.totalLicenseCount)}
+          />
+          <StatCard
+            label="Kalite Katkısı"
+            value={
+              qualityContribution.pct == null
+                ? "—"
+                : `%${qualityContribution.pct.toFixed(1).replace(".", ",")}`
+            }
+            hint={
+              qualityContribution.pct == null
+                ? kpiQuery.isLoading
+                  ? "Hesaplanıyor…"
+                  : "Dönem KPI verisi girilmemiş"
+                : `${formatCurrency(summary.totalSales)} / ${formatCurrency(qualityContribution.teamTotal)} takım cirosu`
+            }
+            tone={
+              qualityContribution.pct == null
+                ? "neutral"
+                : qualityContribution.pct >= 20
+                  ? "green"
+                  : qualityContribution.pct >= 10
+                    ? "yellow"
+                    : "neutral"
+            }
           />
           <StatCard
             label="Dönüşüm Oranı"
