@@ -550,21 +550,38 @@ export function ChampionSpotlightCard(props: {
     props.people && props.people.length > 0
       ? props.people
       : [{ name: props.name, imageSrc: props.imageSrc, imageAlt: props.imageAlt }];
-  const visiblePeople = people.slice(0, 8);
+  // Podyumlu kart sabit yükseklikte olduğu için 8'den fazlasını taşıyamaz; podyumsuz
+  // kartta ise ızgara akışa girip büyüyebildiği için tüm liderler gösterilebilir.
+  const maxVisiblePeople = showPodium ? 8 : 24;
+  const visiblePeople = people.slice(0, maxVisiblePeople);
   const hasExpandedPortraitLayout = !showPodium && visiblePeople.length <= 2;
+  // 8'den fazla kişide ızgara mutlak konumdan çıkıp kart yüksekliğini büyütür.
+  const usesFlowGrid = !showPodium && visiblePeople.length > 8;
+  const overflowCount = usesFlowGrid ? people.length - visiblePeople.length : 0;
+  const gridCellCount = visiblePeople.length + (overflowCount > 0 ? 1 : 0);
   const gridColsClass =
-    visiblePeople.length >= 7
-      ? "grid-cols-4"
-      : visiblePeople.length >= 5
-        ? "grid-cols-3"
-        : "grid-cols-2";
+    gridCellCount >= 21
+      ? "grid-cols-6"
+      : gridCellCount >= 13
+        ? "grid-cols-5"
+        : gridCellCount >= 7
+          ? "grid-cols-4"
+          : gridCellCount >= 5
+            ? "grid-cols-3"
+            : "grid-cols-2";
   const gridTileSizeClass = showPodium
     ? "h-24 rounded-[10px]"
-    : visiblePeople.length >= 7
-      ? "h-[100px] w-[72px] rounded-[10px]"
-      : visiblePeople.length >= 5
-        ? "h-[124px] w-[90px] rounded-[10px]"
-        : "h-[148px] w-[108px] rounded-[10px]";
+    : gridCellCount >= 21
+      ? "h-[64px] w-[46px] rounded-[10px]"
+      : gridCellCount >= 13
+        ? "h-[78px] w-[56px] rounded-[10px]"
+        : gridCellCount >= 9
+          ? "h-[88px] w-[64px] rounded-[10px]"
+          : gridCellCount >= 7
+            ? "h-[100px] w-[72px] rounded-[10px]"
+            : gridCellCount >= 5
+              ? "h-[124px] w-[90px] rounded-[10px]"
+              : "h-[148px] w-[108px] rounded-[10px]";
 
   return (
     <section className={cn("surface-hero relative overflow-hidden rounded-[10px] p-6 sm:p-7", props.className)}>
@@ -603,7 +620,9 @@ export function ChampionSpotlightCard(props: {
             "relative z-0",
             showPodium
               ? "surface-default h-[260px] overflow-hidden rounded-[10px] border border-white/80 bg-white/75"
-              : "h-[300px] overflow-visible"
+              : usesFlowGrid
+                ? "flex min-h-[300px] items-center overflow-visible"
+                : "h-[300px] overflow-visible"
           )}
         >
           {visiblePeople.length === 1 ? (
@@ -646,11 +665,13 @@ export function ChampionSpotlightCard(props: {
           ) : (
             <div
               className={cn(
-                "absolute grid",
+                "grid",
                 gridColsClass,
                 showPodium
-                  ? "inset-x-8 top-8 gap-3"
-                  : "inset-x-4 top-1/2 -translate-y-1/2 justify-items-center gap-x-3 gap-y-4"
+                  ? "absolute inset-x-8 top-8 gap-3"
+                  : usesFlowGrid
+                    ? "w-full justify-items-center gap-x-3 gap-y-4 px-4"
+                    : "absolute inset-x-4 top-1/2 -translate-y-1/2 justify-items-center gap-x-3 gap-y-4"
               )}
             >
               {visiblePeople.map((person) => (
@@ -669,6 +690,16 @@ export function ChampionSpotlightCard(props: {
                   />
                 </div>
               ))}
+              {overflowCount > 0 ? (
+                <div
+                  className={cn(
+                    "relative flex items-center justify-center border border-slate-200 bg-white/88 font-display text-sm font-semibold text-slate-600 dark:bg-slate-800/70 dark:text-slate-300",
+                    gridTileSizeClass
+                  )}
+                >
+                  +{overflowCount}
+                </div>
+              ) : null}
             </div>
           )}
           {showPodium ? (
