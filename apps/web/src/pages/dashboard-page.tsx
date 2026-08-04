@@ -14,6 +14,7 @@ import {
   AUDIT_AVERAGE_EXCLUDED_KEYS,
   average,
   buildDashboardSnapshot,
+  normalizeKey,
   resolveThresholdTone,
   selectAuditMetrics,
   selectDefaultReportPeriod,
@@ -164,6 +165,10 @@ export function DashboardPage() {
   // "Start" etiketli temsilciler lider tablolarından gizlenir,
   // özet/ortalama hesaplarına dahil edilir.
   const startTeamKeys = useRepresentativeKeysWithBadge("start");
+  // Audit lider tablosunda puanı eşit olanlarda çağrı etiketli temsilci öne alınır.
+  // NOT: top-5 kesimi shared'daki buildDashboardSnapshot içinde yapıldığı için
+  // bu sıralama yalnızca kesime giren 5 satırı kendi arasında yeniden dizer.
+  const cagriBadgeKeys = useRepresentativeKeysWithBadge("cagri");
   const snapshot = useMemo(() => {
     if (!aggregatedSnapshotCsatAdjusted) return undefined;
     const rankingExcluded = new Set<string>([...startTeamKeys]);
@@ -325,12 +330,26 @@ export function DashboardPage() {
 
           <div className="dash-section dash-delay-3 grid gap-6 xl:grid-cols-2">
             <Leaderboard
-              items={snapshot.rankings.auditTop.slice(0, 5).map((agent) => ({
-                id: agent.id,
-                label: agent.label,
-                value: formatAuditScore(agent.value),
-                ...(agent.delta != null ? { delta: `Değişim ${formatDelta(agent.delta)}` } : {})
-              }))}
+              items={[...snapshot.rankings.auditTop]
+                .sort((left, right) => {
+                  const leftValue = left.value ?? Number.NEGATIVE_INFINITY;
+                  const rightValue = right.value ?? Number.NEGATIVE_INFINITY;
+                  if (rightValue !== leftValue) {
+                    return rightValue - leftValue;
+                  }
+                  // Puan eşitliğinde çağrı etiketli temsilci üstte kalır.
+                  return (
+                    Number(cagriBadgeKeys.has(normalizeKey(right.label))) -
+                    Number(cagriBadgeKeys.has(normalizeKey(left.label)))
+                  );
+                })
+                .slice(0, 5)
+                .map((agent) => ({
+                  id: agent.id,
+                  label: agent.label,
+                  value: formatAuditScore(agent.value),
+                  ...(agent.delta != null ? { delta: `Değişim ${formatDelta(agent.delta)}` } : {})
+                }))}
               title="Audit lider tablosu"
               variant="flat"
             />

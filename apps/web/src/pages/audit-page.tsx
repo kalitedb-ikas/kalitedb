@@ -150,6 +150,8 @@ export function AuditPage() {
   // öne çıkanlardan (champion, lider tablosu, insight tile) hariç tutulur.
   const otherBadgeExcludedKeys = useRepresentativeKeysWithBadge("diger");
   const startTeamKeys = useRepresentativeKeysWithBadge("start");
+  // Lider tablosunda puanı eşit olanlarda çağrı etiketli temsilci öne alınır.
+  const cagriBadgeKeys = useRepresentativeKeysWithBadge("cagri");
   const highlightExcludedKeys = useMemo(
     () => new Set<string>([...otherBadgeExcludedKeys, ...startTeamKeys]),
     [otherBadgeExcludedKeys, startTeamKeys]
@@ -613,7 +615,15 @@ export function AuditPage() {
               items={applyTopRankPreference(
                 [...highlightAudits]
                   .filter((a): a is typeof a & { auditScore: number } => a.auditScore !== null)
-                  .sort((left, right) => right.auditScore - left.auditScore)
+                  .sort((left, right) => {
+                    if (right.auditScore !== left.auditScore) {
+                      return right.auditScore - left.auditScore;
+                    }
+                    // Puan eşitliğinde çağrı etiketli temsilci üstte kalır.
+                    return (
+                      Number(cagriBadgeKeys.has(right.agentKey)) - Number(cagriBadgeKeys.has(left.agentKey))
+                    );
+                  })
                   .map((a) => ({
                     id: a.id,
                     label: a.agentName,
